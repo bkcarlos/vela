@@ -32,6 +32,7 @@ use crate::unicode_confusables;
 
 use db::kvp::KeyValueStore;
 use gpui::List;
+use gpui::PromptLevel;
 use gpui::Stateful;
 use gpui::TaskExt;
 use heapless::Vec as ArrayVec;
@@ -623,6 +624,7 @@ pub struct ThreadView {
     pub add_context_menu_handle: PopoverMenuHandle<ContextMenu>,
     pub thinking_effort_menu_handle: PopoverMenuHandle<ContextMenu>,
     pub fast_mode_menu_handle: PopoverMenuHandle<ContextMenu>,
+    pub permission_mode_menu_handle: PopoverMenuHandle<ContextMenu>,
     pub project: WeakEntity<Project>,
     /// Cache + worktree snapshot for resolving paths in markdown code spans.
     /// Cloned from the parent `ConversationView` so the cache is shared and the
@@ -898,6 +900,10 @@ impl ThreadView {
             Self::handle_message_editor_event,
         ));
 
+        subscriptions.push(cx.observe_global::<settings::SettingsStore>(|_this, cx| {
+            cx.notify();
+        }));
+
         // If this thread is backed by a NativeAgent, listen for skill loading
         // issues so we can surface them as banners. The agent emits a single
         // replacement-style event per project refresh, so we overwrite our
@@ -1029,6 +1035,7 @@ impl ThreadView {
             add_context_menu_handle: PopoverMenuHandle::default(),
             thinking_effort_menu_handle: PopoverMenuHandle::default(),
             fast_mode_menu_handle: PopoverMenuHandle::default(),
+            permission_mode_menu_handle: PopoverMenuHandle::default(),
             project,
             code_span_resolver,
             show_external_source_prompt_warning,
@@ -4378,6 +4385,7 @@ impl ThreadView {
                                             .children(self.mode_selector.clone())
                                             .children(self.model_selector.clone()),
                                     })
+                                    .children(self.render_permission_mode_selector(cx))
                                     .child(self.render_send_button(cx)),
                             ),
                     ),
@@ -5319,6 +5327,93 @@ impl ThreadView {
                 y: px(-2.0),
             })
             .anchor(gpui::Anchor::BottomLeft)
+    }
+
+    fn render_permission_mode_selector(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.as_native_thread(cx)?;
+
+        let current_mode = AgentSettings::get_global(cx).effective_permission_mode();
+        let (color, icon) = if self.permission_mode_menu_handle.is_deployed() {
+            (Color::Accent, IconName::ChevronUp)
+        } else {
+            (Color::Muted, IconName::ChevronDown)
+        };
+        let trigger = Button::new("permission-mode-selector-trigger", current_mode.label())
+            .label_size(LabelSize::Small)
+            .color(color)
+            .end_icon(Icon::new(icon).size(IconSize::XSmall).color(Color::Muted));
+        let weak_self = cx.weak_entity();
+
+        Some(
+            PopoverMenu::new("permission-mode-selector")
+                .trigger_with_tooltip(trigger, Tooltip::text(current_mode.description()))
+                .menu(move |window, cx| {
+                    let weak_self = weak_self.clone();
+                    Some(ContextMenu::build(window, cx, move |mut menu, _window, _cx| {
+                        for mode in settings::AgentPermissionMode::ALL {
+                            let is_selected = mode == current_mode;
+                            let entry = ContextMenuEntry::new(mode.label())
+                                .toggleable(IconPosition::End, is_selected);
+
+                            menu.push_item(entry.handler({
+                                let weak_self = weak_self.clone();
+                                move |window, cx| {
+                                    if is_selected {
+                                        return;
+                                    }
+
+                                    if mode == settings::AgentPermissionMode::FullAccess {
+                                        let answer = window.prompt(
+                                            PromptLevel::Critical,
+                                            "Enable Full Access?",
+                                            Some(
+                                                "Full Access skips tool confirmations and disables the terminal sandbox. Only enable it in an isolated environment that you can recover.",
+                                            ),
+                                            &["Enable Full Access", "Cancel"],
+                                            cx,
+                                        );
+                                        let weak_self = weak_self.clone();
+                                        cx.spawn(async move |cx| -> anyhow::Result<()> {
+                                            if answer.await? == 0 {
+                                                weak_self.update(cx, |this, cx| {
+                                                    this.set_permission_mode(mode, cx);
+                                                })?;
+                                            }
+                                            Ok(())
+                                        })
+                                        .detach_and_log_err(cx);
+                                    } else {
+                                        weak_self
+                                            .update(cx, |this, cx| {
+                                                this.set_permission_mode(mode, cx);
+                                            })
+                                            .log_err();
+                                    }
+                                }
+                            }));
+                        }
+
+                        menu
+                    }))
+                })
+                .with_handle(self.permission_mode_menu_handle.clone())
+                .offset(gpui::Point {
+                    x: px(0.0),
+                    y: px(-2.0),
+                })
+                .anchor(gpui::Anchor::BottomRight)
+                .into_any_element(),
+        )
+    }
+
+    fn set_permission_mode(&self, mode: settings::AgentPermissionMode, cx: &mut App) {
+        let Some(thread) = self.as_native_thread(cx) else {
+            return;
+        };
+        let fs = thread.read(cx).project().read(cx).fs().clone();
+        update_settings_file(fs, cx, move |settings, _| {
+            settings.agent.get_or_insert_default().permission_mode = Some(mode);
+        });
     }
 
     fn render_send_button(&self, cx: &mut Context<Self>) -> AnyElement {

@@ -4,7 +4,7 @@ use gpui::{
     Focusable, HighlightStyle, ReadGlobal, ScrollHandle, StyledText, TextStyleRefinement, point,
     prelude::*,
 };
-use settings::{Settings as _, SettingsStore, ToolPermissionMode};
+use settings::{AgentPermissionMode, Settings as _, SettingsStore, ToolPermissionMode};
 use shell_command_parser::extract_commands;
 use std::sync::Arc;
 use theme_settings::ThemeSettings;
@@ -164,7 +164,7 @@ pub(crate) fn render_tool_permissions_setup_page(
         .collect();
 
     let settings = AgentSettings::get_global(cx);
-    let global_default = settings.tool_permissions.default;
+    let permission_mode = settings.effective_permission_mode();
 
     let scroll_step = px(40.);
 
@@ -203,7 +203,7 @@ pub(crate) fn render_tool_permissions_setup_page(
         )
         .child(
             v_flex()
-                .child(render_global_default_mode_section(global_default))
+                .child(render_global_permission_mode_section(permission_mode))
                 .child(Divider::horizontal())
                 .children(tool_items.into_iter().enumerate().flat_map(|(i, item)| {
                     let mut elements: Vec<AnyElement> = vec![item];
@@ -1069,46 +1069,52 @@ fn render_add_pattern_input(
         .into_any_element()
 }
 
-fn render_global_default_mode_section(current_mode: ToolPermissionMode) -> AnyElement {
-    let mode_label = current_mode.to_string();
+fn render_global_permission_mode_section(current_mode: AgentPermissionMode) -> AnyElement {
+    let mode_label = current_mode.label().to_string();
+    let mode_descriptions = AgentPermissionMode::ALL
+        .iter()
+        .map(|mode| {
+            let is_full_access = *mode == AgentPermissionMode::FullAccess;
+            Label::new(format!("{} — {}", mode.label(), mode.description()))
+                .size(LabelSize::Small)
+                .color(if is_full_access {
+                    Color::Error
+                } else {
+                    Color::Muted
+                })
+        })
+        .collect::<Vec<_>>();
 
     h_flex()
         .my_4()
         .min_w_0()
+        .items_start()
         .justify_between()
         .child(
             v_flex()
                 .w_full()
                 .min_w_0()
-                .child(Label::new("Default Permission"))
-                .child(
-                    Label::new(
-                        "Controls the default behavior for all tool actions. Per-tool rules and patterns can override this.",
-                    )
-                    .size(LabelSize::Small)
-                    .color(Color::Muted),
-                ),
+                .child(Label::new("Permission Mode"))
+                .children(mode_descriptions),
         )
         .child(
-            PopoverMenu::new("global-default-mode")
+            PopoverMenu::new("permission-mode")
                 .trigger(
-                    Button::new("global-mode-trigger", mode_label)
+                    Button::new("permission-mode-trigger", mode_label)
                         .tab_index(0_isize)
                         .style(ButtonStyle::Outlined)
                         .size(ButtonSize::Medium)
                         .end_icon(Icon::new(IconName::ChevronDown).size(IconSize::Small)),
                 )
                 .menu(move |window, cx| {
-                    Some(ContextMenu::build(window, cx, move |menu, _, _| {
-                        menu.entry("Confirm", None, move |_, cx| {
-                            set_global_default_permission(ToolPermissionMode::Confirm, cx);
-                        })
-                        .entry("Allow", None, move |_, cx| {
-                            set_global_default_permission(ToolPermissionMode::Allow, cx);
-                        })
-                        .entry("Deny", None, move |_, cx| {
-                            set_global_default_permission(ToolPermissionMode::Deny, cx);
-                        })
+                    Some(ContextMenu::build(window, cx, move |mut menu, _, _| {
+                        for mode in AgentPermissionMode::ALL {
+                            let label = mode.label().to_string();
+                            menu = menu.entry(label, None, move |window, cx| {
+                                select_permission_mode(mode, window, cx);
+                            });
+                        }
+                        menu
                     }))
                 })
                 .anchor(gpui::Anchor::TopRight),
@@ -1191,12 +1197,13 @@ struct ToolRulesView {
 
 fn get_tool_rules(tool_name: &str, cx: &App) -> ToolRulesView {
     let settings = AgentSettings::get_global(cx);
+    let inherited_default = settings.effective_tool_permission_default();
 
     let tool_rules = settings.tool_permissions.tools.get(tool_name);
 
     match tool_rules {
         Some(rules) => ToolRulesView {
-            default: rules.default.unwrap_or(settings.tool_permissions.default),
+            default: rules.default.unwrap_or(inherited_default),
             always_allow: rules
                 .always_allow
                 .iter()
@@ -1223,7 +1230,7 @@ fn get_tool_rules(tool_name: &str, cx: &App) -> ToolRulesView {
                 .collect(),
         },
         None => ToolRulesView {
-            default: settings.tool_permissions.default,
+            default: inherited_default,
             always_allow: Vec::new(),
             always_deny: Vec::new(),
             always_confirm: Vec::new(),
@@ -1338,14 +1345,32 @@ fn delete_pattern(tool_name: &str, rule_type: ToolPermissionMode, pattern: &str,
     });
 }
 
-fn set_global_default_permission(mode: ToolPermissionMode, cx: &mut App) {
+fn select_permission_mode(mode: AgentPermissionMode, window: &mut Window, cx: &mut App) {
+    if mode != AgentPermissionMode::FullAccess {
+        set_permission_mode(mode, cx);
+        return;
+    }
+
+    let answer = window.prompt(
+        gpui::PromptLevel::Critical,
+        "Enable Full Access?",
+        Some(
+            "Full Access skips tool confirmations and disables the terminal sandbox. Only enable it in an isolated environment that you can recover.",
+        ),
+        &["Enable Full Access", "Cancel"],
+        cx,
+    );
+    cx.spawn(async move |cx| match answer.await {
+        Ok(0) => cx.update(|cx| set_permission_mode(mode, cx)),
+        Ok(_) => {}
+        Err(error) => log::error!("Full Access confirmation failed: {error}"),
+    })
+    .detach();
+}
+
+fn set_permission_mode(mode: AgentPermissionMode, cx: &mut App) {
     SettingsStore::global(cx).update_settings_file(<dyn fs::Fs>::global(cx), move |settings, _| {
-        settings
-            .agent
-            .get_or_insert_default()
-            .tool_permissions
-            .get_or_insert_default()
-            .default = Some(mode);
+        settings.agent.get_or_insert_default().permission_mode = Some(mode);
     });
 }
 

@@ -1107,22 +1107,36 @@
       //   "temperature": 1.0
       // }
     ],
+    // Permission mode for native agent tool actions:
+    // - "manual": Confirm file modifications and terminal commands (default)
+    // - "auto": Automatically run low-risk actions and confirm high-risk actions
+    // - "full_access": Skip confirmations and disable the terminal sandbox
+    //
+    // Full Access can run arbitrary commands and modify files without confirmation.
+    // Only use it in environments you trust.
+    //
+    // Default: "manual"
+    // "permission_mode": "manual",
+    //
     // Permission rules for tool actions.
     //
-    // The "default" setting applies when no tool-specific rules match.
-    // For external agents that define their own permission modes,
-    // "deny" and "confirm" still take precedence — the external agent's
-    // permission system is only used when Zed would allow the action.
+    // `tool_permissions.default` is retained for compatibility with existing
+    // settings. When `permission_mode` is omitted, it supplies the inherited
+    // default for tools without a tool-specific rule.
+    // For external agents that define their own permission modes, "deny" and
+    // "confirm" still take precedence — the external agent's permission system
+    // is only used when Zed would allow the action.
     //
     // Per-tool regex patterns ("tools" below) match against tool input text
     // (commands, paths, URLs, etc.). For `copy_path` and `move_path`,
     // patterns are matched independently against each path (source and
     // destination).
     "tool_permissions": {
-      // Global default permission when no tool-specific rules match.
+      // Legacy global default permission when `permission_mode` is omitted and
+      // no tool-specific rules match.
       // "allow" - Auto-approve without prompting
       // "deny" - Auto-reject
-      // "confirm" - Always prompt (default)
+      // "confirm" - Always prompt (default, equivalent to Manual)
       "default": "confirm",
       // Per-tool permission rules. Regex patterns match against tool input text.
       // The per-tool "default" also applies to MCP tools.
