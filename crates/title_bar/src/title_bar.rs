@@ -31,6 +31,7 @@ use gpui::{
     IntoElement, MouseButton, ParentElement, Render, StatefulInteractiveElement, Styled,
     Subscription, TaskExt, WeakEntity, Window, actions, div,
 };
+use language_model::{Event as LanguageModelEvent, LanguageModelRegistry};
 use onboarding_banner::OnboardingBanner;
 use project::{
     Project, git_store::GitStoreEvent, project_settings::ProjectSettings,
@@ -445,6 +446,20 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.observe(&user_store, |_a, _, cx| cx.notify()));
+        subscriptions.push(cx.subscribe(
+            &LanguageModelRegistry::global(cx),
+            |_, _, event: &LanguageModelEvent, cx| {
+                if matches!(
+                    event,
+                    LanguageModelEvent::ProviderStateChanged(_)
+                        | LanguageModelEvent::AddedProvider(_)
+                        | LanguageModelEvent::RemovedProvider(_)
+                        | LanguageModelEvent::ProvidersChanged
+                ) {
+                    cx.notify();
+                }
+            },
+        ));
         if let Some(workspace_entity) = workspace.weak_handle().upgrade() {
             subscriptions.push(cx.subscribe(
                 &workspace_entity,
@@ -1166,10 +1181,16 @@ impl TitleBar {
         }
     }
 
-    pub fn render_provider_login_button(&mut self, _: &mut Context<Self>) -> Button {
+    pub fn render_provider_login_button(&mut self, cx: &mut Context<Self>) -> Button {
+        let has_authenticated_provider =
+            LanguageModelRegistry::read_global(cx).has_authenticated_provider(cx);
+        let logo = Icon::new(IconName::Vela)
+            .size(IconSize::Small)
+            .when(has_authenticated_provider, |icon| icon.color(Color::Accent));
+
         Button::new("connect_providers", "Connect")
             .label_size(LabelSize::Small)
-            .start_icon(Icon::new(IconName::Vela).size(IconSize::Small))
+            .start_icon(logo)
             .tooltip(Tooltip::text(
                 "Connect ChatGPT, GitHub Copilot, OpenRouter, or an API key",
             ))

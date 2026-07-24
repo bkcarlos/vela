@@ -18916,6 +18916,7 @@ dependencies = [
  "git_ui",
  "gpui",
  "icons",
+ "language_model",
  "livekit_client",
  "notifications",
  "platform_title_bar",
