@@ -3,26 +3,66 @@
 Configure which [Agent Panel](./agent-panel.md) tools run automatically and which require your approval.
 For a list of available tools, [see the Tools page](./tools.md).
 
-> **Note:** In Zed v0.224.0 and above, tool approval is controlled by `agent.tool_permissions.default`.
-> In earlier versions, it was controlled by the `agent.always_allow_tool_actions` boolean (default `false`).
+Use `agent.permission_mode` to choose the overall permission mode.
+Existing `agent.tool_permissions.default` settings remain supported when `permission_mode` is not set.
 
-## Quick Start
-
-Use Zed's Settings Editor to [configure tool permissions](zed://settings/agent.tool_permissions), or add rules directly to your settings file:
+## Permission Modes
 
 ```json [settings]
 {
   "agent": {
+    "permission_mode": "manual"
+  }
+}
+```
+
+`permission_mode` accepts the following values:
+
+- **Manual** (`"manual"`, default): Requires confirmation before the agent modifies files or runs terminal commands. Explicit per-tool allow rules can still approve trusted actions automatically.
+- **Auto** (`"auto"`): Automatically performs low-risk actions and asks for confirmation before high-risk actions.
+- **Full Access** (`"full_access"`): Skips normal permission confirmations and disables the terminal sandbox.
+
+<div class="warning">
+
+Full Access allows the agent to run arbitrary commands and modify files without confirmation, and terminal commands are not isolated by the sandbox.
+Only use it in environments and repositories you trust.
+
+</div>
+
+### Auto Risk Categories
+
+Auto mode allows routine edits and commands, then applies an additional safety check before execution.
+It asks for confirmation for actions such as:
+
+- Destructive Git commands, including force pushes, hard resets, forced cleans, branch deletion, and clearing stashes
+- Recursive deletion and deleting paths through the file tools
+- Deployments, infrastructure changes, IAM changes, and database migrations
+- Downloading code and piping it directly to a shell
+- Sending likely credentials or secret files through network commands
+- Modifying credentials, CI workflows, infrastructure definitions, migrations, or other sensitive paths
+- Invoking third-party MCP tools whose effects cannot be classified from their input
+- Requesting network, filesystem, or unsandboxed terminal access beyond the sandbox's existing grants
+
+The Auto safety check takes precedence over allow rules, so a high-risk action still asks even when a broad `always_allow` pattern matches.
+Built-in catastrophic-operation rules can block an action instead of prompting.
+See [Sandboxing](./sandboxing.md) for the default writable locations and network restrictions.
+
+## Quick Start
+
+Use Zed's Settings Editor to [configure tool permissions](zed://settings/agent.tool_permissions), or add the mode and rules directly to your settings file:
+
+```json [settings]
+{
+  "agent": {
+    "permission_mode": "auto",
     "tool_permissions": {
-      "default": "allow",
       "tools": {
         "terminal": {
-          "default": "confirm",
           "always_allow": [
             { "pattern": "^cargo\\s+(build|test|check)" },
             { "pattern": "^npm\\s+(install|test|run)" }
           ],
-          "always_confirm": [{ "pattern": "sudo\\s+/" }]
+          "always_confirm": [{ "pattern": "^sudo\\s" }]
         }
       }
     }
@@ -30,16 +70,20 @@ Use Zed's Settings Editor to [configure tool permissions](zed://settings/agent.t
 }
 ```
 
-This example auto-approves `cargo` and `npm` commands in the terminal tool, while requiring manual confirmation on a case-by-case basis for `sudo` commands.
-Non-terminal commands follow the global `"default": "allow"` setting, but tool-specific defaults and `always_confirm` rules can still prompt.
+This example uses Auto mode, explicitly approves selected `cargo` and `npm` commands, and requires confirmation for `sudo` commands.
+Other unmatched actions use Auto's risk classification.
 
 ## How It Works
 
-The `tool_permissions` setting lets you customize tool permissions by specifying regex patterns that:
+The permission mode provides the fallback behavior for agent tool actions.
+The `tool_permissions` setting adds per-tool defaults and regex patterns that:
 
 - **Auto-approve** actions you trust
-- **Auto-deny** dangerous actions (blocked even when `tool_permissions.default` is set to `"allow"`)
-- **Always confirm** sensitive actions regardless of other settings
+- **Auto-deny** dangerous actions
+- **Always confirm** sensitive actions
+
+Custom rules apply normally in Manual and Auto modes. In Full Access, explicit deny rules still block actions, while confirmation rules are treated as allowed so the agent does not pause for approval.
+These settings apply to Zed's native agent; external agents connected through the Agent Client Protocol (ACP) may also apply their own permission system.
 
 ## Supported Tools
 
@@ -66,8 +110,8 @@ For model-invoked [Skills](./skills.md), use the `skill` tool. A user-invoked `/
 ```json [settings]
 {
   "agent": {
+    "permission_mode": "manual",
     "tool_permissions": {
-      "default": "confirm",
       "tools": {
         "<tool_name>": {
           "default": "confirm",
@@ -83,12 +127,24 @@ For model-invoked [Skills](./skills.md), use the `skill` tool. A user-invoked `/
 
 ### Options
 
-| Option           | Description                                                                    |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `default`        | Fallback when no patterns match: `"confirm"` (default), `"allow"`, or `"deny"` |
-| `always_allow`   | Patterns that auto-approve (unless deny or confirm also matches)               |
-| `always_deny`    | Patterns that block immediately—highest priority, cannot be overridden         |
-| `always_confirm` | Patterns that always prompt, even when `tool_permissions.default` is `"allow"` |
+| Option                                | Description                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `permission_mode`                     | Overall mode: `"manual"` (default), `"auto"`, or `"full_access"`                   |
+| `tools.<tool_name>.default`            | Per-tool fallback when no patterns match: `"confirm"`, `"allow"`, or `"deny"`      |
+| `tools.<tool_name>.always_allow`       | Patterns that auto-approve unless a deny or confirm rule also matches                |
+| `tools.<tool_name>.always_deny`        | Patterns that block immediately—highest custom-rule priority                        |
+| `tools.<tool_name>.always_confirm`     | Patterns that require confirmation unless an `always_deny` rule also matches         |
+| `tool_permissions.default`             | Legacy global fallback used only when `permission_mode` is omitted                   |
+
+### Compatibility with `tool_permissions.default`
+
+`agent.tool_permissions.default` is retained for compatibility with existing settings.
+When `agent.permission_mode` is absent, its `"confirm"`, `"allow"`, or `"deny"` value remains the inherited fallback for tools without a tool-specific default.
+The default `"confirm"` behavior corresponds to Manual mode.
+
+When `agent.permission_mode` is present, the permission mode supplies the inherited fallback instead.
+Tool-specific defaults and regex rules remain supported and keep their normal precedence.
+You do not need to migrate existing settings immediately, but new configurations should use `agent.permission_mode` for the overall behavior.
 
 ### Pattern Syntax
 
@@ -118,28 +174,30 @@ Matching is case-insensitive by default.
 
 From highest to lowest priority:
 
-1. **Built-in security rules**: Hardcoded protections (e.g., `rm -rf /`). Cannot be overridden.
-2. **`always_deny`**: Blocks matching actions
-3. **`always_confirm`**: Requires confirmation for matching actions
-4. **`always_allow`**: Auto-approves matching actions
-5. **Tool-specific `default`**: Per-tool fallback when no patterns match (e.g., `tools.terminal.default`)
-6. **Global `default`**: Falls back to `tool_permissions.default` when no tool-specific default is set
+1. **Built-in security rules**: Hardcoded protections (for example, `rm -rf /`) block catastrophic actions.
+2. **Invalid custom rules**: A tool with an invalid regex is blocked until the rule is fixed.
+3. **`always_deny`**: Blocks matching actions.
+4. **`always_confirm`**: Requires confirmation in Manual and Auto.
+5. **`always_allow`**: Auto-approves matching actions unless Auto's safety check classifies the action as high risk.
+6. **Tool-specific `default`**: Applies when no patterns match (for example, `tools.terminal.default`).
+7. **Permission mode fallback**: Uses Confirm for Manual and Allow for Auto or Full Access. If `permission_mode` is omitted, the legacy `tool_permissions.default` value is used instead.
 
-## Global Auto-Approve
+Auto's safety check converts otherwise allowed high-risk actions back to confirmation. Full Access converts confirmation results to allow, but it does not override built-in or explicit deny results.
 
-To auto-approve all tool actions:
+## Full Access
+
+To skip normal permission confirmations and disable the terminal sandbox:
 
 ```json [settings]
 {
   "agent": {
-    "tool_permissions": {
-      "default": "allow"
-    }
+    "permission_mode": "full_access"
   }
 }
 ```
 
-This bypasses confirmation prompts for most tools, but `always_deny`, `always_confirm`, built-in security rules, and paths inside Zed settings directories still prompt or block.
+Built-in security rules and explicit per-tool deny rules still block matching actions. Confirmation rules do not prompt in Full Access.
+Full Access should only be enabled when you understand and accept the risk of unconfirmed, unsandboxed command execution.
 
 ## Shell Compatibility
 
