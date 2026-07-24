@@ -53,7 +53,8 @@ use schemars::{JsonSchema, Schema};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use settings::{
-    LanguageModelSelection, Settings, SettingsStore, ToolPermissionMode, update_settings_file,
+    AgentPermissionMode, LanguageModelSelection, Settings, SettingsStore, ToolPermissionMode,
+    update_settings_file,
 };
 use std::fmt::Write;
 use std::{cell::RefCell, ops::ControlFlow};
@@ -1796,10 +1797,13 @@ impl Thread {
         if !self.sandboxing_available(cx) {
             return None;
         }
-        let persistent = AgentSettings::get_global(cx).sandbox_permissions.clone();
+        let agent_settings = AgentSettings::get_global(cx);
+        let persistent = agent_settings.sandbox_permissions.clone();
+        let full_access =
+            agent_settings.effective_permission_mode() == AgentPermissionMode::FullAccess;
         let git_dirs = sandbox_git_dirs(self.project.read(cx), cx);
         let grants = self.sandbox_grants.borrow();
-        let settings = crate::sandboxing::settings_thread_sandbox(&persistent)
+        let settings = crate::sandboxing::settings_thread_sandbox(&persistent, full_access)
             .with_protected_paths(git_dirs.clone());
         let thread = grants.thread_sandbox().with_protected_paths(git_dirs);
         Some((settings, thread))
@@ -1813,8 +1817,11 @@ impl Thread {
             return None;
         }
 
-        let persistent = AgentSettings::get_global(cx).sandbox_permissions.clone();
-        let settings_sandbox = crate::sandboxing::settings_thread_sandbox(&persistent);
+        let agent_settings = AgentSettings::get_global(cx);
+        let persistent = agent_settings.sandbox_permissions.clone();
+        let full_access =
+            agent_settings.effective_permission_mode() == AgentPermissionMode::FullAccess;
+        let settings_sandbox = crate::sandboxing::settings_thread_sandbox(&persistent, full_access);
         let grants = self.sandbox_grants.borrow();
         let thread_sandbox = grants.thread_sandbox();
         drop(grants);
@@ -5678,7 +5685,17 @@ impl ToolCallEventStream {
     ) -> Task<Result<()>> {
         let title = title.into();
         let options = context.build_permission_options();
-        self.run_authorization_loop(title, options, Some(context), None, cx)
+        let check_full_access: Box<dyn Fn(&App) -> ToolPermissionDecision> =
+            Box::new(|cx: &App| {
+                if AgentSettings::get_global(cx).effective_permission_mode()
+                    == AgentPermissionMode::FullAccess
+                {
+                    ToolPermissionDecision::Allow
+                } else {
+                    ToolPermissionDecision::Confirm
+                }
+            });
+        self.run_authorization_loop(title, options, Some(context), Some(check_full_access), cx)
     }
 
     /// Gate a sandbox *escalation* (network access, per-path writes, or full
@@ -5695,7 +5712,10 @@ impl ToolCallEventStream {
         reason: String,
         cx: &mut App,
     ) -> Task<Result<()>> {
-        if Self::sandbox_request_covered_by_grants(&request, &self.sandbox_grants, cx) {
+        if AgentSettings::get_global(cx).effective_permission_mode()
+            == AgentPermissionMode::FullAccess
+            || Self::sandbox_request_covered_by_grants(&request, &self.sandbox_grants, cx)
+        {
             return Task::ready(Ok(()));
         }
 
@@ -5832,9 +5852,10 @@ impl ToolCallEventStream {
         cx: &App,
     ) -> bool {
         let settings = AgentSettings::get_global(cx);
-        sandbox_grants
-            .borrow()
-            .covers_with_persistent(request, &settings.sandbox_permissions)
+        settings.effective_permission_mode() == AgentPermissionMode::FullAccess
+            || sandbox_grants
+                .borrow()
+                .covers_with_persistent(request, &settings.sandbox_permissions)
     }
 
     fn handle_sandbox_permission_outcome(
@@ -5970,6 +5991,8 @@ impl ToolCallEventStream {
     pub(crate) fn unsandboxed_access_granted(&self, cx: &App) -> bool {
         self.unsandboxed_granted_for_thread()
             || self.sandbox_fallback_granted_for_thread()
+            || AgentSettings::get_global(cx).effective_permission_mode()
+                == AgentPermissionMode::FullAccess
             || AgentSettings::get_global(cx)
                 .sandbox_permissions
                 .allow_unsandboxed
@@ -7660,6 +7683,42 @@ mod tests {
         ) -> Task<Result<Self::Output, Self::Output>> {
             Task::ready(Ok(String::new()))
         }
+    }
+
+    #[gpui::test]
+    async fn test_full_access_skips_native_authorization_prompts(cx: &mut TestAppContext) {
+        crate::tests::init_test(cx);
+        cx.update(|cx| {
+            let mut settings = AgentSettings::get_global(cx).clone();
+            settings.permission_mode = Some(AgentPermissionMode::FullAccess);
+            AgentSettings::override_global(settings, cx);
+        });
+
+        let (event_stream, mut receiver) = ToolCallEventStream::test();
+        let authorize_sensitive = cx.update(|cx| {
+            event_stream.authorize_always_prompt(
+                "Edit sensitive settings",
+                ToolPermissionContext::new("edit_file", vec![".zed/settings.json".into()]),
+                cx,
+            )
+        });
+        assert!(authorize_sensitive.await.is_ok());
+        assert!(receiver.0.next().now_or_never().is_none());
+
+        let authorize_sandbox = cx.update(|cx| {
+            event_stream.authorize_sandbox(
+                SandboxRequest {
+                    network: crate::sandboxing::NetworkRequest::AnyHost,
+                    allow_fs_write_all: true,
+                    unsandboxed: true,
+                    write_paths: vec![PathBuf::from("/tmp/full-access")],
+                },
+                "requires unrestricted access".to_string(),
+                cx,
+            )
+        });
+        assert!(authorize_sandbox.await.is_ok());
+        assert!(receiver.0.next().now_or_never().is_none());
     }
 
     #[gpui::test]

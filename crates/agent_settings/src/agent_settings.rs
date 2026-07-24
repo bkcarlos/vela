@@ -16,7 +16,7 @@ use project::DisableAiSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
-    DockPosition, DockSide, LanguageModelParameters, LanguageModelSelection,
+    AgentPermissionMode, DockPosition, DockSide, LanguageModelParameters, LanguageModelSelection,
     NotifyWhenAgentWaiting, PlaySoundWhenAgentDone, RegisterSetting, Settings, SettingsContent,
     SettingsStore, SidebarDockPosition, SidebarSide, ThinkingBlockDisplay, ToolPermissionMode,
     update_settings_file, update_settings_file_with_completion,
@@ -239,6 +239,7 @@ pub struct AgentSettings {
     pub message_editor_min_lines: usize,
     pub show_turn_stats: bool,
     pub show_merge_conflict_indicator: bool,
+    pub permission_mode: Option<AgentPermissionMode>,
     pub tool_permissions: ToolPermissions,
     pub sandbox_permissions: SandboxPermissions,
 }
@@ -275,6 +276,23 @@ impl AgentSettings {
 
     pub fn set_message_editor_max_lines(&self) -> usize {
         self.message_editor_min_lines * 2
+    }
+
+    pub fn effective_permission_mode(&self) -> AgentPermissionMode {
+        self.permission_mode.unwrap_or_else(|| {
+            if self.tool_permissions.default == ToolPermissionMode::Allow {
+                AgentPermissionMode::Auto
+            } else {
+                AgentPermissionMode::Manual
+            }
+        })
+    }
+
+    pub fn effective_tool_permission_default(&self) -> ToolPermissionMode {
+        self.permission_mode
+            .map_or(self.tool_permissions.default, |mode| {
+                mode.tool_permission_default()
+            })
     }
 
     pub fn favorite_model_ids(&self) -> HashSet<SharedString> {
@@ -806,6 +824,7 @@ impl Settings for AgentSettings {
             message_editor_min_lines: agent.message_editor_min_lines.unwrap(),
             show_turn_stats: agent.show_turn_stats.unwrap(),
             show_merge_conflict_indicator: agent.show_merge_conflict_indicator.unwrap(),
+            permission_mode: agent.permission_mode,
             tool_permissions: compile_tool_permissions(agent.tool_permissions),
             sandbox_permissions: compile_sandbox_permissions(agent.sandbox_permissions),
         }

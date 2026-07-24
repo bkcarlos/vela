@@ -336,6 +336,11 @@ pub struct AgentSettingsContent {
     ///
     /// Default: true
     pub show_merge_conflict_indicator: Option<bool>,
+    /// The native Agent's permission policy. When unset, this is inferred from
+    /// `tool_permissions.default` for compatibility with older settings.
+    ///
+    /// Default: manual
+    pub permission_mode: Option<AgentPermissionMode>,
     /// Per-tool permission rules for granular control over which tool actions
     /// require confirmation.
     ///
@@ -891,6 +896,62 @@ pub struct ToolRegexRule {
     Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, MergeFrom,
 )]
 #[serde(rename_all = "snake_case")]
+pub enum AgentPermissionMode {
+    /// Ask before file modifications, commands, and other tool actions unless
+    /// an explicit per-tool allow rule applies.
+    #[default]
+    Manual,
+    /// Run routine actions automatically while retaining confirmation gates for
+    /// operations classified as high risk.
+    Auto,
+    /// Skip native Agent permission prompts and run terminal commands without
+    /// the Agent sandbox.
+    FullAccess,
+}
+
+impl AgentPermissionMode {
+    pub const ALL: [Self; 3] = [Self::Manual, Self::Auto, Self::FullAccess];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Manual => "Manual",
+            Self::Auto => "Auto",
+            Self::FullAccess => "Full Access",
+        }
+    }
+
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Manual => {
+                "Read code automatically, but ask before modifying files or running commands."
+            }
+            Self::Auto => {
+                "Run routine edits and commands automatically, while asking before high-risk operations."
+            }
+            Self::FullAccess => {
+                "Skip permission prompts and run terminal commands without the Agent sandbox."
+            }
+        }
+    }
+
+    pub const fn tool_permission_default(self) -> ToolPermissionMode {
+        match self {
+            Self::Manual => ToolPermissionMode::Confirm,
+            Self::Auto | Self::FullAccess => ToolPermissionMode::Allow,
+        }
+    }
+}
+
+impl std::fmt::Display for AgentPermissionMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, MergeFrom,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum ToolPermissionMode {
     /// Auto-approve without prompting.
     Allow,
@@ -914,6 +975,19 @@ impl std::fmt::Display for ToolPermissionMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_permission_mode_serializes_as_snake_case() -> serde_json::Result<()> {
+        assert_eq!(
+            serde_json::to_value(AgentPermissionMode::FullAccess)?,
+            serde_json::json!("full_access")
+        );
+        assert_eq!(
+            serde_json::from_value::<AgentPermissionMode>(serde_json::json!("auto"))?,
+            AgentPermissionMode::Auto
+        );
+        Ok(())
+    }
 
     #[test]
     fn agent_config_option_value_serializes_value_id_as_string() {

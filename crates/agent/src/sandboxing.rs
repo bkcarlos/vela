@@ -137,8 +137,11 @@ impl ThreadSandbox {
 /// [`ThreadSandbox`]. The persistent `allow_unsandboxed` setting removes the
 /// sandbox entirely; otherwise the writable-path and host grants form its
 /// scope. The per-thread overrides come from [`ThreadSandboxGrants::thread_sandbox`].
-pub fn settings_thread_sandbox(persistent: &SandboxPermissions) -> ThreadSandbox {
-    if persistent.allow_unsandboxed {
+pub fn settings_thread_sandbox(
+    persistent: &SandboxPermissions,
+    full_access: bool,
+) -> ThreadSandbox {
+    if full_access || persistent.allow_unsandboxed {
         ThreadSandbox::Unsandboxed
     } else {
         ThreadSandbox::Sandboxed(settings_sandbox_policy(persistent))
@@ -187,10 +190,10 @@ pub fn settings_sandbox_policy(persistent: &SandboxPermissions) -> SandboxPolicy
 /// prompt in place, since the model is still operating in the sandbox model and
 /// only escaping individual commands (tracked in `ThreadSandboxGrants`).
 pub(crate) fn sandboxing_enabled_for_project(project: &Project, cx: &App) -> bool {
+    let settings = AgentSettings::get_global(cx);
     sandboxing_available_for_project(project, cx)
-        && !AgentSettings::get_global(cx)
-            .sandbox_permissions
-            .allow_unsandboxed
+        && !settings.sandbox_permissions.allow_unsandboxed
+        && settings.effective_permission_mode() != settings::AgentPermissionMode::FullAccess
 }
 
 /// Whether agent-run terminal commands should be wrapped in an OS-level
@@ -675,9 +678,10 @@ mod tests {
             allow_unsandboxed: true,
             ..Default::default()
         };
-        assert!(settings_thread_sandbox(&unsandboxed).is_unsandboxed());
+        assert!(settings_thread_sandbox(&unsandboxed, false).is_unsandboxed());
+        assert!(settings_thread_sandbox(&SandboxPermissions::default(), true).is_unsandboxed());
         assert!(matches!(
-            settings_thread_sandbox(&SandboxPermissions::default()),
+            settings_thread_sandbox(&SandboxPermissions::default(), false),
             ThreadSandbox::Sandboxed(_)
         ));
     }
