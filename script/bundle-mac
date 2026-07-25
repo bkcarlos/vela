@@ -140,60 +140,11 @@ if [[ -n "${MACOS_CERTIFICATE:-}" && -n "${MACOS_CERTIFICATE_PASSWORD:-}" && -n 
     trap cleanup EXIT
 fi
 
-GIT_VERSION="v2.43.3"
-GIT_VERSION_SHA="fa29823"
 
-function download_and_unpack() {
-    local url=$1
-    local path_to_unpack=$2
-    local target_path=$3
-
-    temp_dir=$(mktemp -d)
-
-    if ! command -v curl &> /dev/null; then
-        echo "curl is not installed. Please install curl to continue."
-        exit 1
-    fi
-
-    curl --silent --fail --location "$url" | tar -xvz -C "$temp_dir" -f - $path_to_unpack
-
-    mv "$temp_dir/$path_to_unpack" "$target_path"
-
-    rm -rf "$temp_dir"
-}
-
-function download_git() {
-    local architecture=$1
-    local target_binary=$2
-
-    tmp_dir=$(mktemp -d)
-    pushd "$tmp_dir"
-
-    case "$architecture" in
-        aarch64-apple-darwin)
-            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-arm64.tar.gz" bin/git ./git
-            ;;
-        x86_64-apple-darwin)
-            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-x64.tar.gz" bin/git ./git
-            ;;
-        *)
-            echo "Unsupported architecture: $architecture"
-            exit 1
-            ;;
-    esac
-
-    popd
-
-    mv "${tmp_dir}/git" "${target_binary}"
-    rm -rf "$tmp_dir"
-}
 
 function sign_app_binaries() {
     rm -rf "${app_path}/Contents/Frameworks"
     mkdir -p "${app_path}/Contents/Frameworks"
-
-    echo "Downloading git binary"
-    download_git "${target_triple}" "${app_path}/Contents/MacOS/git"
 
     # Note: The app identifier for our development builds is the same as the app identifier for nightly.
     cp crates/zed/contents/$channel/embedded.provisionprofile "${app_path}/Contents/"
@@ -202,7 +153,6 @@ function sign_app_binaries() {
         echo "Code signing binaries"
         # sequence of codesign commands modeled after this example: https://developer.apple.com/forums/thread/701514
         /usr/bin/codesign --deep --force --timestamp --options runtime --sign "$IDENTITY" "${app_path}/Contents/MacOS/cli" -v
-        /usr/bin/codesign --deep --force --timestamp --options runtime --sign "$IDENTITY" "${app_path}/Contents/MacOS/git" -v
         /usr/bin/codesign --deep --force --timestamp --options runtime --entitlements crates/zed/resources/zed.entitlements --sign "$IDENTITY" "${app_path}/Contents/MacOS/vela" -v
         /usr/bin/codesign --force --timestamp --options runtime --entitlements crates/zed/resources/zed.entitlements --sign "$IDENTITY" "${app_path}" -v
     else
@@ -336,5 +286,5 @@ cp target/${target_triple}/${target_dir}/vela "${app_path}/Contents/MacOS/vela"
 cp target/${target_triple}/${target_dir}/cli "${app_path}/Contents/MacOS/cli"
 sign_app_binaries
 
-sign_binary "target/$target_triple/release/remote_server"
-gzip -f --stdout --best target/$target_triple/release/remote_server > target/zed-remote-server-macos-$arch_suffix.gz
+sign_binary "target/$target_triple/$target_dir/remote_server"
+gzip -f --stdout --best target/$target_triple/$target_dir/remote_server > target/zed-remote-server-macos-$arch_suffix.gz

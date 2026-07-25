@@ -1399,19 +1399,8 @@ pub async fn get_git_committer(cx: &AsyncApp) -> GitCommitter {
         };
     }
 
-    let git_binary_path =
-        if cfg!(target_os = "macos") && option_env!("ZED_BUNDLE").as_deref() == Some("true") {
-            cx.update(|cx| {
-                cx.path_for_auxiliary_executable("git")
-                    .context("could not find git binary path")
-                    .log_err()
-            })
-        } else {
-            None
-        };
-
     let git = GitBinary::new(
-        git_binary_path.unwrap_or(PathBuf::from("git")),
+        PathBuf::from("git"),
         paths::home_dir().clone(),
         paths::home_dir().join(".git"),
         cx.background_executor().clone(),
