@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use editor::Editor;
-use gpui::{AnyView, Entity, Focusable as _, ScrollHandle, prelude::*};
+use gpui::{AnyView, Entity, Focusable as _, ReadGlobal, ScrollHandle, prelude::*};
 use language_model::{
     ApiKeyConfiguration, CreateProviderSettingsView, IconOrSvg, InlineDescription,
     LanguageModelProvider, LanguageModelProviderId, LanguageModelRegistry, ProviderSettingsView,
@@ -11,6 +11,7 @@ use settings::{
     AnthropicCompatibleAvailableModel, AnthropicCompatibleModelCapabilities,
     AnthropicCompatibleSettingsContent, OpenAiCompatibleAvailableModel,
     OpenAiCompatibleModelCapabilities, OpenAiCompatibleSettingsContent, OpenAiReasoningEffort,
+    SettingsStore,
 };
 use ui::{
     ButtonLink, Checkbox, ConfiguredApiCard, ContextMenu, Divider, DividerColor, DropdownMenu,
@@ -130,6 +131,7 @@ pub(crate) fn render_add_llm_provider_popover(
                                     open_llm_provider_form(
                                         this,
                                         CompatibleProviderKind::OpenAi,
+                                        None,
                                         window,
                                         cx,
                                     );
@@ -145,6 +147,7 @@ pub(crate) fn render_add_llm_provider_popover(
                                     open_llm_provider_form(
                                         this,
                                         CompatibleProviderKind::Anthropic,
+                                        None,
                                         window,
                                         cx,
                                     );
@@ -517,6 +520,24 @@ fn render_provider_config_sub_page(
     let view =
         get_or_create_configuration_view(settings_window, &provider_id, create_view, window, cx);
 
+    // For user-configured OpenAI/Anthropic-compatible providers, offer an
+    // "Edit Provider" action that reopens the provider form pre-populated with
+    // the existing models and API URL, so they can be modified in place instead
+    // of deleting and re-adding the provider.
+    let edit_provider_button = existing_provider_data(&provider_id, cx).map(|(kind, data)| {
+        Button::new("edit-compatible-provider", "Edit Provider")
+            .style(ButtonStyle::OutlinedGhost)
+            .label_size(LabelSize::Small)
+            .start_icon(
+                Icon::new(IconName::Pencil)
+                    .size(IconSize::Small)
+                    .color(Color::Muted),
+            )
+            .on_click(cx.listener(move |this, _, window, cx| {
+                open_llm_provider_form(this, kind, Some(data.clone()), window, cx);
+            }))
+    });
+
     v_flex()
         .id("provider-config-sub-page")
         .size_full()
@@ -525,6 +546,9 @@ fn render_provider_config_sub_page(
         .pb_16()
         .track_scroll(scroll_handle)
         .overflow_y_scroll()
+        .when_some(edit_provider_button, |this, button| {
+            this.child(h_flex().w_full().justify_end().pb_2().child(button))
+        })
         .child(view)
         .into_any_element()
 }
@@ -558,6 +582,10 @@ fn get_or_create_configuration_view(
 
 pub(crate) struct LlmProviderForm {
     kind: CompatibleProviderKind,
+    /// `Some` when editing an existing compatible provider. The provider name is
+    /// fixed to this id (rendered read-only) and saving updates the existing
+    /// entry in place instead of creating a new one.
+    original_id: Option<LanguageModelProviderId>,
     provider_name: Entity<Editor>,
     api_url: Entity<Editor>,
     api_key: Entity<Editor>,
@@ -568,24 +596,164 @@ pub(crate) struct LlmProviderForm {
 impl LlmProviderForm {
     fn new(
         kind: CompatibleProviderKind,
+        existing: Option<ExistingProviderData>,
         window: &mut Window,
         cx: &mut Context<SettingsWindow>,
     ) -> Self {
+        let original_id = existing.as_ref().map(|data| data.id.clone());
+        let provider_name_initial = existing.as_ref().map(|data| data.id.0.as_ref());
+        let api_url_initial = existing.as_ref().map(|data| data.api_url.as_str());
+        let is_edit = existing.is_some();
+
+        let models = match existing.as_ref() {
+            Some(data) if !data.models.is_empty() => data
+                .models
+                .iter()
+                .enumerate()
+                .map(|(index, model)| ModelInput::from_existing(index, model, window, cx))
+                .collect(),
+            _ => vec![ModelInput::new(0, window, cx)],
+        };
+
+        let provider_name = new_input(kind.label(), provider_name_initial, false, window, cx);
+        // In edit mode the provider name is the settings key and cannot change.
+        if is_edit {
+            provider_name.update(cx, |editor, _cx| editor.set_read_only(true));
+        }
+
+        let api_key_placeholder = if is_edit {
+            "Leave blank to keep the current API key"
+        } else {
+            "000000000000000000000000000000000000000000000000"
+        };
+
         Self {
             kind,
-            provider_name: new_input(kind.label(), None, false, window, cx),
-            api_url: new_input(kind.default_api_url(), None, false, window, cx),
-            api_key: new_input(
-                "000000000000000000000000000000000000000000000000",
-                None,
-                true,
-                window,
-                cx,
-            ),
-            models: vec![ModelInput::new(0, window, cx)],
+            original_id,
+            provider_name,
+            api_url: new_input(kind.default_api_url(), api_url_initial, false, window, cx),
+            api_key: new_input(api_key_placeholder, None, true, window, cx),
+            models,
             error: None,
         }
     }
+}
+
+/// Pre-extracted configuration for an existing compatible provider, used to
+/// pre-populate the form in edit mode.
+#[derive(Clone)]
+struct ExistingProviderData {
+    id: LanguageModelProviderId,
+    api_url: String,
+    models: Vec<ExistingModel>,
+}
+
+/// A model's editable fields in plain (editor-free) form, used to seed
+/// `ModelInput` when editing an existing provider.
+#[derive(Clone)]
+struct ExistingModel {
+    name: String,
+    max_completion_tokens: Option<u64>,
+    max_output_tokens: Option<u64>,
+    max_tokens: u64,
+    reasoning_effort: Option<OpenAiReasoningEffort>,
+    supports_tools: bool,
+    supports_images: bool,
+    supports_parallel_tool_calls: bool,
+    supports_prompt_cache_key: bool,
+    supports_chat_completions: bool,
+    supports_thinking: bool,
+    interleaved_reasoning: bool,
+    max_tokens_parameter: bool,
+}
+
+fn existing_model_from_openai(model: &OpenAiCompatibleAvailableModel) -> ExistingModel {
+    ExistingModel {
+        name: model.name.clone(),
+        max_completion_tokens: model.max_completion_tokens,
+        max_output_tokens: model.max_output_tokens,
+        max_tokens: model.max_tokens,
+        reasoning_effort: model.reasoning_effort,
+        supports_tools: model.capabilities.tools,
+        supports_images: model.capabilities.images,
+        supports_parallel_tool_calls: model.capabilities.parallel_tool_calls,
+        supports_prompt_cache_key: model.capabilities.prompt_cache_key,
+        supports_chat_completions: model.capabilities.chat_completions,
+        supports_thinking: model.reasoning_effort.is_some(),
+        interleaved_reasoning: model.capabilities.interleaved_reasoning,
+        max_tokens_parameter: model.capabilities.max_tokens_parameter,
+    }
+}
+
+fn existing_model_from_anthropic(model: &AnthropicCompatibleAvailableModel) -> ExistingModel {
+    ExistingModel {
+        name: model.name.clone(),
+        max_completion_tokens: None,
+        max_output_tokens: model.max_output_tokens,
+        max_tokens: model.max_tokens,
+        reasoning_effort: None,
+        supports_tools: model.capabilities.tools,
+        supports_images: model.capabilities.images,
+        supports_parallel_tool_calls: false,
+        supports_prompt_cache_key: false,
+        supports_chat_completions: false,
+        supports_thinking: false,
+        interleaved_reasoning: false,
+        max_tokens_parameter: false,
+    }
+}
+
+/// Looks up an existing OpenAI/Anthropic-compatible provider's configuration in
+/// the merged settings, returning the data needed to pre-populate the edit form.
+/// Returns `None` for providers that aren't user-configured compatible providers.
+fn existing_provider_data(
+    provider_id: &LanguageModelProviderId,
+    cx: &App,
+) -> Option<(CompatibleProviderKind, ExistingProviderData)> {
+    let language_models = SettingsStore::global(cx)
+        .merged_settings()
+        .language_models
+        .as_ref()?;
+
+    if let Some(content) = language_models
+        .openai_compatible
+        .as_ref()
+        .and_then(|providers| providers.get(provider_id.0.as_ref()))
+    {
+        return Some((
+            CompatibleProviderKind::OpenAi,
+            ExistingProviderData {
+                id: provider_id.clone(),
+                api_url: content.api_url.clone(),
+                models: content
+                    .available_models
+                    .iter()
+                    .map(existing_model_from_openai)
+                    .collect(),
+            },
+        ));
+    }
+
+    if let Some(content) = language_models
+        .anthropic_compatible
+        .as_ref()
+        .and_then(|providers| providers.get(provider_id.0.as_ref()))
+    {
+        return Some((
+            CompatibleProviderKind::Anthropic,
+            ExistingProviderData {
+                id: provider_id.clone(),
+                api_url: content.api_url.clone(),
+                models: content
+                    .available_models
+                    .iter()
+                    .map(existing_model_from_anthropic)
+                    .collect(),
+            },
+        ));
+    }
+
+    None
 }
 
 struct ModelInput {
@@ -638,6 +806,55 @@ impl ModelInput {
             max_tokens_parameter: max_tokens_parameter.into(),
         }
     }
+
+    fn from_existing(
+        _index: usize,
+        model: &ExistingModel,
+        window: &mut Window,
+        cx: &mut Context<SettingsWindow>,
+    ) -> Self {
+        Self {
+            name: new_input(
+                "e.g. gpt-5, claude-opus-4, gemini-2.5-pro",
+                Some(&model.name),
+                false,
+                window,
+                cx,
+            ),
+            max_completion_tokens: new_input(
+                "200000",
+                Some(&model.max_completion_tokens.unwrap_or(200000).to_string()),
+                false,
+                window,
+                cx,
+            ),
+            max_output_tokens: new_input(
+                "Max Output Tokens",
+                Some(&model.max_output_tokens.unwrap_or(32000).to_string()),
+                false,
+                window,
+                cx,
+            ),
+            max_tokens: new_input(
+                "Max Tokens",
+                Some(&model.max_tokens.to_string()),
+                false,
+                window,
+                cx,
+            ),
+            reasoning_effort: model
+                .reasoning_effort
+                .unwrap_or(OpenAiReasoningEffort::Medium),
+            supports_tools: model.supports_tools.into(),
+            supports_images: model.supports_images.into(),
+            supports_parallel_tool_calls: model.supports_parallel_tool_calls.into(),
+            supports_prompt_cache_key: model.supports_prompt_cache_key.into(),
+            supports_chat_completions: model.supports_chat_completions.into(),
+            supports_thinking: model.supports_thinking.into(),
+            interleaved_reasoning: model.interleaved_reasoning.into(),
+            max_tokens_parameter: model.max_tokens_parameter.into(),
+        }
+    }
 }
 
 fn new_input(
@@ -663,12 +880,19 @@ fn new_input(
 fn open_llm_provider_form(
     settings_window: &mut SettingsWindow,
     kind: CompatibleProviderKind,
+    existing: Option<ExistingProviderData>,
     window: &mut Window,
     cx: &mut Context<SettingsWindow>,
 ) {
-    settings_window.llm_provider_form = Some(LlmProviderForm::new(kind, window, cx));
+    let is_edit = existing.is_some();
+    settings_window.llm_provider_form = Some(LlmProviderForm::new(kind, existing, window, cx));
+    let title = if is_edit {
+        format!("Edit {}-Compatible Provider", kind.label())
+    } else {
+        format!("Add {}-Compatible Provider", kind.label())
+    };
     settings_window.push_dynamic_sub_page(
-        format!("Add {}-Compatible Provider", kind.label()),
+        title,
         "Agent Configuration",
         Some("llm_providers"),
         true,
@@ -686,6 +910,12 @@ fn render_llm_provider_form_page(
 ) -> AnyElement {
     let Some(form) = settings_window.llm_provider_form.as_ref() else {
         return div().into_any_element();
+    };
+    let is_edit = form.original_id.is_some();
+    let api_key_description = if is_edit {
+        "Optional. Leave blank to keep the current key. Stored in the system keychain, not in settings.json."
+    } else {
+        "Stored in the system keychain, not in settings.json."
     };
 
     v_flex()
@@ -710,7 +940,11 @@ fn render_llm_provider_form_page(
                 .child(Divider::horizontal().flex_shrink_0())
                 .child(render_form_field(
                     "Provider Name",
-                    "A unique name used to identify this provider.",
+                    if is_edit {
+                        "The provider name cannot be changed after creation."
+                    } else {
+                        "A unique name used to identify this provider."
+                    },
                     &form.provider_name,
                     cx,
                 ))
@@ -722,7 +956,7 @@ fn render_llm_provider_form_page(
                 ))
                 .child(render_form_field(
                     "API Key",
-                    "Stored in the system keychain, not in settings.json.",
+                    api_key_description,
                     &form.api_key,
                     cx,
                 ))
@@ -738,7 +972,7 @@ fn render_llm_provider_form_page(
                 .when_some(form.error.clone(), |this, error| {
                     this.child(render_form_error(error))
                 })
-                .child(render_form_actions(cx)),
+                .child(render_form_actions(is_edit, cx)),
         )
         .into_any_element()
 }
@@ -1057,7 +1291,12 @@ fn render_form_error(error: SharedString) -> impl IntoElement {
         .child(Label::new(error).size(LabelSize::Small).color(Color::Error))
 }
 
-fn render_form_actions(cx: &mut Context<SettingsWindow>) -> impl IntoElement {
+fn render_form_actions(is_edit: bool, cx: &mut Context<SettingsWindow>) -> impl IntoElement {
+    let save_label = if is_edit {
+        "Save Changes"
+    } else {
+        "Save Provider"
+    };
     h_flex()
         .w_full()
         .gap_1()
@@ -1071,7 +1310,7 @@ fn render_form_actions(cx: &mut Context<SettingsWindow>) -> impl IntoElement {
             )),
         )
         .child(
-            Button::new("llm-provider-form-save", "Save Provider")
+            Button::new("llm-provider-form-save", save_label)
                 .style(ButtonStyle::Filled)
                 .on_click(cx.listener(|this, _, window, cx| {
                     save_llm_provider_form(this, window, cx);
@@ -1081,6 +1320,7 @@ fn render_form_actions(cx: &mut Context<SettingsWindow>) -> impl IntoElement {
 
 struct LlmProviderFormValues {
     kind: CompatibleProviderKind,
+    original_id: Option<LanguageModelProviderId>,
     provider_name: String,
     api_url: String,
     api_key: String,
@@ -1119,6 +1359,7 @@ fn save_llm_provider_form(
         };
         LlmProviderFormValues {
             kind: form.kind,
+            original_id: form.original_id.clone(),
             provider_name: form.provider_name.read(cx).text(cx),
             api_url: form.api_url.read(cx).text(cx),
             api_key: form.api_key.read(cx).text(cx),
@@ -1154,6 +1395,8 @@ fn save_llm_provider_form(
             return;
         }
     };
+    let original_id = values.original_id.clone();
+    let is_edit = original_id.is_some();
 
     let fs = <dyn fs::Fs>::global(cx);
     cx.spawn_in(window, async move |this, cx| {
@@ -1164,6 +1407,17 @@ fn save_llm_provider_form(
                     let language_models = settings.language_models.get_or_insert_default();
                     match models {
                         ParsedModels::OpenAi(available_models) => {
+                            // Preserve any custom headers the user configured
+                            // directly in settings.json when editing in place.
+                            let custom_headers = if is_edit {
+                                language_models
+                                    .openai_compatible
+                                    .as_ref()
+                                    .and_then(|providers| providers.get(provider_name.as_str()))
+                                    .and_then(|content| content.custom_headers.clone())
+                            } else {
+                                None
+                            };
                             language_models
                                 .openai_compatible
                                 .get_or_insert_default()
@@ -1172,11 +1426,20 @@ fn save_llm_provider_form(
                                     OpenAiCompatibleSettingsContent {
                                         api_url: api_url.clone(),
                                         available_models,
-                                        custom_headers: None,
+                                        custom_headers,
                                     },
                                 );
                         }
                         ParsedModels::Anthropic(available_models) => {
+                            let custom_headers = if is_edit {
+                                language_models
+                                    .anthropic_compatible
+                                    .as_ref()
+                                    .and_then(|providers| providers.get(provider_name.as_str()))
+                                    .and_then(|content| content.custom_headers.clone())
+                            } else {
+                                None
+                            };
                             language_models
                                 .anthropic_compatible
                                 .get_or_insert_default()
@@ -1185,7 +1448,7 @@ fn save_llm_provider_form(
                                     AnthropicCompatibleSettingsContent {
                                         api_url: api_url.clone(),
                                         available_models,
-                                        custom_headers: None,
+                                        custom_headers,
                                     },
                                 );
                         }
@@ -1197,13 +1460,17 @@ fn save_llm_provider_form(
                 .await
                 .map_err(|_| anyhow::anyhow!("Settings update was canceled"))??;
 
-            let set_api_key = cx.update(|_window, cx| {
-                let provider = LanguageModelRegistry::read_global(cx)
-                    .provider(&provider_id)
-                    .ok_or_else(|| anyhow::anyhow!("Provider was not registered"))?;
-                anyhow::Ok(provider.set_api_key(Some(api_key), cx))
-            })??;
-            set_api_key.await?;
+            // Only update the stored API key when the user entered one. In edit
+            // mode an empty field means "keep the existing key".
+            if let Some(api_key) = api_key {
+                let set_api_key = cx.update(|_window, cx| {
+                    let provider = LanguageModelRegistry::read_global(cx)
+                        .provider(&provider_id)
+                        .ok_or_else(|| anyhow::anyhow!("Provider was not registered"))?;
+                    anyhow::Ok(provider.set_api_key(Some(api_key), cx))
+                })??;
+                set_api_key.await?;
+            }
 
             cx.update(|window, cx| {
                 this.update(cx, |this, cx| {
@@ -1234,19 +1501,26 @@ fn save_llm_provider_form(
 fn validate_llm_provider_form(
     values: &LlmProviderFormValues,
     cx: &App,
-) -> Result<(String, String, String, ParsedModels), SharedString> {
+) -> Result<(String, String, Option<String>, ParsedModels), SharedString> {
     let provider_name = values.provider_name.clone();
     if provider_name.is_empty() {
         return Err("Provider Name cannot be empty".into());
     }
 
-    if LanguageModelRegistry::read_global(cx)
-        .providers()
-        .iter()
-        .any(|provider| {
-            provider.id().0.as_ref() == provider_name.as_str()
-                || provider.name().0.as_ref() == provider_name.as_str()
-        })
+    // When editing, the provider name is fixed to the original id, so a name
+    // collision with itself is expected and allowed.
+    let is_editing_self = values
+        .original_id
+        .as_ref()
+        .is_some_and(|original| original.0.as_ref() == provider_name.as_str());
+    if !is_editing_self
+        && LanguageModelRegistry::read_global(cx)
+            .providers()
+            .iter()
+            .any(|provider| {
+                provider.id().0.as_ref() == provider_name.as_str()
+                    || provider.name().0.as_ref() == provider_name.as_str()
+            })
     {
         return Err("Provider Name is already taken by another provider".into());
     }
@@ -1256,10 +1530,15 @@ fn validate_llm_provider_form(
         return Err("API URL cannot be empty".into());
     }
 
-    let api_key = values.api_key.clone();
-    if api_key.is_empty() {
+    // The API key is required when creating a provider. When editing, an empty
+    // field means "keep the existing key".
+    let api_key = if values.original_id.is_some() && values.api_key.is_empty() {
+        None
+    } else if values.api_key.is_empty() {
         return Err("API Key cannot be empty".into());
-    }
+    } else {
+        Some(values.api_key.clone())
+    };
 
     let models = match values.kind {
         CompatibleProviderKind::OpenAi => ParsedModels::OpenAi(
