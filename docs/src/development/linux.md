@@ -1,13 +1,13 @@
 ---
-title: Building Zed for Linux
-description: "Guide to building zed for linux for Zed development."
+title: Building Vela for Linux
+description: "Guide to building vela for linux for Vela development."
 ---
 
-# Building Zed for Linux
+# Building Vela for Linux
 
 ## Repository
 
-Clone the [Zed repository](https://github.com/zed-industries/zed).
+Clone the [Vela repository](https://github.com/vela-industries/vela).
 
 ## Dependencies
 
@@ -23,7 +23,7 @@ Clone the [Zed repository](https://github.com/zed-industries/zed).
 
 ## Building from source
 
-Once the dependencies are installed, you can build Zed using [Cargo](https://doc.rust-lang.org/cargo/).
+Once the dependencies are installed, you can build Vela using [Cargo](https://doc.rust-lang.org/cargo/).
 
 For a debug build of the editor:
 
@@ -51,42 +51,42 @@ You can install a local build on your machine with:
 ./script/install-linux
 ```
 
-This builds `zed` and the `cli` in release mode, installs the binary at `~/.local/bin/zed`, and installs `.desktop` files to `~/.local/share`.
+This builds `vela` and the `cli` in release mode, installs the binary at `~/.local/bin/vela`, and installs `.desktop` files to `~/.local/share`.
 
 ## Wayland & X11
 
-Zed supports both X11 and Wayland. By default, we pick whichever we can find at runtime. If you're on Wayland and want to run in X11 mode, use the environment variable `WAYLAND_DISPLAY=''`.
+Vela supports both X11 and Wayland. By default, we pick whichever we can find at runtime. If you're on Wayland and want to run in X11 mode, use the environment variable `WAYLAND_DISPLAY=''`.
 
-## Notes for packaging Zed
+## Notes for packaging Vela
 
-This section is for distribution maintainers packaging Zed.
+This section is for distribution maintainers packaging Vela.
 
 ### Technical requirements
 
-Zed has two main binaries:
+Vela has two main binaries:
 
-- You will need to build `crates/cli` and make its binary available in `$PATH` with the name `zed`.
-- You will need to build `crates/zed` and put it at `$PATH/to/cli/../../libexec/zed-editor`. For example, if you are going to put the cli at `~/.local/bin/zed` put zed at `~/.local/libexec/zed-editor`. As some linux distributions (notably Arch) discourage the use of `libexec`, you can also put this binary at `$PATH/to/cli/../../lib/zed/zed-editor` (e.g. `~/.local/lib/zed/zed-editor`) instead.
-- If you are going to provide a `.desktop` file you can find a template in `crates/zed/resources/zed.desktop.in`, and use `envsubst` to populate it with the values required. This file should also be renamed to `$APP_ID.desktop` so that the file [follows the FreeDesktop standards](https://github.com/zed-industries/zed/issues/12707#issuecomment-2168742761). You should also make this desktop file executable (`chmod 755`).
-- You will need to ensure that the necessary libraries are installed. You can get the current list by [inspecting the built binary](https://github.com/zed-industries/zed/blob/935cf542aebf55122ce6ed1c91d0fe8711970c82/script/bundle-linux#L65-L67) on your system.
-- For an example of a complete build script, see [script/bundle-linux](https://github.com/zed-industries/zed/blob/935cf542aebf55122ce6ed1c91d0fe8711970c82/script/bundle-linux).
-- You can disable Zed's auto updates and provide instructions for users who try to update Zed manually by building (or running) Zed with the environment variable `ZED_UPDATE_EXPLANATION`. For example: `ZED_UPDATE_EXPLANATION="Please use flatpak to update zed."`.
-- Make sure to update the contents of the `crates/zed/RELEASE_CHANNEL` file to 'nightly', 'preview', or 'stable', with no newline. This will cause Zed to use the credentials manager to remember a user's login.
+- You will need to build `crates/cli` and make its binary available in `$PATH` with the name `vela`.
+- You will need to build `crates/vela` and put it at `$PATH/to/cli/../../libexec/vela-editor`. For example, if you are going to put the cli at `~/.local/bin/vela` put vela at `~/.local/libexec/vela-editor`. As some linux distributions (notably Arch) discourage the use of `libexec`, you can also put this binary at `$PATH/to/cli/../../lib/vela/vela-editor` (e.g. `~/.local/lib/vela/vela-editor`) instead.
+- If you are going to provide a `.desktop` file you can find a template in `crates/vela/resources/vela.desktop.in`, and use `envsubst` to populate it with the values required. This file should also be renamed to `$APP_ID.desktop` so that the file [follows the FreeDesktop standards](https://github.com/vela-industries/vela/issues/12707#issuecomment-2168742761). You should also make this desktop file executable (`chmod 755`).
+- You will need to ensure that the necessary libraries are installed. You can get the current list by [inspecting the built binary](https://github.com/vela-industries/vela/blob/935cf542aebf55122ce6ed1c91d0fe8711970c82/script/bundle-linux#L65-L67) on your system.
+- For an example of a complete build script, see [script/bundle-linux](https://github.com/vela-industries/vela/blob/935cf542aebf55122ce6ed1c91d0fe8711970c82/script/bundle-linux).
+- You can disable Vela's auto updates and provide instructions for users who try to update Vela manually by building (or running) Vela with the environment variable `VELA_UPDATE_EXPLANATION`. For example: `VELA_UPDATE_EXPLANATION="Please use flatpak to update vela."`.
+- Make sure to update the contents of the `crates/vela/RELEASE_CHANNEL` file to 'nightly', 'preview', or 'stable', with no newline. This will cause Vela to use the credentials manager to remember a user's login.
 
 ### Other things to note
 
-Zed moves quickly, and distribution maintainers often have different constraints and priorities. The points below describe current trade-offs:
+Vela moves quickly, and distribution maintainers often have different constraints and priorities. The points below describe current trade-offs:
 
-- Zed is a fast-moving project. We typically publish 2-3 builds per week to address reported issues and ship larger changes.
-- There are a couple of other `zed` binaries that may be present on Linux systems ([1](https://openzfs.github.io/openzfs-docs/man/v2.2/8/zed.8.html), [2](https://zed.brimdata.io/docs/commands/zed)). If you want to rename our CLI binary because of these issues, we suggest `zedit`, `zeditor`, or `zed-cli`.
-- Zed automatically installs versions of common developer tools, similar to rustup/rbenv/pyenv. This behavior is discussed [here](https://github.com/zed-industries/zed/issues/12589).
-- Users can install extensions locally and from [zed-industries/extensions](https://github.com/zed-industries/extensions). Extensions may install additional tools such as language servers. Planned safety improvements are tracked [here](https://github.com/zed-industries/zed/issues/12358).
-- Zed connects to several online services by default (AI, telemetry, collaboration). AI and our telemetry can be disabled by your users with their zed settings or by patching our [default settings file](https://github.com/zed-industries/zed/blob/main/assets/settings/default.json).
-- Because of the points above, Zed currently does not work well with sandboxes. See [this discussion](https://github.com/zed-industries/zed/pull/12006#issuecomment-2130421220).
+- Vela is a fast-moving project. We typically publish 2-3 builds per week to address reported issues and ship larger changes.
+- There are a couple of other `vela` binaries that may be present on Linux systems ([1](https://openzfs.github.io/openzfs-docs/man/v2.2/8/vela.8.html), [2](https://vela.brimdata.io/docs/commands/vela)). If you want to rename our CLI binary because of these issues, we suggest `velait`, `velaitor`, or `vela-cli`.
+- Vela automatically installs versions of common developer tools, similar to rustup/rbenv/pyenv. This behavior is discussed [here](https://github.com/vela-industries/vela/issues/12589).
+- Users can install extensions locally and from [vela-industries/extensions](https://github.com/vela-industries/extensions). Extensions may install additional tools such as language servers. Planned safety improvements are tracked [here](https://github.com/vela-industries/vela/issues/12358).
+- Vela connects to several online services by default (AI, telemetry, collaboration). AI and our telemetry can be disabled by your users with their vela settings or by patching our [default settings file](https://github.com/vela-industries/vela/blob/main/assets/settings/default.json).
+- Because of the points above, Vela currently does not work well with sandboxes. See [this discussion](https://github.com/vela-industries/vela/pull/12006#issuecomment-2130421220).
 
 ## Flatpak
 
-> Zed's current Flatpak integration exits the sandbox on startup. Workflows that rely on Flatpak's sandboxing may not work as expected.
+> Vela's current Flatpak integration exits the sandbox on startup. Workflows that rely on Flatpak's sandboxing may not work as expected.
 
 To build & install the Flatpak package locally follow the steps below:
 
@@ -104,24 +104,24 @@ $ sudo apt install heaptrack heaptrack-gui
 $ cargo install cargo-heaptrack
 ```
 
-Then, to build and run Zed with the profiler attached:
+Then, to build and run Vela with the profiler attached:
 
 ```sh
-$ cargo heaptrack -b zed
+$ cargo heaptrack -b vela
 ```
 
-When this zed instance is exited, terminal output will include a command to run `heaptrack_interpret` to convert the `*.raw.zst` profile to a `*.zst` file which can be passed to `heaptrack_gui` for viewing.
+When this vela instance is exited, terminal output will include a command to run `heaptrack_interpret` to convert the `*.raw.zst` profile to a `*.zst` file which can be passed to `heaptrack_gui` for viewing.
 
 ## Perf recording
 
-How to get a flamegraph with resolved symbols from a running Zed instance.
-Use this when Zed is using a lot of CPU. It is not useful for hangs.
+How to get a flamegraph with resolved symbols from a running Vela instance.
+Use this when Vela is using a lot of CPU. It is not useful for hangs.
 
 ### During the incident
 
 - Find the PID (process ID) using:
-  `ps -eo size,pid,comm | grep zed | sort | head -n 1 | cut -d ' ' -f 2`
-  Or find the PID of `zed-editor` with the highest RAM usage in something
+  `ps -eo size,pid,comm | grep vela | sort | head -n 1 | cut -d ' ' -f 2`
+  Or find the PID of `vela-editor` with the highest RAM usage in something
   like htop/btop/top.
 
 - Install perf:
@@ -134,15 +134,15 @@ Use this when Zed is using a lot of CPU. It is not useful for hangs.
   run `sudo chown $USER:$USER perf.data`
 
 - Get build info:
-  Run zed again and type {#action zed::About} in the command pallet to get the exact commit.
+  Run vela again and type {#action vela::About} in the command pallet to get the exact commit.
 
-The `perf.data` file can be sent to Zed together with the exact commit.
+The `perf.data` file can be sent to Vela together with the exact commit.
 
 ### Later
 
-This can be done by Zed staff.
+This can be done by Vela staff.
 
-- Build Zed with symbols:
+- Build Vela with symbols:
   Check out the commit found previously and modify `Cargo.toml`.
   Apply the following diff, then make a release build.
 
@@ -153,7 +153,7 @@ This can be done by Zed staff.
 ```
 
 - Add the symbols to the perf database:
-  `perf buildid-cache -v -a <path to release zed binary>`
+  `perf buildid-cache -v -a <path to release vela binary>`
 
 - Resolve the symbols from the db:
   `perf inject -i perf.data -o perf_with_symbols.data`

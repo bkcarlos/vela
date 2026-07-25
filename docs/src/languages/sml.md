@@ -1,11 +1,11 @@
 ---
 title: Standard ML
-description: "Configure Standard ML language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Standard ML language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Standard ML
 
-Standard ML support is available through the community-maintained [Standard ML extension](https://github.com/omarjatoi/zed-sml).
+Standard ML support is available through the community-maintained [Standard ML extension](https://github.com/omarjatoi/vela-sml).
 
 - Tree-sitter: [MatthewFluet/tree-sitter-sml](https://github.com/MatthewFluet/tree-sitter-sml)
 - Language Server: [Millet](https://github.com/azdavis/millet)
@@ -17,7 +17,7 @@ Standard ML support is available through the community-maintained [Standard ML e
 
 ## Project setup
 
-For projects with more than one source file, Millet expects a single root group file. Create a `millet.toml` in the directory you open in Zed:
+For projects with more than one source file, Millet expects a single root group file. Create a `millet.toml` in the directory you open in Vela:
 
 ```toml
 version = 1

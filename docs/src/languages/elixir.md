@@ -1,11 +1,11 @@
 ---
 title: Elixir
-description: "Configure Elixir language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Elixir language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Elixir
 
-Elixir support is available through the [Elixir extension](https://github.com/zed-extensions/elixir).
+Elixir support is available through the [Elixir extension](https://github.com/vela-extensions/elixir).
 
 - Tree-sitter Grammars:
   - [elixir-lang/tree-sitter-elixir](https://github.com/elixir-lang/tree-sitter-elixir)
@@ -21,11 +21,11 @@ Furthermore, the extension provides support for [EEx](https://hexdocs.pm/eex/EEx
 
 ## Language Servers
 
-The Elixir extension offers language server support for ElixirLS, Expert, Dexter, Next LS, and Lexical. By default, only ElixirLS is enabled. You can change or disable the enabled language servers in your settings ({#kb zed::OpenSettings}) under Languages > Elixir/EEx/HEEx or directly within your settings file.
+The Elixir extension offers language server support for ElixirLS, Expert, Dexter, Next LS, and Lexical. By default, only ElixirLS is enabled. You can change or disable the enabled language servers in your settings ({#kb vela::OpenSettings}) under Languages > Elixir/EEx/HEEx or directly within your settings file.
 
 Some of the language servers can also accept initialization or workspace configuration options. See the sections below for an outline of what each server supports. The configuration can be passed in your settings file via `lsp.{language-server-id}.initialization_options` and `lsp.{language-server-id}.settings` respectively.
 
-Visit the [Configuring Zed](../configuring-zed.md#settings-files) guide for more information on how to edit your settings file.
+Visit the [Configuring Vela](../configuring-vela.md#settings-files) guide for more information on how to edit your settings file.
 
 ### Using ElixirLS
 
@@ -163,7 +163,7 @@ Enable Next LS by adding the following to your settings file:
 
 Next LS can accept initialization options.
 
-Completions are an experimental feature within Next LS, and are enabled by default in Zed. Disable them by adding the following to your settings file:
+Completions are an experimental feature within Next LS, and are enabled by default in Vela. Disable them by adding the following to your settings file:
 
 ```json [settings]
   "lsp": {

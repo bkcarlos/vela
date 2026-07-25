@@ -1,9 +1,9 @@
 ---
 title: Rough quick CPU profiling (Flamechart)
-description: "Performance profiling and optimization for Zed development."
+description: "Performance profiling and optimization for Vela development."
 ---
 
-How to use our internal tools to profile and keep Zed fast.
+How to use our internal tools to profile and keep Vela fast.
 
 # Rough quick CPU profiling (Flamechart)
 
@@ -33,13 +33,13 @@ fn should_appear_in_profile(kitty: Cat) {
 }
 ```
 
-Then either compile Zed with `ZTRACING=1 cargo r --features tracy --release`. The release build is optional but highly recommended as like every program Zed's performance characteristics change dramatically with optimizations. You do not want to chase slowdowns that do not exist in release.
+Then either compile Vela with `ZTRACING=1 cargo r --features tracy --release`. The release build is optional but highly recommended as like every program Vela's performance characteristics change dramatically with optimizations. You do not want to chase slowdowns that do not exist in release.
 
 ## One time Setup/Building the profiler:
 
 Download the profiler:
-[linux x86_64](https://zed-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-profiler-linux-x86_64)
-[macos aarch64](https://zed-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-profiler-0.13.0-macos-aarch64)
+[linux x86_64](https://vela-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-profiler-linux-x86_64)
+[macos aarch64](https://vela-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-profiler-0.13.0-macos-aarch64)
 
 ### Alternative: Building it yourself
 
@@ -51,7 +51,7 @@ Download the profiler:
 
 ## Usage
 
-Open the profiler (tracy-profiler), you should see zed in the list of `Discovered clients` click it.
+Open the profiler (tracy-profiler), you should see vela in the list of `Discovered clients` click it.
 
 <img width="392" height="auto" alt="image" src="https://github.com/user-attachments/assets/b6f06fc3-6b25-41c7-ade9-558cc93d6033" style="display: block; margin: 0 auto;"/>
 
@@ -96,7 +96,7 @@ let _enter = span.enter(); // span guard, when this is dropped the span ends (an
 
 # Task/Async profiling
 
-Get a profile of the zed foreground executor and background executors. Check if
+Get a profile of the vela foreground executor and background executors. Check if
 anything is blocking the foreground too long or taking too much (clock) time in
 the background.
 
@@ -106,12 +106,12 @@ look at the results live.
 ## Setup/Building the importer:
 
 Download the importer
-[linux x86_64](https://zed-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-import-miniprofiler-linux-x86_64)
-[mac aarch64](https://zed-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-import-miniprofiler-macos-aarch64)
+[linux x86_64](https://vela-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-import-miniprofiler-linux-x86_64)
+[mac aarch64](https://vela-tracy-import-miniprofiler.nyc3.digitaloceanspaces.com/tracy-import-miniprofiler-macos-aarch64)
 
 ### Alternative: Building it yourself
 
-- Clone the repo at git@github.com:zed-industries/tracy.git on v0.12.2 branch
+- Clone the repo at git@github.com:vela-industries/tracy.git on v0.12.2 branch
 - `cd import && mkdir build && cd build`
 - Run cmake to generate build files: `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..`
 - Build the importer: `ninja`
@@ -122,7 +122,7 @@ Download the importer
 
 ## To Save a Trace:
 
-- Run the action: `zed open performance profiler`
+- Run the action: `vela open performance profiler`
 - Hit the save button. This opens a save dialog or if that fails to open the trace gets saved in your working directory.
 - Convert the profile so it can be imported in tracy using the importer: `./tracy-import-miniprofiler <path to performance_profile.miniprof.json> output.tracy`
 - Go to <https://tracy.nereid.pl/> hit the 'power button' in the top left and then open saved trace.

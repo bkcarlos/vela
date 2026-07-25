@@ -1,11 +1,11 @@
 ---
 title: Clojure
-description: "Configure Clojure language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Clojure language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Clojure
 
-Clojure support is available through the [Clojure extension](https://github.com/zed-extensions/clojure).
+Clojure support is available through the [Clojure extension](https://github.com/vela-extensions/clojure).
 
 - Tree-sitter: [prcastro/tree-sitter-clojure](https://github.com/prcastro/tree-sitter-clojure)
 - Language Server: [clojure-lsp/clojure-lsp](https://github.com/clojure-lsp/clojure-lsp)

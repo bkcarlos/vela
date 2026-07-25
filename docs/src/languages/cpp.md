@@ -1,22 +1,22 @@
 ---
 title: C++
-description: "Configure C++ language support in Zed, including language servers, formatting, and debugging."
+description: "Configure C++ language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # C++
 
-C++ support is available natively in Zed.
+C++ support is available natively in Vela.
 
 - Tree-sitter: [tree-sitter/tree-sitter-cpp](https://github.com/tree-sitter/tree-sitter-cpp)
 - Language Server: [clangd/clangd](https://github.com/clangd/clangd)
 
 ## Binary
 
-You can configure which `clangd` binary Zed should use.
+You can configure which `clangd` binary Vela should use.
 
-By default, Zed will try to find a `clangd` in your `$PATH` and try to use that. If that binary successfully executes, it's used. Otherwise, Zed will fall back to installing its own `clangd` version and use that.
+By default, Vela will try to find a `clangd` in your `$PATH` and try to use that. If that binary successfully executes, it's used. Otherwise, Vela will fall back to installing its own `clangd` version and use that.
 
-If you want to install a pre-release `clangd` version instead you can instruct Zed to do so by setting `pre_release` to `true` in your `settings.json`:
+If you want to install a pre-release `clangd` version instead you can instruct Vela to do so by setting `pre_release` to `true` in your `settings.json`:
 
 ```json [settings]
 {
@@ -30,7 +30,7 @@ If you want to install a pre-release `clangd` version instead you can instruct Z
 }
 ```
 
-If you want to disable Zed looking for a `clangd` binary, you can set `ignore_system_version` to `true` in your `settings.json`:
+If you want to disable Vela looking for a `clangd` binary, you can set `ignore_system_version` to `true` in your `settings.json`:
 
 ```json [settings]
 {
@@ -80,7 +80,7 @@ You can pass any number of arguments to clangd. To see a full set of available o
 
 ## Formatting
 
-By default Zed will use the `clangd` language server for formatting C++ code. Its formatter is the same as the `clang-format` CLI tool. To configure this you can add a `.clang-format` file. For example:
+By default Vela will use the `clangd` language server for formatting C++ code. Its formatter is the same as the `clang-format` CLI tool. To configure this you can add a `.clang-format` file. For example:
 
 ```yaml
 # yaml-language-server: $schema=https://json.schemastore.org/clang-format-21.x.json
@@ -99,7 +99,7 @@ See [Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOpt
 
 You can trigger formatting via {#kb editor::Format} or the {#action editor::Format} action from the command palette or by enabling format on save.
 
-Configure formatting in Settings ({#kb zed::OpenSettings}) under Languages > C++, or add to your settings file:
+Configure formatting in Settings ({#kb vela::OpenSettings}) under Languages > C++, or add to your settings file:
 
 ```json [settings]
   "languages": {
@@ -142,7 +142,7 @@ After building your project, CMake will generate the `compile_commands.json` fil
 
 ## Debugging
 
-You can use CodeLLDB or GDB to debug native binaries. (Make sure that your build process passes `-g` to the C++ compiler, so that debug information is included in the resulting binary.) See below for examples of debug configurations that you can add to `.zed/debug.json`.
+You can use CodeLLDB or GDB to debug native binaries. (Make sure that your build process passes `-g` to the C++ compiler, so that debug information is included in the resulting binary.) See below for examples of debug configurations that you can add to `.vela/debug.json`.
 
 - [CodeLLDB configuration documentation](https://github.com/vadimcn/codelldb/blob/master/MANUAL.md#starting-a-new-debug-session)
 - [GDB configuration documentation](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Debugger-Adapter-Protocol.html)
@@ -157,9 +157,9 @@ You can use CodeLLDB or GDB to debug native binaries. (Make sure that your build
     "build": {
       "command": "make",
       "args": ["-j8"],
-      "cwd": "$ZED_WORKTREE_ROOT"
+      "cwd": "$VELA_WORKTREE_ROOT"
     },
-    "program": "$ZED_WORKTREE_ROOT/build/prog",
+    "program": "$VELA_WORKTREE_ROOT/build/prog",
     "request": "launch",
     "adapter": "CodeLLDB"
   }
@@ -168,7 +168,7 @@ You can use CodeLLDB or GDB to debug native binaries. (Make sure that your build
 
 ## Protocol Extensions
 
-Zed currently implements the following `clangd` [extensions](https://clangd.llvm.org/extensions):
+Vela currently implements the following `clangd` [extensions](https://clangd.llvm.org/extensions):
 
 ### Inactive Regions
 

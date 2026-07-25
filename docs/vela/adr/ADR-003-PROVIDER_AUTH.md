@@ -5,7 +5,7 @@
 
 ## Context
 
-Vela needs account and API-key authentication for multiple language-model providers without depending on Zed login or running Pi/Node as a child process. Pi demonstrates a useful separation between provider metadata, login interaction, credential persistence, refresh, and request-time auth resolution.
+Vela needs account and API-key authentication for multiple language-model providers without depending on Vela login or running Pi/Node as a child process. Pi demonstrates a useful separation between provider metadata, login interaction, credential persistence, refresh, and request-time auth resolution.
 
 ## Decision
 

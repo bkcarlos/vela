@@ -1,11 +1,11 @@
 ---
 title: Sandboxing
-description: Zed Agent tool calls can run in an OS-level sandbox to restrict certain operations.
+description: Vela Agent tool calls can run in an OS-level sandbox to restrict certain operations.
 ---
 
 # Sandboxing
 
-You can restrict what operations the [Zed Agent](./zed-agent.md) can run in multiple ways. One way to restrict them is
+You can restrict what operations the [Vela Agent](./vela-agent.md) can run in multiple ways. One way to restrict them is
 [Tool Permissions](./tool-permissions.md), but these are of limited use when the agent wants to do things like run a
 complicated script in a terminal.
 
@@ -20,12 +20,12 @@ sandbox?](#trust) for more details.
 - Tool permissions restrict the agent's ability to run certain tool actions in the first place
 - Once a tool action is actually running, sandboxing restricts what it can do
 
-Sandboxing applies only to Zed Agent. It does not sandbox Zed itself, language servers, extensions, tasks, your normal
+Sandboxing applies only to Vela Agent. It does not sandbox Vela itself, language servers, extensions, tasks, your normal
 terminal tabs, [External Agents](./external-agents.md), or [Terminal Threads](./terminal-threads.md).
 
 ## Sandboxed Tools {#sandboxed-tools}
 
-Zed Agent sandboxing currently applies to the `terminal` and `fetch` tools.
+Vela Agent sandboxing currently applies to the `terminal` and `fetch` tools.
 
 | Tool       | What sandboxing limits                                                                                |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
@@ -49,7 +49,7 @@ The `fetch` tool has no extra requirements on any platform.
 
 ## Default Access {#default-access}
 
-By default, sandboxed Zed Agent tool actions have these restrictions:
+By default, sandboxed Vela Agent tool actions have these restrictions:
 
 | Access type         | Default behavior                                                                                                                                                                       |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -68,7 +68,7 @@ However, it does not fully eliminate them.
 
 Firstly, sandboxing relies on OS-level features, which may contain bugs.
 Operating systems have historically had bugs in security features. And while we
-have tested thoroughly, there may also be bugs in Zed's implementation. These
+have tested thoroughly, there may also be bugs in Vela's implementation. These
 could allow privilege escalation - for example, allow an agent to write to a
 file that it should only have read access to.
 
@@ -84,7 +84,7 @@ provide a `reason`, which is displayed in the prompt. Read it, and decide
 whether it makes sense before approving.
 
 Also, sandboxing restricts **only** what the `terminal` and `fetch` tools in the
-Zed agent can do. It has **no effect** on other parts of Zed, including:
+Vela agent can do. It has **no effect** on other parts of Vela, including:
 
 - Language servers
 - The built-in git client
@@ -118,14 +118,14 @@ But none of this changes the fundamental principle: **a sandbox is not a
 substitute for good security practices**. It is one layer in a defense-in-depth
 strategy.
 
-Zed's default profile aims to strike a balance between security and convenience,
+Vela's default profile aims to strike a balance between security and convenience,
 but we encourage you to tune your settings based on your own security
 requirements and risk profile. A disabled sandbox is not a very effective
 sandbox.
 
 ## Approval Prompts {#approval-prompts}
 
-When the agent needs access outside the default sandbox, Zed shows a sandbox approval prompt before the tool action runs.
+When the agent needs access outside the default sandbox, Vela shows a sandbox approval prompt before the tool action runs.
 Depending on what the tool requested, the prompt can ask you to allow:
 
 - network access to specific hosts, such as `github.com` or `*.npmjs.org`
@@ -166,7 +166,7 @@ The available options are:
 | `allow_all_hosts`    | Allow sandboxed tools to reach any host without prompting.                                                        |
 | `write_paths`        | Directory subtrees that sandboxed terminal commands may write to without prompting. Paths are absolute.           |
 | `allow_fs_write_all` | Allow sandboxed terminal commands to write anywhere except protected Git metadata without prompting.              |
-| `allow_unsandboxed`  | Turn sandboxing off entirely for Zed Agent terminal commands. The fetch tool will have no restrictions.           |
+| `allow_unsandboxed`  | Turn sandboxing off entirely for Vela Agent terminal commands. The fetch tool will have no restrictions.           |
 
 Prefer narrow grants, such as a specific host or write path, over `allow_all_hosts`, `allow_fs_write_all`, or
 `allow_unsandboxed`.
@@ -184,7 +184,7 @@ enforcement details vary.
 
 ### macOS {#macos}
 
-On macOS, Zed uses Apple's Seatbelt sandbox through `sandbox-exec`.
+On macOS, Vela uses Apple's Seatbelt sandbox through `sandbox-exec`.
 
 Sandboxed terminal commands:
 
@@ -197,17 +197,17 @@ Sandboxed terminal commands:
 - cannot reach the network unless you approve network access
 - can reach only an allowlist of macOS system (Mach) services that developer tooling needs; services that could be abused to escape the sandbox (LaunchServices and launchd, which can launch processes outside it), read the clipboard (the pasteboard), or capture audio are not reachable
 
-When network access is approved on macOS, Zed uses an HTTP/HTTPS proxy so access can be limited to approved hosts.
+When network access is approved on macOS, Vela uses an HTTP/HTTPS proxy so access can be limited to approved hosts.
 Tools that do not honor proxy environment variables, such as SSH, FTP, and raw socket clients, may not work even after host-specific network access is approved.
 For networked terminal commands, prefer HTTPS URLs over SSH URLs when possible.
 
 ### Linux {#linux}
 
-On Linux, Zed uses [Bubblewrap][bubblewrap] (`bwrap`) for sandboxing.
+On Linux, Vela uses [Bubblewrap][bubblewrap] (`bwrap`) for sandboxing.
 
-Zed only uses a non-setuid `bwrap` binary. Its sandbox is built entirely on unprivileged user namespaces, so a setuid-root
+Vela only uses a non-setuid `bwrap` binary. Its sandbox is built entirely on unprivileged user namespaces, so a setuid-root
 `bwrap` provides no extra functionality, and running one would mean executing root-privileged setup with arguments partly
-derived from model-influenced input. If the only `bwrap` found on your `PATH` is setuid-root, Zed refuses to run it;
+derived from model-influenced input. If the only `bwrap` found on your `PATH` is setuid-root, Vela refuses to run it;
 install a non-setuid Bubblewrap to enable sandboxing.
 
 Sandboxed terminal commands:
@@ -219,16 +219,16 @@ Sandboxed terminal commands:
 - cannot write elsewhere unless you approve additional paths or broader write access
 - cannot reach the network unless you approve network access
 
-When host-specific network access is approved on Linux, Zed uses an HTTP/HTTPS proxy so access can be limited to approved
+When host-specific network access is approved on Linux, Vela uses an HTTP/HTTPS proxy so access can be limited to approved
 hosts. Tools that do not honor proxy environment variables, such as SSH, FTP, and raw socket clients, may not work even
 after host-specific network access is approved.
 
-If Bubblewrap is unavailable or cannot create a sandbox in the current environment, Zed may run the command without the OS
+If Bubblewrap is unavailable or cannot create a sandbox in the current environment, Vela may run the command without the OS
 sandbox and show a warning in the tool output.
 
 #### Installing Bubblewrap {#installing-bubblewrap}
 
-Zed needs a runnable, non-setuid `bwrap` binary on your `$PATH`. Installing
+Vela needs a runnable, non-setuid `bwrap` binary on your `$PATH`. Installing
 `bubblewrap` from your distribution's package manager is usually all you need.
 
 You can test whether it's working with:
@@ -239,7 +239,7 @@ bwrap --ro-bind / / -- echo "working"
 
 "Non-setuid" here refers to the [setuid bit][setuid bit]. Historically,
 bubblewrap has shipped both a setuid and non-setuid binary. The setuid binary is
-being phased out for security concerns, and so Zed's sandbox _explicitly rejects
+being phased out for security concerns, and so Vela's sandbox _explicitly rejects
 setuid `bwrap` binaries_.
 
 ##### Ubuntu-specific requirements {#installing-bubblewrap-ubuntu}
@@ -276,11 +276,11 @@ sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 
 ### Windows {#windows}
 
-On Windows, Zed Agent sandboxing is supported only when the agent action runs inside WSL.
+On Windows, Vela Agent sandboxing is supported only when the agent action runs inside WSL.
 
-Zed uses the Linux Bubblewrap sandbox inside WSL because WSL provides the Linux process and filesystem primitives that
-Bubblewrap needs. Native Windows processes do not currently have the same sandbox integration in Zed, so a native Windows
-command cannot be confined by Zed Agent's OS sandbox in the same way.
+Vela uses the Linux Bubblewrap sandbox inside WSL because WSL provides the Linux process and filesystem primitives that
+Bubblewrap needs. Native Windows processes do not currently have the same sandbox integration in Vela, so a native Windows
+command cannot be confined by Vela Agent's OS sandbox in the same way.
 
 When running inside WSL, the Linux sandboxing behavior applies, including the requirement that `bwrap` not be setuid-root:
 
@@ -289,7 +289,7 @@ When running inside WSL, the Linux sandboxing behavior applies, including the re
 - `/tmp` is temporary for sandboxed terminal calls
 - network access is all-or-nothing rather than host-specific, so host-specific network requests are rejected and the agent must request unrestricted network access when network access is needed
 
-If WSL is not installed, or if you choose to run a command without the sandbox, Zed falls back to the standard terminal
+If WSL is not installed, or if you choose to run a command without the sandbox, Vela falls back to the standard terminal
 behavior of running in your native shell. It selects the shell using the usual preference order: a bash (scoop's bash or
 Git Bash) when one is installed, otherwise PowerShell, and finally `cmd.exe`. Because the command then runs against native
 Windows paths instead of WSL's Linux filesystem, path conventions change accordingly (for example `C:\...` or `/c/...`

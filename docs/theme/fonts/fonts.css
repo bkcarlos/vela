@@ -4,7 +4,7 @@
 
 @font-face {
   font-family: "iA Writer Quattro S";
-  src: url("https://cdn.zed.dev/fonts/iAWriterQuattroV.woff2")
+  src: url("https://cdn.vela.dev/fonts/iAWriterQuattroV.woff2")
     format("woff2-variations");
   font-weight: 100 900;
   font-style: normal;
@@ -13,7 +13,7 @@
 
 @font-face {
   font-family: "iA Writer Quattro S";
-  src: url("https://cdn.zed.dev/fonts/iAWriterQuattroV-Italic.woff2")
+  src: url("https://cdn.vela.dev/fonts/iAWriterQuattroV-Italic.woff2")
     format("woff2-variations");
   font-weight: 100 900;
   font-style: italic;
@@ -22,7 +22,7 @@
 
 @font-face {
   font-family: "IBM Plex Serif";
-  src: url("https://cdn.zed.dev/fonts/IBMPlexSerif-Var.woff2")
+  src: url("https://cdn.vela.dev/fonts/IBMPlexSerif-Var.woff2")
     format("woff2-variations");
   font-weight: 400 700;
   font-style: normal;
@@ -31,7 +31,7 @@
 
 @font-face {
   font-family: "Lilex";
-  src: url("https://cdn.zed.dev/fonts/Lilex-Regular.woff2")
+  src: url("https://cdn.vela.dev/fonts/Lilex-Regular.woff2")
     format("woff2-variations");
   font-weight: 400;
   font-style: normal;

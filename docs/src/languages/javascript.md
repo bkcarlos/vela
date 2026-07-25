@@ -1,11 +1,11 @@
 ---
 title: JavaScript
-description: "Configure JavaScript language support in Zed, including language servers, formatting, and debugging."
+description: "Configure JavaScript language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # JavaScript
 
-JavaScript support is available natively in Zed.
+JavaScript support is available natively in Vela.
 
 - Tree-sitter: [tree-sitter/tree-sitter-javascript](https://github.com/tree-sitter/tree-sitter-javascript)
 - Language Server: [yioneko/vtsls](https://github.com/yioneko/vtsls)
@@ -37,7 +37,7 @@ See [the configuration docs](../reference/all-settings.md) for more information.
 
 For example, if you have Prettier installed and on your `PATH`, you can use it to format JavaScript files.
 
-Configure formatting in Settings ({#kb zed::OpenSettings}) under Languages > JavaScript, or add to your settings file:
+Configure formatting in Settings ({#kb vela::OpenSettings}) under Languages > JavaScript, or add to your settings file:
 
 ```json [settings]
 {
@@ -56,20 +56,20 @@ Configure formatting in Settings ({#kb zed::OpenSettings}) under Languages > Jav
 
 ## JSX
 
-Zed supports JSX syntax highlighting out of the box.
+Vela supports JSX syntax highlighting out of the box.
 
 In JSX strings, the [`tailwindcss-language-server`](./tailwindcss.md) is used to provide autocompletion for Tailwind CSS classes.
 
 ## JSDoc
 
-Zed supports JSDoc syntax in JavaScript and TypeScript comments that match the JSDoc syntax.
-Zed uses [tree-sitter/tree-sitter-jsdoc](https://github.com/tree-sitter/tree-sitter-jsdoc) for parsing and highlighting JSDoc.
+Vela supports JSDoc syntax in JavaScript and TypeScript comments that match the JSDoc syntax.
+Vela uses [tree-sitter/tree-sitter-jsdoc](https://github.com/tree-sitter/tree-sitter-jsdoc) for parsing and highlighting JSDoc.
 
 ## ESLint
 
-You can configure Zed to format code using `eslint --fix` by running the ESLint code action when formatting.
+You can configure Vela to format code using `eslint --fix` by running the ESLint code action when formatting.
 
-Configure code actions on format in Settings ({#kb zed::OpenSettings}) under Languages > JavaScript, or add to your settings file:
+Configure code actions on format in Settings ({#kb vela::OpenSettings}) under Languages > JavaScript, or add to your settings file:
 
 ```json [settings]
 {
@@ -113,7 +113,7 @@ You can also only execute a single ESLint rule when using `fixAll`:
 
 If you **only** want to run ESLint on save, you can configure code actions as the formatter.
 
-Configure in Settings ({#kb zed::OpenSettings}) under Languages > JavaScript, or add to your settings file:
+Configure in Settings ({#kb vela::OpenSettings}) under Languages > JavaScript, or add to your settings file:
 
 ```json [settings]
 {
@@ -231,7 +231,7 @@ To get all the features (autocomplete, linting, etc.) from the [Tailwind CSS lan
 
 ## Debugging
 
-Zed supports debugging JavaScript code out of the box with `vscode-js-debug`.
+Vela supports debugging JavaScript code out of the box with `vscode-js-debug`.
 The following can be debugged without writing additional configuration:
 
 - Tasks from `package.json`
@@ -243,9 +243,9 @@ Run {#action debugger::Start} ({#kb debugger::Start}) to see a contextual list o
 
 > **Note:** Node test is automatically detected when `@types/node` is present in `package.json` (requires Node.js 20+).
 
-As for all languages, configurations from `.vscode/launch.json` are also available for debugging in Zed.
+As for all languages, configurations from `.vscode/launch.json` are also available for debugging in Vela.
 
-If your use-case isn't covered by any of these, you can take full control by adding debug configurations to `.zed/debug.json`. See below for example configurations.
+If your use-case isn't covered by any of these, you can take full control by adding debug configurations to `.vela/debug.json`. See below for example configurations.
 
 ### Configuring JavaScript debug tasks
 
@@ -262,7 +262,7 @@ JavaScript debugging is more complicated than other languages because there are 
     "label": "Debug JS file",
     "type": "node",
     "request": "launch",
-    "program": "$ZED_FILE",
+    "program": "$VELA_FILE",
     "skipFiles": ["<node_internals>/**"]
   }
 ]
@@ -277,8 +277,8 @@ JavaScript debugging is more complicated than other languages because there are 
     "label": "Debug app in Chrome",
     "type": "chrome",
     "request": "launch",
-    "file": "$ZED_WORKTREE_ROOT/index.html",
-    "webRoot": "$ZED_WORKTREE_ROOT",
+    "file": "$VELA_WORKTREE_ROOT/index.html",
+    "webRoot": "$VELA_WORKTREE_ROOT",
     "console": "integratedTerminal",
     "skipFiles": ["<node_internals>/**"]
   }

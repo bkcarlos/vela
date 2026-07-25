@@ -1,11 +1,11 @@
 ---
 title: C#
-description: "Configure C# language support in Zed, including language servers, formatting, and debugging."
+description: "Configure C# language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # C#
 
-C# support is available through the [C# extension](https://github.com/zed-extensions/csharp).
+C# support is available through the [C# extension](https://github.com/vela-extensions/csharp).
 
 - Tree-sitter: [tree-sitter/tree-sitter-c-sharp](https://github.com/tree-sitter/tree-sitter-c-sharp)
 - Language Servers:
@@ -13,7 +13,7 @@ C# support is available through the [C# extension](https://github.com/zed-extens
   - [csharp-ls](https://github.com/razzmatazz/csharp-language-server)
   - [OmniSharp/omnisharp-roslyn](https://github.com/OmniSharp/omnisharp-roslyn)
 
-Roslyn is enabled by default. To switch to csharp-ls or OmniSharp, add the following to your Zed settings file:
+Roslyn is enabled by default. To switch to csharp-ls or OmniSharp, add the following to your Vela settings file:
 
 ```json [settings]
 {
@@ -115,7 +115,7 @@ Roslyn can be configured with the following language server settings:
 }
 ```
 
-csharp-ls can be configured in a Zed settings file with:
+csharp-ls can be configured in a Vela settings file with:
 
 ```json [settings]
 {
@@ -146,7 +146,7 @@ csharp-ls can be configured in a Zed settings file with:
 }
 ```
 
-OmniSharp can be configured in a Zed settings file with:
+OmniSharp can be configured in a Vela settings file with:
 
 ```json [settings]
 {

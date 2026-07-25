@@ -2,16 +2,16 @@
 
 - Status: Accepted
 - Date: 2026-07-23
-- Zed baseline: `6297c88f428a99741a7bfb33f31dfe98123bb8e4`
+- Vela baseline: `6297c88f428a99741a7bfb33f31dfe98123bb8e4`
 
 ## Context
 
-CodeIDE configuration must be editable through UI and persisted in a comment-friendly non-JSON format. Zed's existing settings implementation is mature but strongly coupled to JSON/JSONC:
+CodeIDE configuration must be editable through UI and persisted in a comment-friendly non-JSON format. Vela's existing settings implementation is mature but strongly coupled to JSON/JSONC:
 
 - `crates/settings` loads and updates `settings.json`;
 - `crates/settings_content` provides typed setting content;
 - `crates/settings_ui` reads and writes through `SettingsStore`;
-- project overrides use `.zed/settings.json`;
+- project overrides use `.vela/settings.json`;
 - schemas, completion, errors, tests, and UI labels assume JSON.
 
 Replacing every layer at once would create a large fork and make upstream synchronization difficult.
@@ -56,16 +56,16 @@ Every UI field must expose its effective value and source. Reset removes the val
 
 ## Compatibility
 
-External project files retain their required formats, including `package.json` and `tsconfig.json`. Existing Zed JSON settings may be offered as a one-time import source, but CodeIDE does not continue writing them.
+External project files retain their required formats, including `package.json` and `tsconfig.json`. Existing Vela JSON settings may be offered as a one-time import source, but CodeIDE does not continue writing them.
 
-Zed's bundled JSON assets can remain internal during the facade phase. This requirement concerns CodeIDE-managed user configuration.
+Vela's bundled JSON assets can remain internal during the facade phase. This requirement concerns CodeIDE-managed user configuration.
 
 ## Consequences
 
 ### Positive
 
 - Users get comment-friendly, reviewable configuration.
-- Existing typed Zed settings and runtime consumers remain reusable.
+- Existing typed Vela settings and runtime consumers remain reusable.
 - Migration can happen setting group by setting group.
 
 ### Negative

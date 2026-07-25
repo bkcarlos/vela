@@ -1,14 +1,14 @@
 ---
-title: Business Support - Zed Business
-description: How to contact Zed for business inquiries and support.
+title: Business Support - Vela Business
+description: How to contact Vela for business inquiries and support.
 ---
 
 # Business Support
 
-For billing and business support (account setup, invoices, organization questions), email [billing-support@zed.dev](mailto:billing-support@zed.dev). Business support is prioritized relative to other support channels.
+For billing and business support (account setup, invoices, organization questions), email [billing-support@vela.dev](mailto:billing-support@vela.dev). Business support is prioritized relative to other support channels.
 
-For general questions, email [hi@zed.dev](mailto:hi@zed.dev).
+For general questions, email [hi@vela.dev](mailto:hi@vela.dev).
 
 ## Open-source issues
 
-Questions and bugs about the Zed editor itself (features, extensions, language support, crashes) go through the main Zed project on [GitHub](https://github.com/zed-industries/zed/issues).
+Questions and bugs about the Vela editor itself (features, extensions, language support, crashes) go through the main Vela project on [GitHub](https://github.com/vela-industries/vela/issues).

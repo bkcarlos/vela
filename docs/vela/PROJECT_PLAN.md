@@ -2,30 +2,30 @@
 
 > 状态：Draft v0.1  
 > 目标平台：macOS arm64 优先，后续支持 Linux / Windows  
-> 调研基线：Zed `6297c88f42`、Pi `9b3a2059`
+> 调研基线：Vela `6297c88f42`、Pi `9b3a2059`
 
 ## 1. 项目愿景
 
-基于 **Zed** 的高性能编辑器、Tree-sitter、LSP、调试、工作区和原生 Rust Agent 能力，并参考 **Pi** 的多模型、会话管理、工具调用等设计，构建一个：
+基于 **Vela** 的高性能编辑器、Tree-sitter、LSP、调试、工作区和原生 Rust Agent 能力，并参考 **Pi** 的多模型、会话管理、工具调用等设计，构建一个：
 
 - 日常开发足够快、稳定、低延迟；
 - AI 与编辑器上下文深度结合，而不是简单嵌入聊天窗口；
 - 支持函数、类型、属性、变量的定义跳转、引用查找、重命名和诊断；
 - 支持主流语言工具链自动发现、明确配置和故障诊断；
 - 模型与供应商可替换，项目数据默认留在本地；
-- 尽量少修改 Zed 上游代码，便于持续升级。
+- 尽量少修改 Vela 上游代码，便于持续升级。
 
 暂定项目代号：**CodeIDE**。
 
 ### 1.1 主开发语言
 
-项目运行时代码以 **Rust** 为主语言：桌面端、Agent Runtime、模型适配、语义工具、权限系统、配置、会话和诊断均在 Zed 进程内运行。**不嵌入 Node.js，不启动 Pi 子进程，也不依赖 Pi RPC/ACP 适配器。** Pi 仅作为设计与行为参考；适合复用的算法需按 MIT 许可证要求以 Rust 重写并记录来源。
+项目运行时代码以 **Rust** 为主语言：桌面端、Agent Runtime、模型适配、语义工具、权限系统、配置、会话和诊断均在 Vela 进程内运行。**不嵌入 Node.js，不启动 Pi 子进程，也不依赖 Pi RPC/ACP 适配器。** Pi 仅作为设计与行为参考；适合复用的算法需按 MIT 许可证要求以 Rust 重写并记录来源。
 
 ## 2. 已调研项目结论
 
-### 2.1 Zed 可复用能力
+### 2.1 Vela 可复用能力
 
-Zed 是 Rust + GPUI 构建的高性能编辑器，已经具备本项目最难且最基础的部分：
+Vela 是 Rust + GPUI 构建的高性能编辑器，已经具备本项目最难且最基础的部分：
 
 - Tree-sitter：语法高亮、代码结构、outline、缩进、语言注入；
 - LSP：补全、诊断、Hover、定义/类型定义跳转、引用、重命名、Code Action、Workspace Symbol；
@@ -33,15 +33,15 @@ Zed 是 Rust + GPUI 构建的高性能编辑器，已经具备本项目最难且
 - Toolchain：部分语言的 SDK、解释器和虚拟环境发现；
 - 工作区、终端、任务、Git、远程开发与扩展系统；
 - Agent Panel、并行线程和 ACP（Agent Client Protocol）外部 Agent 支持；
-- Zed 原生 Agent 已有基于 LSP 的 `go_to_definition`、`find_references`、`diagnostics` 等工具实现，可作为语义桥接设计参考。
+- Vela 原生 Agent 已有基于 LSP 的 `go_to_definition`、`find_references`、`diagnostics` 等工具实现，可作为语义桥接设计参考。
 
 关键源码位置：
 
-- `../zed/crates/language*`：语言和 Tree-sitter 基础；
-- `../zed/crates/lsp`、`../zed/crates/project`：LSP 与项目模型；
-- `../zed/crates/editor`、`../zed/crates/workspace`：编辑器和工作区；
-- `../zed/crates/agent_servers`、`../zed/crates/acp_thread`：ACP 客户端；
-- `../zed/crates/agent/src/tools/`：原生 Agent 的语义工具。
+- `../vela/crates/language*`：语言和 Tree-sitter 基础；
+- `../vela/crates/lsp`、`../vela/crates/project`：LSP 与项目模型；
+- `../vela/crates/editor`、`../vela/crates/workspace`：编辑器和工作区；
+- `../vela/crates/agent_servers`、`../vela/crates/acp_thread`：ACP 客户端；
+- `../vela/crates/agent/src/tools/`：原生 Agent 的语义工具。
 
 ### 2.2 Pi 可参考能力
 
@@ -65,12 +65,12 @@ Pi 是 TypeScript/Node.js 的轻量 Agent Harness。本项目不直接运行或�
 
 ### 2.3 重要约束
 
-1. **不要重写编辑器和 LSP 客户端。** 首版直接复用 Zed。
-2. **AI Runtime 必须进程内运行。** 以 Zed 的 `agent`、`language_model*`、`agent_ui` 等 Rust crate 为基础扩展，不使用 Pi 子进程、Node 嵌入或 TUI/RPC 转换。
+1. **不要重写编辑器和 LSP 客户端。** 首版直接复用 Vela。
+2. **AI Runtime 必须进程内运行。** 以 Vela 的 `agent`、`language_model*`、`agent_ui` 等 Rust crate 为基础扩展，不使用 Pi 子进程、Node 嵌入或 TUI/RPC 转换。
 3. **“不使用子进程”特指 AI Runtime。** LSP、DAP、终端、编译器和格式化器按其协议天然需要外部进程；完全禁用所有子进程将无法实现完整语言支持。
 4. **权限必须位于工具执行入口。** Agent 即使在进程内运行，也不能绕过写文件、Shell、网络和敏感路径授权。
-5. **许可证必须提前处理。** Zed 主体为 GPL-3.0-or-later（部分组件 Apache-2.0），Pi 为 MIT。分发修改后的 Zed 桌面端需满足 GPL 源码与许可证义务；参考或移植 Pi 代码时保留 MIT 声明与来源记录。
-6. 当前机器为 macOS arm64；本机 Rust `1.94.1`，而当前 Zed 固定为 `1.95.0`，首次构建前需要由 rustup 安装对应工具链。
+5. **许可证必须提前处理。** Vela 主体为 GPL-3.0-or-later（部分组件 Apache-2.0），Pi 为 MIT。分发修改后的 Vela 桌面端需满足 GPL 源码与许可证义务；参考或移植 Pi 代码时保留 MIT 声明与来源记录。
+6. 当前机器为 macOS arm64；本机 Rust `1.94.1`，而当前 Vela 固定为 `1.95.0`，首次构建前需要由 rustup 安装对应工具链。
 
 ## 3. 产品范围
 
@@ -100,8 +100,8 @@ Pi 是 TypeScript/Node.js 的轻量 Agent Harness。本项目不直接运行或�
 - 自研文本渲染器、LSP 或语言服务器；
 - 云端账号、团队协作和计费系统；
 - 自动执行任意高危命令；
-- 同时大幅重构 Zed UI 与 Agent Runtime；
-- 首版覆盖所有 Zed 支持的语言；
+- 同时大幅重构 Vela UI 与 Agent Runtime；
+- 首版覆盖所有 Vela 支持的语言；
 - 首版实现完整远程开发、容器编排和多人协同。
 
 ### 3.3 核心交互模型
@@ -140,7 +140,7 @@ Agent Panel 是主要入口，消息不是单一字符串，而是由结构化 B
 
 #### 完整文件树
 
-直接复用并增强 Zed Project Panel：
+直接复用并增强 Vela Project Panel：
 
 - 工作区多根目录、展开/折叠、拖动、复制路径和快速搜索；
 - 新建、移动、重命名、删除文件与目录；
@@ -162,7 +162,7 @@ Agent Panel 是主要入口，消息不是单一字符串，而是由结构化 B
 聊天输入区以 Context Chip 显示已选择的文件、目录、symbol 和代码范围。多轮对话规则：
 
 - pinned selection 默认持续参与后续轮次，用户可随时移除；
-- buffer 改动后优先通过 Zed anchor 跟踪新范围；
+- buffer 改动后优先通过 Vela anchor 跟踪新范围；
 - 无法可靠重定位时标记 `stale`，展示旧快照与当前位置差异，不静默替换；
 - Agent 回答引用范围时可点击回到编辑器；
 - 支持同时加入多个不连续 selection，并明确 Token 预算；
@@ -198,7 +198,7 @@ Agent Panel 是主要入口，消息不是单一字符串，而是由结构化 B
 | `codeide::CommitStaged` | 提交已暂存改动 |
 | `codeide::ReviewAndCommit` | 打开审查界面，生成信息并确认提交 |
 
-默认快捷键需要先审计 Zed 在 macOS/Linux/Windows 上的现有绑定，避免覆盖编辑器常用操作。用户可在快捷键 UI 中搜索 Action、录制组合键、查看冲突并修改；最终写入 `keybindings.toml`，不要求手写。
+默认快捷键需要先审计 Vela 在 macOS/Linux/Windows 上的现有绑定，避免覆盖编辑器常用操作。用户可在快捷键 UI 中搜索 Action、录制组合键、查看冲突并修改；最终写入 `keybindings.toml`，不要求手写。
 
 #### 可配置的 Diff 对比基准
 
@@ -398,15 +398,15 @@ compact_at  = usable_input × compact_threshold
 - 删除供应商时询问是否同步删除 Keychain 凭证；
 - 项目级配置可以引用 credential id，但不能把全局秘密复制进仓库。
 
-#### 与 Zed 设置系统兼容
+#### 与 Vela 设置系统兼容
 
-Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facade：TOML 是用户配置的唯一事实来源，解析后映射到 Zed 强类型 Settings Store，不生成用户可见的 `settings.json`。上游内置资源可暂时保留原格式，之后再评估迁移，避免第一阶段重写整个设置框架。
+Vela 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facade：TOML 是用户配置的唯一事实来源，解析后映射到 Vela 强类型 Settings Store，不生成用户可见的 `settings.json`。上游内置资源可暂时保留原格式，之后再评估迁移，避免第一阶段重写整个设置框架。
 
 ## 4. 总体架构
 
 ```text
 ┌──────────────────── CodeIDE 单一 Rust 进程 ───────────────────┐
-│ Zed / GPUI                                                    │
+│ Vela / GPUI                                                    │
 │ Editor · Workspace · Git · Diff · Settings · Agent UI        │
 │        │                              │                        │
 │        │ Rust API                     │ Rust API               │
@@ -420,14 +420,14 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
 │                         HTTP/SSE/WebSocket · Auth · Usage       │
 └────────────────────────────────────────────────────────────────┘
 
-外部的 LSP、DAP、终端命令和编译器仍由 Zed 按标准协议管理，它们不属于 AI Runtime。
+外部的 LSP、DAP、终端命令和编译器仍由 Vela 按标准协议管理，它们不属于 AI Runtime。
 ```
 
 ### 4.1 集成策略
 
-采用“**Zed 原生 Rust Agent 为内核，吸收 Pi 的优秀设计**”策略：
+采用“**Vela 原生 Rust Agent 为内核，吸收 Pi 的优秀设计**”策略：
 
-1. **复用 Zed Agent。** 基于 `agent`、`agent_ui`、`language_model*`、`project` crate，不另建跨进程 Agent。
+1. **复用 Vela Agent。** 基于 `agent`、`agent_ui`、`language_model*`、`project` crate，不另建跨进程 Agent。
 2. **补齐会话能力。** 参考 Pi 的树形会话、分支、压缩、重试和消息队列，在 Rust 中实现缺失部分。
 3. **直接调用语义能力。** Agent 工具通过 `Entity<Project>` 调用定义、引用、诊断等能力，不经过本地 socket、ACP 或 JSONL：
    - `ide_go_to_definition`
@@ -438,11 +438,11 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
    - `ide_code_actions`
    - 后续再开放 `ide_rename_symbol`
 4. **统一原生体验。** 上下文选择、Diff 审批、权限、诊断回路和 Agent 状态均使用 GPUI 组件。
-5. **保留可选 ACP。** Zed 原有外部 Agent 能力可以保留兼容，但不是 CodeIDE 默认 Agent，也不参与核心实现。
+5. **保留可选 ACP。** Vela 原有外部 Agent 能力可以保留兼容，但不是 CodeIDE 默认 Agent，也不参与核心实现。
 
 ### 4.2 Rust 模块边界
 
-优先扩展或封装 Zed 现有 crate，避免平行实现同一套状态：
+优先扩展或封装 Vela 现有 crate，避免平行实现同一套状态：
 
 - `codeide_agent`：Agent loop、上下文、队列、压缩与会话协调；
 - `codeide_agent_tools`：文件、Shell、Git、LSP 语义工具；
@@ -455,7 +455,7 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
 - `codeide_agent_ui`：结构化消息 Block、Agent Panel、Diff 审批和状态展示；
 - `codeide_git_workflow`：staged diff 摘要、Commit 生成、hooks 状态和 ChangeSet 关联。
 
-若 Zed 已有等价能力，应向现有 crate 增量贡献，而不是创建 `codeide_*` 重复层。Rust 代码避免无边界的 `serde_json::Value` 传播；网络和持久化不得阻塞 GPUI 主线程；长任务必须支持取消。
+若 Vela 已有等价能力，应向现有 crate 增量贡献，而不是创建 `codeide_*` 重复层。Rust 代码避免无边界的 `serde_json::Value` 传播；网络和持久化不得阻塞 GPUI 主线程；长任务必须支持取消。
 
 ### 4.3 语义工具设计原则
 
@@ -465,7 +465,7 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
 - 读工具支持 timeout、cancel 和 LSP readiness 状态；
 - LSP 未就绪、文件未索引、语言服务器崩溃时返回可诊断错误；
 - 写操作与读操作分权，rename/code action 必须进入 Diff/审批流程；
-- 可参考 Zed 原生工具的 `SymbolLocator`，但正式接口优先使用精确字符位置，避免同一行重名歧义。
+- 可参考 Vela 原生工具的 `SymbolLocator`，但正式接口优先使用精确字符位置，避免同一行重名歧义。
 
 ## 5. 语言环境规划
 
@@ -473,13 +473,13 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
 
 | 优先级 | 语言 | Tree-sitter | 默认 LSP | 格式化/检查 | 调试 |
 |---|---|---|---|---|---|
-| P0 | TypeScript/JavaScript | Zed 内置 | vtsls | Prettier / ESLint | vscode-js-debug |
-| P0 | Python | Zed 内置 | basedpyright + Ruff | Ruff | debugpy |
-| P0 | Go | Zed 内置 | gopls | gofmt/gopls | Delve |
-| P0 | Rust | Zed 内置 | rust-analyzer | rustfmt / cargo check | CodeLLDB |
+| P0 | TypeScript/JavaScript | Vela 内置 | vtsls | Prettier / ESLint | vscode-js-debug |
+| P0 | Python | Vela 内置 | basedpyright + Ruff | Ruff | debugpy |
+| P0 | Go | Vela 内置 | gopls | gofmt/gopls | Delve |
+| P0 | Rust | Vela 内置 | rust-analyzer | rustfmt / cargo check | CodeLLDB |
 | P1 | Java | 扩展/内置配置 | JDTLS | Spotless/项目配置 | Java DAP |
-| P1 | C/C++ | Zed 内置 | clangd | clang-format | CodeLLDB/GDB |
-| P1 | Vue/Svelte | Zed 支持 | 对应 LSP + TS | Prettier/ESLint | JS Debug |
+| P1 | C/C++ | Vela 内置 | clangd | clang-format | CodeLLDB/GDB |
+| P1 | Vue/Svelte | Vela 支持 | 对应 LSP + TS | Prettier/ESLint | JS Debug |
 
 ### 5.1 工具链管理
 
@@ -535,7 +535,7 @@ Zed 当前设置体系包含 JSON/JSONC 资源。CodeIDE 首期增加 TOML facad
 
 ## 7. 仓库与上游维护策略
 
-当前仓库是 Vela 产品源码及文档的唯一来源；官方 Zed 通过只读 `upstream` remote 同步，`../pi` 仅用于设计调研。Agent 与 Project/LSP 通过进程内 Rust API 集成：
+当前仓库是 Vela 产品源码及文档的唯一来源；官方 Vela 通过只读 `upstream` remote 同步，`../pi` 仅用于设计调研。Agent 与 Project/LSP 通过进程内 Rust API 集成：
 
 ```text
 vela/
@@ -553,15 +553,15 @@ vela/
   config/                       # 默认设置和语言配置
   fixtures/languages/           # P0 语言验收工程
   scripts/                      # bootstrap、build、test、package
-  upstream.lock                 # Zed commit 与参考 Pi commit
+  upstream.lock                 # Vela commit 与参考 Pi commit
 ```
 
 版本控制原则：
 
-- CodeIDE 基于 Zed fork 维护，Pi 不作为运行时依赖；
-- `upstream.lock` 固定已验证的 Zed commit，不跟随 latest 自动构建；
-- 优先复用 Zed 已有 crate 和抽象，避免复制 Agent 状态；
-- 每项 Zed 核心改动记录原因、关联测试和可上游化方案；
+- CodeIDE 基于 Vela fork 维护，Pi 不作为运行时依赖；
+- `upstream.lock` 固定已验证的 Vela commit，不跟随 latest 自动构建；
+- 优先复用 Vela 已有 crate 和抽象，避免复制 Agent 状态；
+- 每项 Vela 核心改动记录原因、关联测试和可上游化方案；
 - 移植 Pi 的具体实现时记录原文件、commit 和 MIT 许可证；
 - 建立定期上游同步流程，而不是长期积累一次性大合并。
 
@@ -569,13 +569,13 @@ vela/
 
 ### M0：可行性验证（1 周）
 
-- 在当前 macOS arm64 环境构建并运行 Zed；
-- 梳理 Zed 原生 Agent、模型、会话、工具与 UI crate 的调用边界；
-- 用 Zed 原生 Agent 完成一次模型流式对话和受控文件修改；
+- 在当前 macOS arm64 环境构建并运行 Vela；
+- 梳理 Vela 原生 Agent、模型、会话、工具与 UI crate 的调用边界；
+- 用 Vela 原生 Agent 完成一次模型流式对话和受控文件修改；
 - 打开 P0 fixture，验证人工定义跳转和引用查找；
 - 输出 ADR-001：进程内 Rust Agent 的 crate 边界与最小 fork 改动。
 
-**退出条件：** Zed 原生 Rust Agent 可完成一次受控文件修改；P0 至少两种语言的 LSP 跳转可用。
+**退出条件：** Vela 原生 Rust Agent 可完成一次受控文件修改；P0 至少两种语言的 LSP 跳转可用。
 
 ### M1：稳定编辑器基线（1–2 周）
 
@@ -648,10 +648,10 @@ vela/
 
 | 风险 | 影响 | 应对 |
 |---|---|---|
-| Zed 上游变化快、fork 冲突 | 升级成本高 | 复用现有 crate、少改核心、固定版本、定期小步同步 |
+| Vela 上游变化快、fork 冲突 | 升级成本高 | 复用现有 crate、少改核心、固定版本、定期小步同步 |
 | 进程内 Agent 故障影响 IDE | 卡顿或崩溃 | 任务隔离、取消、超时、panic 边界、压力测试 |
-| Pi 功能需用 Rust 补齐 | 初期开发量增加 | 只移植经过验证且 Zed 缺失的能力，分阶段实现 |
-| TOML facade 与 Zed Settings 不一致 | 配置显示或生效错误 | 强类型映射、来源追踪、round-trip 与 E2E 测试 |
+| Pi 功能需用 Rust 补齐 | 初期开发量增加 | 只移植经过验证且 Vela 缺失的能力，分阶段实现 |
+| TOML facade 与 Vela Settings 不一致 | 配置显示或生效错误 | 强类型映射、来源追踪、round-trip 与 E2E 测试 |
 | 自定义 Base URL 泄漏 Key | 凭证安全风险 | Keychain、同源重定向限制、Header 脱敏和安全测试 |
 | 服务未声明上下文窗口 | 请求溢出或过早压缩 | 每模型显式配置、来源展示、未知时发送前阻止 |
 | Agent 工具权限不足 | 误操作和凭证泄漏 | 工具入口权限、路径限制、审计、Diff 审批、可选沙箱 |
@@ -663,8 +663,8 @@ vela/
 
 1. 产品仅供个人内部使用，还是计划公开分发？这会影响品牌、签名、更新和 GPL 合规工作。
 2. 首发只做 macOS，还是同时要求 Linux/Windows？
-3. 是否保留 Zed 原有 ACP 外部 Agent 入口，还是产品层隐藏该入口？
-4. 模型认证是直接沿用 Zed Provider 设置，还是建立 CodeIDE 统一设置页？
+3. 是否保留 Vela 原有 ACP 外部 Agent 入口，还是产品层隐藏该入口？
+4. 模型认证是直接沿用 Vela Provider 设置，还是建立 CodeIDE 统一设置页？
 5. 首批语言除 TypeScript/Python/Go/Rust 外，是否必须包含 Java、C++ 或前端框架？
 6. 高危工具执行是采用本机确认模式，还是 MVP 就要求容器/VM 沙箱？
 
@@ -672,11 +672,11 @@ vela/
 
 按以下顺序开始，不先做 UI 大改：
 
-1. 创建 `upstream.lock`，记录当前 Zed commit、参考 Pi commit、工具链和平台；
-2. 安装 Rust `1.95.0` 和 Zed 的 macOS 构建依赖，完成首次构建；
-3. 阅读并画出 Zed `agent`、`agent_ui`、`language_model*`、`project` 的进程内依赖图；
-4. 运行 Zed 原生 Agent，验证模型流、取消、工具和会话持久化；
+1. 创建 `upstream.lock`，记录当前 Vela commit、参考 Pi commit、工具链和平台；
+2. 安装 Rust `1.95.0` 和 Vela 的 macOS 构建依赖，完成首次构建；
+3. 阅读并画出 Vela `agent`、`agent_ui`、`language_model*`、`project` 的进程内依赖图；
+4. 运行 Vela 原生 Agent，验证模型流、取消、工具和会话持久化；
 5. 创建四种 P0 语言 fixture 和统一的语义验收表；
-6. 编写 ADR-001，确定应扩展的 Zed crate 与 CodeIDE 新 crate；
-7. 编写 ADR-002，确定 TOML schema、配置层级和 Zed Settings 映射；
+6. 编写 ADR-001，确定应扩展的 Vela crate 与 CodeIDE 新 crate；
+7. 编写 ADR-002，确定 TOML schema、配置层级和 Vela Settings 映射；
 8. 在任何 Agent 写入能力上线前，先实现权限策略和 Diff 审批原型。

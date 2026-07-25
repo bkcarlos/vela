@@ -1,25 +1,25 @@
 ---
-title: Zed on Linux
-description: "The installation script on the download page is the fastest way to install Zed:"
+title: Vela on Linux
+description: "The installation script on the download page is the fastest way to install Vela:"
 ---
 
-# Zed on Linux
+# Vela on Linux
 
 ## Standard Installation
 
-The installation script on the [download](https://zed.dev/download) page is the fastest way to install Zed:
+The installation script on the [download](https://vela.dev/download) page is the fastest way to install Vela:
 
 ```sh
-curl -f https://zed.dev/install.sh | sh
+curl -f https://vela.dev/install.sh | sh
 ```
 
-We also offer a preview build of Zed which receives updates about a week ahead of stable. You can install it with:
+We also offer a preview build of Vela which receives updates about a week ahead of stable. You can install it with:
 
 ```sh
-curl -f https://zed.dev/install.sh | ZED_CHANNEL=preview sh
+curl -f https://vela.dev/install.sh | VELA_CHANNEL=preview sh
 ```
 
-The Zed installed by the script works best on systems that:
+The Vela installed by the script works best on systems that:
 
 - have a Vulkan compatible GPU available (for example Linux on an M-series MacBook)
 - have a system-wide glibc
@@ -34,112 +34,112 @@ You will need to build from source for:
 - Redhat Enterprise Linux 8.x, Rocky Linux 8, AlmaLinux 8, Amazon Linux 2 on all architectures
 - Redhat Enterprise Linux 9.x, Rocky Linux 9.3, AlmaLinux 8, Amazon Linux 2023 on aarch64 (x86_x64 OK)
 
-## Other ways to install Zed on Linux
+## Other ways to install Vela on Linux
 
-Zed is open source, and [you can install from source](./development/linux.md).
+Vela is open source, and [you can install from source](./development/linux.md).
 
 ### Installing via a package manager
 
-There are several third-party Zed packages for various Linux distributions and package managers, sometimes under `zed-editor`. Availability varies by distribution, but you may be able to install Zed using one of these packages:
+There are several third-party Vela packages for various Linux distributions and package managers, sometimes under `vela-editor`. Availability varies by distribution, but you may be able to install Vela using one of these packages:
 
-- Arch: [`zed`](https://archlinux.org/packages/extra/x86_64/zed/)
-- Arch (AUR): [`zed-git`](https://aur.archlinux.org/packages/zed-git), [`zed-preview`](https://aur.archlinux.org/packages/zed-preview), [`zed-preview-bin`](https://aur.archlinux.org/packages/zed-preview-bin)
-- Fedora/Ultramarine (Terra): [`zed`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/zed/stable), [`zed-preview`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/zed/preview), [`zed-nightly`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/zed/nightly)
-- Manjaro: [`zed`](https://manjaristas.org/branch_compare?q=zed)
-- Conda: [`zed`](https://anaconda.org/conda-forge/zed)
-- Nix: `zed-editor` ([unstable](https://search.nixos.org/packages?channel=unstable&show=zed-editor))
-- Solus: [`zed`](https://github.com/getsolus/packages/tree/main/packages/z/zed)
-- Parabola: [`zed`](https://www.parabola.nu/packages/extra/x86_64/zed/)
-- ALT Linux (Sisyphus): [`zed`](https://packages.altlinux.org/en/sisyphus/srpms/zed/)
-- AOSC OS: [`zed`](https://packages.aosc.io/packages/zed)
-- Flathub: [`dev.zed.Zed`](https://flathub.org/apps/dev.zed.Zed)
+- Arch: [`vela`](https://archlinux.org/packages/extra/x86_64/vela/)
+- Arch (AUR): [`vela-git`](https://aur.archlinux.org/packages/vela-git), [`vela-preview`](https://aur.archlinux.org/packages/vela-preview), [`vela-preview-bin`](https://aur.archlinux.org/packages/vela-preview-bin)
+- Fedora/Ultramarine (Terra): [`vela`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/vela/stable), [`vela-preview`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/vela/preview), [`vela-nightly`](https://github.com/terrapkg/packages/tree/frawhide/anda/devs/vela/nightly)
+- Manjaro: [`vela`](https://manjaristas.org/branch_compare?q=vela)
+- Conda: [`vela`](https://anaconda.org/conda-forge/vela)
+- Nix: `vela-editor` ([unstable](https://search.nixos.org/packages?channel=unstable&show=vela-editor))
+- Solus: [`vela`](https://github.com/getsolus/packages/tree/main/packages/z/vela)
+- Parabola: [`vela`](https://www.parabola.nu/packages/extra/x86_64/vela/)
+- ALT Linux (Sisyphus): [`vela`](https://packages.altlinux.org/en/sisyphus/srpms/vela/)
+- AOSC OS: [`vela`](https://packages.aosc.io/packages/vela)
+- Flathub: [`dev.vela.Vela`](https://flathub.org/apps/dev.vela.Vela)
 
-See [Repology](https://repology.org/project/zed-editor/versions) for a current list of Zed packages in various repositories.
+See [Repology](https://repology.org/project/vela-editor/versions) for a current list of Vela packages in various repositories.
 
 ### Community
 
-When installing a third-party package please be aware that it may not be completely up to date and may be slightly different from the Zed we package (a common change is to rename the binary to `zedit` or `zeditor` to avoid conflicting with other packages).
+When installing a third-party package please be aware that it may not be completely up to date and may be slightly different from the Vela we package (a common change is to rename the binary to `velait` or `velaitor` to avoid conflicting with other packages).
 
-We'd love your help making Zed available for everyone. If Zed is not yet available for your package manager, and you would like to fix that, we have some notes on [how to do it](./development/linux.md#notes-for-packaging-zed).
+We'd love your help making Vela available for everyone. If Vela is not yet available for your package manager, and you would like to fix that, we have some notes on [how to do it](./development/linux.md#notes-for-packaging-vela).
 
-The packages in this section provide binary installs for Zed but are not official packages within the associated distributions. These packages are maintained by community members and as such a higher level of caution should be taken when installing them.
+The packages in this section provide binary installs for Vela but are not official packages within the associated distributions. These packages are maintained by community members and as such a higher level of caution should be taken when installing them.
 
 ### Downloading manually
 
-If you'd prefer, you can install Zed by downloading our pre-built .tar.gz. This is the same artifact that our install script uses, but you can customize the location of your installation by modifying the instructions below:
+If you'd prefer, you can install Vela by downloading our pre-built .tar.gz. This is the same artifact that our install script uses, but you can customize the location of your installation by modifying the instructions below:
 
 Download the `.tar.gz` file:
 
-- [zed-linux-x86_64.tar.gz](https://cloud.zed.dev/releases/stable/latest/download?asset=zed&arch=x86_64&os=linux&source=docs)
-  ([preview](https://cloud.zed.dev/releases/preview/latest/download?asset=zed&arch=x86_64&os=linux&source=docs))
-- [zed-linux-aarch64.tar.gz](https://cloud.zed.dev/releases/stable/latest/download?asset=zed&arch=aarch64&os=linux&source=docs)
-  ([preview](https://cloud.zed.dev/releases/preview/latest/download?asset=zed&arch=aarch64&os=linux&source=docs))
+- [vela-linux-x86_64.tar.gz](https://cloud.vela.dev/releases/stable/latest/download?asset=vela&arch=x86_64&os=linux&source=docs)
+  ([preview](https://cloud.vela.dev/releases/preview/latest/download?asset=vela&arch=x86_64&os=linux&source=docs))
+- [vela-linux-aarch64.tar.gz](https://cloud.vela.dev/releases/stable/latest/download?asset=vela&arch=aarch64&os=linux&source=docs)
+  ([preview](https://cloud.vela.dev/releases/preview/latest/download?asset=vela&arch=aarch64&os=linux&source=docs))
 
-Then ensure that the `zed` binary in the tarball is on your path. The easiest way is to unpack the tarball and create a symlink:
+Then ensure that the `vela` binary in the tarball is on your path. The easiest way is to unpack the tarball and create a symlink:
 
 ```sh
 mkdir -p ~/.local
-# extract zed to ~/.local/zed.app/
+# extract vela to ~/.local/vela.app/
 tar -xvf <path/to/download>.tar.gz -C ~/.local
-# link the zed binary to ~/.local/bin (or another directory in your $PATH)
-ln -sf ~/.local/zed.app/bin/zed ~/.local/bin/zed
+# link the vela binary to ~/.local/bin (or another directory in your $PATH)
+ln -sf ~/.local/vela.app/bin/vela ~/.local/bin/vela
 ```
 
 If you'd like integration with an XDG-compatible desktop environment, you will also need to install the `.desktop` file:
 
 ```sh
-install -D ~/.local/zed.app/share/applications/dev.zed.Zed.desktop -t ~/.local/share/applications
-sed -i "s|Icon=zed|Icon=$HOME/.local/zed.app/share/icons/hicolor/512x512/apps/zed.png|g" ~/.local/share/applications/dev.zed.Zed.desktop
-sed -i "s|Exec=zed|Exec=$HOME/.local/zed.app/bin/zed|g" ~/.local/share/applications/dev.zed.Zed.desktop
+install -D ~/.local/vela.app/share/applications/dev.vela.Vela.desktop -t ~/.local/share/applications
+sed -i "s|Icon=vela|Icon=$HOME/.local/vela.app/share/icons/hicolor/512x512/apps/vela.png|g" ~/.local/share/applications/dev.vela.Vela.desktop
+sed -i "s|Exec=vela|Exec=$HOME/.local/vela.app/bin/vela|g" ~/.local/share/applications/dev.vela.Vela.desktop
 ```
 
-## Uninstalling Zed
+## Uninstalling Vela
 
 ### Standard Uninstall
 
-If Zed was installed using the default installation script, it can be uninstalled by supplying the `--uninstall` flag to the `zed` shell command
+If Vela was installed using the default installation script, it can be uninstalled by supplying the `--uninstall` flag to the `vela` shell command
 
 ```sh
-zed --uninstall
+vela --uninstall
 ```
 
-If there are no errors, the shell will then prompt you whether you'd like to keep your preferences or delete them. After making a choice, you should see a message that Zed was successfully uninstalled.
+If there are no errors, the shell will then prompt you whether you'd like to keep your preferences or delete them. After making a choice, you should see a message that Vela was successfully uninstalled.
 
-In the case that the `zed` shell command was not found in your PATH, you can try one of the following commands
+In the case that the `vela` shell command was not found in your PATH, you can try one of the following commands
 
 ```sh
-$HOME/.local/bin/zed --uninstall
+$HOME/.local/bin/vela --uninstall
 ```
 
 or
 
 ```sh
-$HOME/.local/zed.app/bin.zed --uninstall
+$HOME/.local/vela.app/bin.vela --uninstall
 ```
 
-The first case might fail if a symlink was not properly established between `$HOME/.local/bin/zed` and `$HOME/.local/zed.app/bin.zed`. But the second case should work as long as Zed was installed to its default location.
+The first case might fail if a symlink was not properly established between `$HOME/.local/bin/vela` and `$HOME/.local/vela.app/bin.vela`. But the second case should work as long as Vela was installed to its default location.
 
-If Zed was installed to a different location, you must invoke the `zed` binary stored in that installation directory and pass the `--uninstall` flag to it in the same format as the previous commands.
+If Vela was installed to a different location, you must invoke the `vela` binary stored in that installation directory and pass the `--uninstall` flag to it in the same format as the previous commands.
 
 ### Package Manager
 
-If Zed was installed using a package manager, please consult the documentation for that package manager on how to uninstall a package.
+If Vela was installed using a package manager, please consult the documentation for that package manager on how to uninstall a package.
 
 ## Troubleshooting
 
-Linux works on a large variety of systems configured in many different ways. We primarily test Zed on a vanilla Ubuntu setup, as it is the most common distribution our users use. That said, we do expect it to work on a wide variety of machines.
+Linux works on a large variety of systems configured in many different ways. We primarily test Vela on a vanilla Ubuntu setup, as it is the most common distribution our users use. That said, we do expect it to work on a wide variety of machines.
 
-### Zed fails to start
+### Vela fails to start
 
-If you see an error like "/lib64/libc.so.6: version 'GLIBC_2.29' not found" it means that your distribution's version of glibc is too old. You can either upgrade your system, or [install Zed from source](./development/linux.md).
+If you see an error like "/lib64/libc.so.6: version 'GLIBC_2.29' not found" it means that your distribution's version of glibc is too old. You can either upgrade your system, or [install Vela from source](./development/linux.md).
 
 ### Graphics issues
 
-#### Zed fails to open windows
+#### Vela fails to open windows
 
-Zed requires a GPU to run effectively. Under the hood, we use [Vulkan](https://www.vulkan.org/) to communicate with your GPU. If you are seeing problems with performance, or Zed fails to load, it is possible that Vulkan is the culprit.
+Vela requires a GPU to run effectively. Under the hood, we use [Vulkan](https://www.vulkan.org/) to communicate with your GPU. If you are seeing problems with performance, or Vela fails to load, it is possible that Vulkan is the culprit.
 
-If you see a notification saying `Zed failed to open a window: NoSupportedDeviceFound` this means that Vulkan cannot find a compatible GPU. You can try running [vkcube](https://github.com/krh/vkcube) (usually available as part of the `vulkaninfo` or `vulkan-tools` package on various distributions) to try to troubleshoot where the issue is coming from like so:
+If you see a notification saying `Vela failed to open a window: NoSupportedDeviceFound` this means that Vulkan cannot find a compatible GPU. You can try running [vkcube](https://github.com/krh/vkcube) (usually available as part of the `vulkaninfo` or `vulkan-tools` package on various distributions) to try to troubleshoot where the issue is coming from like so:
 
 ```
 vkcube
@@ -149,27 +149,27 @@ vkcube
 
 This should output a line describing your current graphics setup and show a rotating cube. If this does not work, you should be able to fix it by installing Vulkan compatible GPU drivers, however in some cases there is no Vulkan support yet.
 
-You can find out which graphics card Zed is using by looking in the Zed log (`~/.local/share/zed/logs/Zed.log`) for `Using GPU: ...`.
+You can find out which graphics card Vela is using by looking in the Vela log (`~/.local/share/vela/logs/Vela.log`) for `Using GPU: ...`.
 
-If you see errors like `ERROR_INITIALIZATION_FAILED` or `GPU Crashed` or `ERROR_SURFACE_LOST_KHR` then you may be able to work around this by installing different drivers for your GPU, or by selecting a different GPU to run on. (See [#14225](https://github.com/zed-industries/zed/issues/14225))
+If you see errors like `ERROR_INITIALIZATION_FAILED` or `GPU Crashed` or `ERROR_SURFACE_LOST_KHR` then you may be able to work around this by installing different drivers for your GPU, or by selecting a different GPU to run on. (See [#14225](https://github.com/vela-industries/vela/issues/14225))
 
 On some systems the file `/etc/prime-discrete` can be used to enforce the use of a discrete GPU using [PRIME](https://wiki.archlinux.org/title/PRIME). Depending on the details of your setup, you may need to change the contents of this file to "on" (to force discrete graphics) or "off" (to force integrated graphics).
 
-On others, you may be able to set the environment variable `DRI_PRIME=1` when running Zed to force the use of the discrete GPU.
+On others, you may be able to set the environment variable `DRI_PRIME=1` when running Vela to force the use of the discrete GPU.
 
-If you're using an AMD GPU, you might get a 'Broken Pipe' error. Try using the RADV or Mesa drivers. (See [#13880](https://github.com/zed-industries/zed/issues/13880))
+If you're using an AMD GPU, you might get a 'Broken Pipe' error. Try using the RADV or Mesa drivers. (See [#13880](https://github.com/vela-industries/vela/issues/13880))
 
-If you are using `amdvlk`, the default open-source AMD graphics driver, you may find that Zed consistently fails to launch. This is a known issue for some users, for example on Omarchy (see issue [#28851](https://github.com/zed-industries/zed/issues/28851)). To fix this, you will need to use a different driver. We recommend removing the `amdvlk` and `lib32-amdvlk` packages and installing `vulkan-radeon` instead (see issue [#14141](https://github.com/zed-industries/zed/issues/14141)).
+If you are using `amdvlk`, the default open-source AMD graphics driver, you may find that Vela consistently fails to launch. This is a known issue for some users, for example on Omarchy (see issue [#28851](https://github.com/vela-industries/vela/issues/28851)). To fix this, you will need to use a different driver. We recommend removing the `amdvlk` and `lib32-amdvlk` packages and installing `vulkan-radeon` instead (see issue [#14141](https://github.com/vela-industries/vela/issues/14141)).
 
 For more information, the [Arch guide to Vulkan](https://wiki.archlinux.org/title/Vulkan) has some good steps that translate well to most distributions.
 
-#### Forcing Zed to use a specific GPU
+#### Forcing Vela to use a specific GPU
 
-There are a few different ways to force Zed to use a specific GPU:
+There are a few different ways to force Vela to use a specific GPU:
 
 ##### Option A
 
-You can use the `ZED_DEVICE_ID={device_id}` environment variable to specify the device ID of the GPU you wish to have Zed use.
+You can use the `VELA_DEVICE_ID={device_id}` environment variable to specify the device ID of the GPU you wish to have Vela use.
 
 You can obtain the device ID of your GPU by running `lspci -nn | grep VGA` which will output each GPU on one line like:
 
@@ -177,17 +177,17 @@ You can obtain the device ID of your GPU by running `lspci -nn | grep VGA` which
 08:00.0 VGA compatible controller [0300]: NVIDIA Corporation GA104 [GeForce RTX 3070] [10de:2484] (rev a1)
 ```
 
-where the device ID here is `2484`. This value is in hexadecimal, so to force Zed to use this specific GPU you would set the environment variable like so:
+where the device ID here is `2484`. This value is in hexadecimal, so to force Vela to use this specific GPU you would set the environment variable like so:
 
 ```
-ZED_DEVICE_ID=0x2484 zed
+VELA_DEVICE_ID=0x2484 vela
 ```
 
 Make sure to export the variable if you choose to define it globally in a `.bashrc` or similar.
 
 ##### Option B
 
-If you are using Mesa, you can run `MESA_VK_DEVICE_SELECT=list zed --foreground` to get a list of available GPUs and then export `MESA_VK_DEVICE_SELECT=xxxx:yyyy` to choose a specific device. Furthermore, you can fallback to xwayland with an additional export of `WAYLAND_DISPLAY=""`.
+If you are using Mesa, you can run `MESA_VK_DEVICE_SELECT=list vela --foreground` to get a list of available GPUs and then export `MESA_VK_DEVICE_SELECT=xxxx:yyyy` to choose a specific device. Furthermore, you can fallback to xwayland with an additional export of `WAYLAND_DISPLAY=""`.
 
 ##### Option C
 
@@ -195,31 +195,31 @@ Using [vkdevicechooser](https://github.com/jiriks74/vkdevicechooser).
 
 #### Reporting graphics issues
 
-If Vulkan is configured correctly, and Zed is still not working for you, please [file an issue](https://github.com/zed-industries/zed) with as much information as possible.
+If Vulkan is configured correctly, and Vela is still not working for you, please [file an issue](https://github.com/vela-industries/vela) with as much information as possible.
 
-When reporting issues where Zed fails to start due to graphics initialization errors on GitHub, it can be impossible to run the {#action zed::CopySystemSpecsIntoClipboard} command like we instruct you to in our issue template. We provide an alternative way to collect the system specs specifically for this situation.
+When reporting issues where Vela fails to start due to graphics initialization errors on GitHub, it can be impossible to run the {#action vela::CopySystemSpecsIntoClipboard} command like we instruct you to in our issue template. We provide an alternative way to collect the system specs specifically for this situation.
 
-Passing the `--system-specs` flag to Zed like
+Passing the `--system-specs` flag to Vela like
 
 ```sh
-zed --system-specs
+vela --system-specs
 ```
 
 will print the system specs to the terminal like so. It is strongly recommended to copy the output verbatim into the issue on GitHub, as it uses markdown formatting to ensure the output is readable.
 
-Additionally, it is extremely beneficial to provide the contents of your Zed log when reporting such issues. The log is usually located at `~/.local/share/zed/logs/Zed.log`. The recommended process for producing a helpful log file is as follows:
+Additionally, it is extremely beneficial to provide the contents of your Vela log when reporting such issues. The log is usually located at `~/.local/share/vela/logs/Vela.log`. The recommended process for producing a helpful log file is as follows:
 
 ```sh
-truncate -s 0 ~/.local/share/zed/logs/Zed.log # Clear the log file
-ZED_LOG=wgpu=info zed .
-cat ~/.local/share/zed/logs/Zed.log
+truncate -s 0 ~/.local/share/vela/logs/Vela.log # Clear the log file
+VELA_LOG=wgpu=info vela .
+cat ~/.local/share/vela/logs/Vela.log
 # copy the output
 ```
 
-Or, if you have the Zed cli setup, you can do
+Or, if you have the Vela cli setup, you can do
 
 ```sh
-ZED_LOG=wgpu=info /path/to/zed/cli --foreground .
+VELA_LOG=wgpu=info /path/to/vela/cli --foreground .
 # copy the output
 ```
 
@@ -228,10 +228,10 @@ It is also highly recommended when pasting the log into a github issue, to do so
 > **_Note_**: The whitespace in the template is important, and will cause incorrect formatting if not preserved.
 
 ````
-<details><summary>Zed Log</summary>
+<details><summary>Vela Log</summary>
 
 ```
-{zed log contents}
+{vela log contents}
 ```
 
 </details>
@@ -250,31 +250,31 @@ These features are provided by XDG desktop portals, specifically:
 
 Some window managers, such as `Hyprland`, don't provide a file picker by default. See [this list](https://wiki.archlinux.org/title/XDG_Desktop_Portal#List_of_backends_and_interfaces) as a starting point for alternatives.
 
-### Zed isn't remembering my API keys
+### Vela isn't remembering my API keys
 
-### Zed isn't remembering my login
+### Vela isn't remembering my login
 
 This feature also requires XDG desktop portals, specifically:
 
 - `org.freedesktop.portal.Secret` or
 - `org.freedesktop.Secrets`
 
-Zed needs a place to securely store secrets such as your Zed login cookie or your OpenAI API Keys and we use a system provided keychain to do this. Examples of packages that provide this are `gnome-keyring`, `KWallet` and `keepassxc` among others.
+Vela needs a place to securely store secrets such as your Vela login cookie or your OpenAI API Keys and we use a system provided keychain to do this. Examples of packages that provide this are `gnome-keyring`, `KWallet` and `keepassxc` among others.
 
 ### Could not start inotify
 
-Zed relies on inotify to watch your filesystem for changes. If you cannot start inotify then Zed will not work reliably.
+Vela relies on inotify to watch your filesystem for changes. If you cannot start inotify then Vela will not work reliably.
 
 If you are seeing "too many open files" then first try `sysctl fs.inotify`.
 
-- You should see that max_user_instances is 128 or higher (you can change the limit with `sudo sysctl fs.inotify.max_user_instances=1024`). Zed needs only 1 inotify instance.
-- You should see that `max_user_watches` is 8000 or higher (you can change the limit with `sudo sysctl fs.inotify.max_user_watches=64000`). Zed needs one watch per directory in all your open projects + one per git repository + a handful more for settings, themes, keymaps, extensions.
+- You should see that max_user_instances is 128 or higher (you can change the limit with `sudo sysctl fs.inotify.max_user_instances=1024`). Vela needs only 1 inotify instance.
+- You should see that `max_user_watches` is 8000 or higher (you can change the limit with `sudo sysctl fs.inotify.max_user_watches=64000`). Vela needs one watch per directory in all your open projects + one per git repository + a handful more for settings, themes, keymaps, extensions.
 
 It is also possible that you are running out of file descriptors. You can check the limits with `ulimit` and update them by editing `/etc/security/limits.conf`.
 
 ### No sound or wrong output device
 
-If you're not hearing any sound in Zed or the audio is routed to the wrong device, it could be due to a mismatch between audio systems. Zed relies on ALSA, while your system may be using PipeWire or PulseAudio. To resolve this, you need to configure ALSA to route audio through PipeWire/PulseAudio.
+If you're not hearing any sound in Vela or the audio is routed to the wrong device, it could be due to a mismatch between audio systems. Vela relies on ALSA, while your system may be using PipeWire or PulseAudio. To resolve this, you need to configure ALSA to route audio through PipeWire/PulseAudio.
 
 If your system uses PipeWire:
 
@@ -304,13 +304,13 @@ If your system uses PipeWire:
 
 ### Forcing X11 scale factor
 
-On X11 systems, Zed automatically detects the appropriate scale factor for high-DPI displays. The scale factor is determined using the following priority order:
+On X11 systems, Vela automatically detects the appropriate scale factor for high-DPI displays. The scale factor is determined using the following priority order:
 
 1. `GPUI_X11_SCALE_FACTOR` environment variable (if set)
 2. `Xft.dpi` from X resources database (xrdb)
 3. Automatic detection via RandR based on monitor resolution and physical size
 
-If you want to customize the scale factor beyond what Zed detects automatically, you have several options:
+If you want to customize the scale factor beyond what Vela detects automatically, you have several options:
 
 #### Check your current scale factor
 
@@ -320,11 +320,11 @@ You can verify if you have `Xft.dpi` set:
 xrdb -query | grep Xft.dpi
 ```
 
-If this command returns no output, Zed is using RandR (X11's monitor management extension) to automatically calculate the scale factor based on your monitor's reported resolution and physical dimensions.
+If this command returns no output, Vela is using RandR (X11's monitor management extension) to automatically calculate the scale factor based on your monitor's reported resolution and physical dimensions.
 
 #### Option 1: Set Xft.dpi (X Resources Database)
 
-`Xft.dpi` is a standard X11 setting that many applications use for consistent font and UI scaling. Setting this ensures Zed scales the same way as other X11 applications that respect this setting.
+`Xft.dpi` is a standard X11 setting that many applications use for consistent font and UI scaling. Setting this ensures Vela scales the same way as other X11 applications that respect this setting.
 
 Edit or create the `~/.Xresources` file:
 
@@ -351,14 +351,14 @@ Load the configuration:
 xrdb -merge ~/.Xresources
 ```
 
-Restart Zed for the changes to take effect.
+Restart Vela for the changes to take effect.
 
 #### Option 2: Use the GPUI_X11_SCALE_FACTOR environment variable
 
-This Zed-specific environment variable directly sets the scale factor, bypassing all automatic detection.
+This Vela-specific environment variable directly sets the scale factor, bypassing all automatic detection.
 
 ```sh
-GPUI_X11_SCALE_FACTOR=1.5 zed
+GPUI_X11_SCALE_FACTOR=1.5 vela
 ```
 
 You can use decimal values (e.g., `1.25`, `1.5`, `2.0`) or set `GPUI_X11_SCALE_FACTOR=randr` to force RandR-based detection even when `Xft.dpi` is set.
@@ -375,16 +375,16 @@ Add this to your `.xprofile` or `.xinitrc`:
 xrandr --dpi 192
 ```
 
-Replace `192` with your desired DPI value. This affects the system globally and will be used by Zed's automatic RandR detection when `Xft.dpi` is not set.
+Replace `192` with your desired DPI value. This affects the system globally and will be used by Vela's automatic RandR detection when `Xft.dpi` is not set.
 
 ### Font rendering parameters
 
-On Linux, Zed reads `ZED_FONTS_GAMMA` and `ZED_FONTS_GRAYSCALE_ENHANCED_CONTRAST` environment variables for the values to use for font rendering.
+On Linux, Vela reads `VELA_FONTS_GAMMA` and `VELA_FONTS_GRAYSCALE_ENHANCED_CONTRAST` environment variables for the values to use for font rendering.
 
-`ZED_FONTS_GAMMA` corresponds to [getgamma](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwriterenderingparams-getgamma) values.
+`VELA_FONTS_GAMMA` corresponds to [getgamma](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwriterenderingparams-getgamma) values.
 Allowed range [1.0, 2.2], other values are clipped.
 Default: 1.8
 
-`ZED_FONTS_GRAYSCALE_ENHANCED_CONTRAST` corresponds to [getgrayscaleenhancedcontrast](https://learn.microsoft.com/en-us/windows/win32/api/dwrite_1/nf-dwrite_1-idwriterenderingparams1-getgrayscaleenhancedcontrast) values.
+`VELA_FONTS_GRAYSCALE_ENHANCED_CONTRAST` corresponds to [getgrayscaleenhancedcontrast](https://learn.microsoft.com/en-us/windows/win32/api/dwrite_1/nf-dwrite_1-idwriterenderingparams1-getgrayscaleenhancedcontrast) values.
 Allowed range: [0.0, ..), other values are clipped.
 Default: 1.0

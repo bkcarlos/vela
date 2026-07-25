@@ -1,11 +1,11 @@
 ---
 title: Billing
-description: Manage billing for your Zed subscription, including payment methods, invoices, and sales tax information for individual and organization accounts.
+description: Manage billing for your Vela subscription, including payment methods, invoices, and sales tax information for individual and organization accounts.
 ---
 
 # Billing
 
-Zed uses Stripe for payment processing. All plans that require payment do so via credit card or other supported payment methods. Individual Pro subscriptions also use Orb for invoicing and metering.
+Vela uses Stripe for payment processing. All plans that require payment do so via credit card or other supported payment methods. Individual Pro subscriptions also use Orb for invoicing and metering.
 
 For details on what's included in each plan and how token usage works, see [Plans & Pricing](./plans-and-pricing.md).
 
@@ -13,20 +13,20 @@ For details on what's included in each plan and how token usage works, see [Plan
 
 ### Billing information {#settings}
 
-Access billing information and settings from your [Zed dashboard](https://dashboard.zed.dev).
+Access billing information and settings from your [Vela dashboard](https://dashboard.vela.dev).
 This page embeds data from Orb, our invoicing and metering partner.
 
 ### Billing cycles {#billing-cycles}
 
-Zed is billed on a monthly basis based on the date you initially subscribe. You'll receive _at least_ one invoice from Zed each month you're subscribed to Zed Pro, and may receive more than one invoice if you use hosted models beyond your included monthly token credit.
+Vela is billed on a monthly basis based on the date you initially subscribe. You'll receive _at least_ one invoice from Vela each month you're subscribed to Vela Pro, and may receive more than one invoice if you use hosted models beyond your included monthly token credit.
 
-### Zed Pro threshold billing {#threshold-billing}
+### Vela Pro threshold billing {#threshold-billing}
 
-For individual Zed Pro subscriptions, Zed uses threshold billing to ensure timely payment collection. Threshold billing controls when already-allowed token usage is invoiced during the month; your [monthly spend limit](./plans-and-pricing.md#usage-spend-limits) still controls when hosted model usage stops.
+For individual Vela Pro subscriptions, Vela uses threshold billing to ensure timely payment collection. Threshold billing controls when already-allowed token usage is invoiced during the month; your [monthly spend limit](./plans-and-pricing.md#usage-spend-limits) still controls when hosted model usage stops.
 
-Threshold invoices start at $10 of pre-tax incremental token spend. For higher token usage, Zed may automatically raise your pre-tax invoicing threshold in $10 increments, up to $100, so you receive fewer mid-cycle invoices. Once raised, the invoicing threshold is not automatically lowered during the same subscription.
+Threshold invoices start at $10 of pre-tax incremental token spend. For higher token usage, Vela may automatically raise your pre-tax invoicing threshold in $10 increments, up to $100, so you receive fewer mid-cycle invoices. Once raised, the invoicing threshold is not automatically lowered during the same subscription.
 
-For Zed Business billing, see [Organization billing](#organization).
+For Vela Business billing, see [Organization billing](#organization).
 
 For example,
 
@@ -36,23 +36,23 @@ For example,
 
 ### Payment failures {#payment-failures}
 
-If payment of an invoice fails, Zed will block usage of our hosted models until the payment is complete. Email [billing-support@zed.dev](mailto:billing-support@zed.dev) for assistance.
+If payment of an invoice fails, Vela will block usage of our hosted models until the payment is complete. Email [billing-support@vela.dev](mailto:billing-support@vela.dev) for assistance.
 
 ### Invoice history {#invoice-history}
 
-You can access your invoice history from the Billing page at [dashboard.zed.dev](https://dashboard.zed.dev) by clicking `Invoice history` within the embedded Orb portal.
+You can access your invoice history from the Billing page at [dashboard.vela.dev](https://dashboard.vela.dev) by clicking `Invoice history` within the embedded Orb portal.
 
-If you require historical Stripe invoices, email [billing-support@zed.dev](mailto:billing-support@zed.dev).
+If you require historical Stripe invoices, email [billing-support@vela.dev](mailto:billing-support@vela.dev).
 
 ## Organization billing {#organization}
 
-Zed Business consolidates your team's costs. Paid Business seats and member AI usage appear on one bill, with no separate invoices per member. For a full feature overview, see [Zed Business](../business/overview.md).
+Vela Business consolidates your team's costs. Paid Business seats and member AI usage appear on one bill, with no separate invoices per member. For a full feature overview, see [Vela Business](../business/overview.md).
 
 ### Billing dashboard {#dashboard}
 
-Owners, admins, and Billing Managers can access billing information at [dashboard.zed.dev](https://dashboard.zed.dev). The dashboard shows the current plan and links to update billing details, tax ID information, and payment information. You can also access invoice history through the Orb billing portal.
+Owners, admins, and Billing Managers can access billing information at [dashboard.vela.dev](https://dashboard.vela.dev). The dashboard shows the current plan and links to update billing details, tax ID information, and payment information. You can also access invoice history through the Orb billing portal.
 
-Use the Billing Manager role for someone who needs billing access but does not need a paid Business seat. Billing Managers can view subscription usage, update billing details and payment methods, and access invoice history. They cannot manage members, change organization settings, cancel the subscription, or use Zed-hosted AI models and Edit Predictions through the Business subscription. For the full permissions list, see [Roles](../roles.md#role-billing-manager).
+Use the Billing Manager role for someone who needs billing access but does not need a paid Business seat. Billing Managers can view subscription usage, update billing details and payment methods, and access invoice history. They cannot manage members, change organization settings, cancel the subscription, or use Vela-hosted AI models and Edit Predictions through the Business subscription. For the full permissions list, see [Roles](../roles.md#role-billing-manager).
 
 ### AI usage {#ai-usage}
 
@@ -62,22 +62,22 @@ Administrators can set an org-wide AI spend limit from the Data & Privacy page i
 
 ### Invoice history {#org-invoice-history}
 
-Owners, admins, and Billing Managers can access an organization's invoice history from the Billing page at [dashboard.zed.dev](https://dashboard.zed.dev) by clicking `Invoice history` within the embedded Orb portal.
+Owners, admins, and Billing Managers can access an organization's invoice history from the Billing page at [dashboard.vela.dev](https://dashboard.vela.dev) by clicking `Invoice history` within the embedded Orb portal.
 
-If you require historical Stripe invoices, email [billing-support@zed.dev](mailto:billing-support@zed.dev).
+If you require historical Stripe invoices, email [billing-support@vela.dev](mailto:billing-support@vela.dev).
 
 ## Updating billing information {#updating-billing-info}
 
 From the _Billing_ page, owners, admins, and Billing Managers can update billing name, address, tax ID information, and payment method.
 
-Changes to billing information will **only** affect future invoices. We cannot modify historical invoices. Email [billing-support@zed.dev](mailto:billing-support@zed.dev) with any questions.
+Changes to billing information will **only** affect future invoices. We cannot modify historical invoices. Email [billing-support@vela.dev](mailto:billing-support@vela.dev) with any questions.
 
 ## Sales tax {#sales-tax}
 
-Zed partners with [Sphere](https://www.getsphere.com/) to calculate indirect tax rates for invoices, based on customer location and the product being sold. Tax is listed as a separate line item on invoices, based preferentially on your billing address, followed by the card issue country known to Stripe.
+Vela partners with [Sphere](https://www.getsphere.com/) to calculate indirect tax rates for invoices, based on customer location and the product being sold. Tax is listed as a separate line item on invoices, based preferentially on your billing address, followed by the card issue country known to Stripe.
 
 If you have a tax ID, such as a VAT or GST ID, you can add it during checkout or update it later from the Billing page. Check the box that denotes you as a business.
 
 Changes to tax IDs and addresses will **only** affect future invoices. We cannot modify historical invoices.
 
-Email [billing-support@zed.dev](mailto:billing-support@zed.dev) with any tax questions.
+Email [billing-support@vela.dev](mailto:billing-support@vela.dev) with any tax questions.

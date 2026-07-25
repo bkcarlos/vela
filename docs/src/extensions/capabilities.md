@@ -1,11 +1,11 @@
 ---
 title: Extension Capabilities
-description: "Extension Capabilities for Zed extensions."
+description: "Extension Capabilities for Vela extensions."
 ---
 
 # Extension Capabilities
 
-The operations that Zed extensions are able to perform are governed by a capability system.
+The operations that Vela extensions are able to perform are governed by a capability system.
 
 ## Restricting capabilities
 
@@ -42,7 +42,7 @@ If you don't want extensions to be able to perform _any_ capabilities, you can r
 
 ### `process:exec`
 
-The `process:exec` capability grants extensions the ability to invoke commands using [`zed_extension_api::process::Command`](https://docs.rs/zed_extension_api/latest/zed_extension_api/process/struct.Command.html).
+The `process:exec` capability grants extensions the ability to invoke commands using [`vela_extension_api::process::Command`](https://docs.rs/vela_extension_api/latest/vela_extension_api/process/struct.Command.html).
 
 #### Examples
 
@@ -60,7 +60,7 @@ To allow a specific command (e.g., `gem`) to be executed with any arguments:
 
 ### `download_file`
 
-The `download_file` capability grants extensions the ability to download files using [`zed_extension_api::download_file`](https://docs.rs/zed_extension_api/latest/zed_extension_api/fn.download_file.html).
+The `download_file` capability grants extensions the ability to download files using [`vela_extension_api::download_file`](https://docs.rs/vela_extension_api/latest/vela_extension_api/fn.download_file.html).
 
 #### Examples
 
@@ -79,12 +79,12 @@ To allow any file to be downloaded from `github.com`:
 To allow any file to be downloaded from a specific GitHub repository:
 
 ```toml
-{ kind = "download_file", host = "github.com", path = ["zed-industries", "zed", "**"] }
+{ kind = "download_file", host = "github.com", path = ["vela-industries", "vela", "**"] }
 ```
 
 ### `npm:install`
 
-The `npm:install` capability grants extensions the ability to install npm packages using [`zed_extension_api::npm_install_package`](https://docs.rs/zed_extension_api/latest/zed_extension_api/fn.npm_install_package.html).
+The `npm:install` capability grants extensions the ability to install npm packages using [`vela_extension_api::npm_install_package`](https://docs.rs/vela_extension_api/latest/vela_extension_api/fn.npm_install_package.html).
 
 #### Examples
 

@@ -1,11 +1,11 @@
 ---
 title: Deno
-description: "Configure Deno language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Deno language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Deno
 
-Deno support is available through the [Deno extension](https://github.com/zed-extensions/deno).
+Deno support is available through the [Deno extension](https://github.com/vela-extensions/deno).
 
 - Language server: [Deno Language Server](https://docs.deno.com/runtime/manual/advanced/language_server/overview/)
 
@@ -13,7 +13,7 @@ Deno support is available through the [Deno extension](https://github.com/zed-ex
 
 To use the Deno Language Server with TypeScript and TSX files, you will likely wish to disable the default language servers and enable Deno.
 
-Configure language servers and formatters in Settings ({#kb zed::OpenSettings}) under Languages > JavaScript/TypeScript/TSX, or add to your settings file:
+Configure language servers and formatters in Settings ({#kb vela::OpenSettings}) under Languages > JavaScript/TypeScript/TSX, or add to your settings file:
 
 ```json [settings]
 {
@@ -58,7 +58,7 @@ Configure language servers and formatters in Settings ({#kb zed::OpenSettings}) 
 }
 ```
 
-See [Configuring supported languages](../configuring-languages.md) in the Zed documentation for more information.
+See [Configuring supported languages](../configuring-languages.md) in the Vela documentation for more information.
 
 <!--
 TBD: Deno TypeScript REPL instructions [docs/repl#typescript-deno](../repl.md#typescript-deno)
@@ -66,7 +66,7 @@ TBD: Deno TypeScript REPL instructions [docs/repl#typescript-deno](../repl.md#ty
 
 ## Configuration completion
 
-To get completions for `deno.json` or `package.json`, add the following to your settings file ([how to edit](../configuring-zed.md#settings-files)). For more details, see [JSON](./json.md).
+To get completions for `deno.json` or `package.json`, add the following to your settings file ([how to edit](../configuring-vela.md#settings-files)). For more details, see [JSON](./json.md).
 
 ```json [settings]
 "lsp": {
@@ -96,7 +96,7 @@ To get completions for `deno.json` or `package.json`, add the following to your 
 
 ## DAP support
 
-To debug deno programs, add this to `.zed/debug.json`
+To debug deno programs, add this to `.vela/debug.json`
 
 ```json [debug]
 [
@@ -105,8 +105,8 @@ To debug deno programs, add this to `.zed/debug.json`
     "label": "Deno",
     "request": "launch",
     "type": "pwa-node",
-    "cwd": "$ZED_WORKTREE_ROOT",
-    "program": "$ZED_FILE",
+    "cwd": "$VELA_WORKTREE_ROOT",
+    "program": "$VELA_FILE",
     "runtimeExecutable": "deno",
     "runtimeArgs": ["run", "--allow-all", "--inspect-wait"],
     "attachSimplePort": 9229
@@ -116,13 +116,13 @@ To debug deno programs, add this to `.zed/debug.json`
 
 ## Runnable support
 
-To run deno tasks like tests from the ui, add this to `.zed/tasks.json`
+To run deno tasks like tests from the ui, add this to `.vela/tasks.json`
 
 ```json [tasks]
 [
   {
     "label": "deno test",
-    "command": "deno test -A $ZED_FILE",
+    "command": "deno test -A $VELA_FILE",
     "tags": ["js-test"]
   }
 ]

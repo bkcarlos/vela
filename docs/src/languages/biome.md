@@ -1,12 +1,12 @@
 ---
 title: Biome
-description: "Configure Biome language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Biome language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Biome
 
-[Biome](https://biomejs.dev/) support in Zed is provided by the community-maintained [Biome extension](https://github.com/biomejs/biome-zed).
-Report issues to: [https://github.com/biomejs/biome-zed/issues](https://github.com/biomejs/biome-zed/issues)
+[Biome](https://biomejs.dev/) support in Vela is provided by the community-maintained [Biome extension](https://github.com/biomejs/biome-vela).
+Report issues to: [https://github.com/biomejs/biome-vela/issues](https://github.com/biomejs/biome-vela/issues)
 
 - Language Server: [biomejs/biome](https://github.com/biomejs/biome)
 
@@ -37,4 +37,4 @@ By default, the `biome.json` file is required to be in the root of the workspace
 
 For a full list of `biome.json` options see [Biome Configuration](https://biomejs.dev/reference/configuration/) documentation.
 
-See the [Biome Zed Extension README](https://github.com/biomejs/biome-zed) for a complete list of features and configuration options.
+See the [Biome Vela Extension README](https://github.com/biomejs/biome-vela) for a complete list of features and configuration options.

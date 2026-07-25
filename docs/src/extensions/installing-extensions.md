@@ -1,19 +1,19 @@
 ---
 title: Installing Extensions
-description: "Browse, install, and manage extensions from the Zed Extension Gallery."
+description: "Browse, install, and manage extensions from the Vela Extension Gallery."
 ---
 
 # Installing Extensions {#installing-extensions}
 
-Extensions add functionality to Zed, including languages, themes, and AI tools. Browse and install them from the Extension Gallery.
+Extensions add functionality to Vela, including languages, themes, and AI tools. Browse and install them from the Extension Gallery.
 
-Open the Extension Gallery with {#kb zed::Extensions}, or select "Zed > Extensions" from the menu bar.
+Open the Extension Gallery with {#kb vela::Extensions}, or select "Vela > Extensions" from the menu bar.
 
 ## Installation Location
 
-- On macOS, extensions are installed in `~/Library/Application Support/Zed/extensions`.
-- On Linux, they are installed in either `$XDG_DATA_HOME/zed/extensions` or `~/.local/share/zed/extensions`.
-- On Windows, the directory is `%LOCALAPPDATA%\Zed\extensions`.
+- On macOS, extensions are installed in `~/Library/Application Support/Vela/extensions`.
+- On Linux, they are installed in either `$XDG_DATA_HOME/vela/extensions` or `~/.local/share/vela/extensions`.
+- On Windows, the directory is `%LOCALAPPDATA%\Vela\extensions`.
 
 This directory contains two subdirectories:
 

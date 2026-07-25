@@ -1,14 +1,14 @@
-# ADR-001: Use Zed's in-process Rust agent
+# ADR-001: Use Vela's in-process Rust agent
 
 - Status: Accepted
 - Date: 2026-07-23
-- Zed baseline: `6297c88f428a99741a7bfb33f31dfe98123bb8e4`
+- Vela baseline: `6297c88f428a99741a7bfb33f31dfe98123bb8e4`
 
 ## Context
 
 CodeIDE needs structured chat, selected-code context, language-server tools, reviewable code changes, model configuration, and recoverable sessions. The AI runtime must not run as a child process. LSP, DAP, terminals, compilers, and formatters remain external processes because their protocols require that model.
 
-The inspected Zed baseline already contains:
+The inspected Vela baseline already contains:
 
 - `crates/agent`: native agent, threads, persistence, permissions, and semantic tools;
 - `crates/agent_ui`: conversation UI, context mentions, agent diff, and model selection;
@@ -17,13 +17,13 @@ The inspected Zed baseline already contains:
 - `crates/git_ui/src/branch_diff.rs`: merge-base branch diff and base picker;
 - `crates/agent_ui/src/agent_diff.rs`: existing agent change review UI.
 
-Pi is TypeScript/Node.js. Embedding or spawning it would violate the runtime constraint and duplicate capabilities already present in Zed.
+Pi is TypeScript/Node.js. Embedding or spawning it would violate the runtime constraint and duplicate capabilities already present in Vela.
 
 ## Decision
 
-CodeIDE will extend Zed's native Rust agent in process. Agent tools call `Entity<Project>` and existing Rust services directly. Pi remains a design reference only and is not a runtime dependency.
+CodeIDE will extend Vela's native Rust agent in process. Agent tools call `Entity<Project>` and existing Rust services directly. Pi remains a design reference only and is not a runtime dependency.
 
-Implementation must prefer extending existing Zed crates over creating parallel `codeide_*` crates when an equivalent abstraction already exists. New crates require a clear ownership boundary that cannot fit an existing crate.
+Implementation must prefer extending existing Vela crates over creating parallel `codeide_*` crates when an equivalent abstraction already exists. New crates require a clear ownership boundary that cannot fit an existing crate.
 
 ACP support may remain available for compatibility, but it is not the default CodeIDE agent path.
 
@@ -46,14 +46,14 @@ ACP support may remain available for compatibility, but it is not the default Co
 
 - No Node.js or Pi runtime process.
 - Direct access to buffers, anchors, LSP state, Git, and GPUI.
-- Existing Zed behavior and tests can be reused.
+- Existing Vela behavior and tests can be reused.
 - Fewer protocol conversion and process-recovery paths.
 
 ### Negative
 
 - Agent failures share the IDE process and need strict task, cancellation, and panic boundaries.
-- Changes to core Zed crates increase upstream merge cost.
-- Pi-specific session behavior must be selectively implemented in Rust when Zed lacks it.
+- Changes to core Vela crates increase upstream merge cost.
+- Pi-specific session behavior must be selectively implemented in Rust when Vela lacks it.
 
 ## Validation tasks
 

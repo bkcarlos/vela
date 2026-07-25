@@ -1,15 +1,15 @@
 ---
 title: Icon Themes
-description: "Icon Themes for Zed extensions."
+description: "Icon Themes for Vela extensions."
 ---
 
 # Icon Themes
 
-Extensions may provide icon themes to change the icons Zed uses for folders and files.
+Extensions may provide icon themes to change the icons Vela uses for folders and files.
 
 ## Example extension
 
-The [Material Icon Theme](https://github.com/zed-extensions/material-icon-theme) serves as an example for the structure of an extension containing an icon theme.
+The [Material Icon Theme](https://github.com/vela-extensions/material-icon-theme) serves as an example for the structure of an extension containing an icon theme.
 
 ## Directory structure
 
@@ -18,13 +18,13 @@ There are two important directories for an icon theme extension:
 - `icon_themes`: This directory will contain one or more JSON files containing the icon theme definitions.
 - `icons`: This directory contains the icon assets distributed with the extension. You can create subdirectories in this directory as needed.
 
-Each icon theme file should adhere to the JSON schema specified at [`https://zed.dev/schema/icon_themes/v0.3.0.json`](https://zed.dev/schema/icon_themes/v0.3.0.json).
+Each icon theme file should adhere to the JSON schema specified at [`https://vela.dev/schema/icon_themes/v0.3.0.json`](https://vela.dev/schema/icon_themes/v0.3.0.json).
 
 Here is an example icon theme structure:
 
 ```json [icon-theme]
 {
-  "$schema": "https://zed.dev/schema/icon_themes/v0.3.0.json",
+  "$schema": "https://vela.dev/schema/icon_themes/v0.3.0.json",
   "name": "My Icon Theme",
   "author": "Your Name",
   "themes": [

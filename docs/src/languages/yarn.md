@@ -1,6 +1,6 @@
 ---
 title: Yarn
-description: "Configure Yarn language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Yarn language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Yarn

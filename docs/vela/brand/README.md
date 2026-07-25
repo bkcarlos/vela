@@ -23,7 +23,7 @@ Source and generation files in the Vela fork:
 
 ```text
 assets/images/vela_logo.svg
-crates/zed/resources/vela-app-icon*.svg
+crates/vela/resources/vela-app-icon*.svg
 script/generate-vela-icons.py
 ```
 

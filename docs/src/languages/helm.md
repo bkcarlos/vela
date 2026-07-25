@@ -1,18 +1,18 @@
 ---
 title: Helm
-description: "Configure Helm language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Helm language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Helm
 
-Support for Helm in Zed is provided by the community-maintained [Helm extension](https://github.com/cabrinha/helm.zed).
+Support for Helm in Vela is provided by the community-maintained [Helm extension](https://github.com/cabrinha/helm.vela).
 
 - Tree-sitter: [tree-sitter-go-template](https://github.com/ngalaiko/tree-sitter-go-template/tree/master)
 - Language Server: [mrjosh/helm-ls](https://github.com/mrjosh/helm-ls)
 
 ## Setup
 
-Enable Helm language for Helm files by editing your `.zed/settings.json` and adding:
+Enable Helm language for Helm files by editing your `.vela/settings.json` and adding:
 
 ```json [settings]
   "file_types": {

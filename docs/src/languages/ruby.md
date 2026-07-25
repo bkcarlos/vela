@@ -1,11 +1,11 @@
 ---
 title: Ruby
-description: "Configure Ruby language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Ruby language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Ruby
 
-Ruby support is available through the [Ruby extension](https://github.com/zed-extensions/ruby).
+Ruby support is available through the [Ruby extension](https://github.com/vela-extensions/ruby).
 
 - Tree-sitters:
   - [tree-sitter-ruby](https://github.com/tree-sitter/tree-sitter-ruby)
@@ -23,16 +23,16 @@ The Ruby extension also provides support for ERB files.
 
 ## Language Servers
 
-There are multiple language servers available for Ruby. Zed supports the two following:
+There are multiple language servers available for Ruby. Vela supports the two following:
 
 - [solargraph](https://github.com/castwide/solargraph)
 - [ruby-lsp](https://github.com/Shopify/ruby-lsp)
 
 They both have an overlapping feature set of autocomplete, diagnostics, code actions, etc. and it's up to you to decide which one you want to use. Note that you can't use both at the same time.
 
-In addition to these two language servers, Zed also supports:
+In addition to these two language servers, Vela also supports:
 
-- [rubocop](https://github.com/rubocop/rubocop) which is a static code analyzer and linter for Ruby. Under the hood, it's also used by Zed as a language server, but its functionality is complementary to that of solargraph and ruby-lsp.
+- [rubocop](https://github.com/rubocop/rubocop) which is a static code analyzer and linter for Ruby. Under the hood, it's also used by Vela as a language server, but its functionality is complementary to that of solargraph and ruby-lsp.
 - [sorbet](https://sorbet.org/) which is a static type checker for Ruby with a custom gradual type system.
 - [steep](https://github.com/soutaro/steep) which is a static type checker for Ruby that uses Ruby Signature (RBS).
 - [Herb](https://herb-tools.dev) which is a language server for ERB files.
@@ -43,7 +43,7 @@ When configuring a language server, it helps to open the LSP Logs window using t
 
 ## Configuring a language server
 
-The [Ruby extension](https://github.com/zed-extensions/ruby) offers both `solargraph` and `ruby-lsp` language server support.
+The [Ruby extension](https://github.com/vela-extensions/ruby) offers both `solargraph` and `ruby-lsp` language server support.
 
 ### Language Server Activation
 
@@ -73,7 +73,7 @@ You can skip step 1 and force using the system executable by setting `use_bundle
 
 ### Using `ruby-lsp`
 
-Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages > Ruby, or add to your settings file:
+Configure language servers in Settings ({#kb vela::OpenSettings}) under Languages > Ruby, or add to your settings file:
 
 ```json [settings]
 {
@@ -103,7 +103,7 @@ That disables `solargraph` and `rubocop` and uses `ruby-lsp`.
 
 The Ruby extension also provides support for `rubocop` language server for offense detection and autocorrection.
 
-Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages > Ruby, or add to your settings file:
+Configure language servers in Settings ({#kb vela::OpenSettings}) under Languages > Ruby, or add to your settings file:
 
 ```json [settings]
 {
@@ -129,7 +129,7 @@ Or, conversely, you can disable `ruby-lsp` and enable `solargraph` and `rubocop`
 
 ## Setting up `solargraph`
 
-Solargraph has formatting and diagnostics disabled by default. We can tell Zed to enable them by adding the following to your `settings.json`:
+Solargraph has formatting and diagnostics disabled by default. We can tell Vela to enable them by adding the following to your `settings.json`:
 
 ```json [settings]
 {
@@ -173,7 +173,7 @@ You can pass Ruby LSP configuration to `initialization_options`, e.g.
 
 For full configuration options, see the [Ruby LSP website](https://shopify.github.io/ruby-lsp/editors.html).
 
-LSP `settings` and `initialization_options` can also be project-specific. For example to use [standardrb/standard](https://github.com/standardrb/standard) as a formatter and linter for a particular project, add this to a `.zed/settings.json` inside your project repo:
+LSP `settings` and `initialization_options` can also be project-specific. For example to use [standardrb/standard](https://github.com/standardrb/standard) as a formatter and linter for a particular project, add this to a `.vela/settings.json` inside your project repo:
 
 ```json [settings]
 {
@@ -190,7 +190,7 @@ LSP `settings` and `initialization_options` can also be project-specific. For ex
 
 ## Setting up `rubocop` LSP
 
-Rubocop has unsafe autocorrection disabled by default. We can tell Zed to enable it by adding the following to your `settings.json`:
+Rubocop has unsafe autocorrection disabled by default. We can tell Vela to enable it by adding the following to your `settings.json`:
 
 ```json [settings]
 {
@@ -223,7 +223,7 @@ Rubocop has unsafe autocorrection disabled by default. We can tell Zed to enable
 
 To enable Sorbet, add `\"sorbet\"` to the `language_servers` list for Ruby. You may want to disable other language servers if Sorbet is intended to be your primary LSP, or if you plan to use it alongside another LSP for specific features like type checking.
 
-Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages > Ruby, or add to your settings file:
+Configure language servers in Settings ({#kb vela::OpenSettings}) under Languages > Ruby, or add to your settings file:
 
 ```json [settings]
 {
@@ -249,7 +249,7 @@ For all aspects of installing Sorbet, setting it up in your project, and configu
 
 To enable Steep, add `\"steep\"` to the `language_servers` list for Ruby. You may need to adjust the order or disable other LSPs depending on your desired setup.
 
-Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages > Ruby, or add to your settings file:
+Configure language servers in Settings ({#kb vela::OpenSettings}) under Languages > Ruby, or add to your settings file:
 
 ```json [settings]
 {
@@ -306,22 +306,22 @@ end
 
 ## Running tests
 
-To run tests in your Ruby project, you can set up custom tasks in your local `.zed/tasks.json` configuration file. These tasks can be defined to work with different test frameworks like Minitest, RSpec, quickdraw, and tldr. Below are some examples of how to set up these tasks to run your tests from within your editor.
+To run tests in your Ruby project, you can set up custom tasks in your local `.vela/tasks.json` configuration file. These tasks can be defined to work with different test frameworks like Minitest, RSpec, quickdraw, and tldr. Below are some examples of how to set up these tasks to run your tests from within your editor.
 
 ### Minitest with Rails
 
 ```json [tasks]
 [
   {
-    "label": "test $ZED_RELATIVE_FILE -n /$ZED_CUSTOM_RUBY_TEST_NAME/",
+    "label": "test $VELA_RELATIVE_FILE -n /$VELA_CUSTOM_RUBY_TEST_NAME/",
     "command": "bin/rails",
     "args": [
       "test",
-      "$ZED_RELATIVE_FILE",
+      "$VELA_RELATIVE_FILE",
       "-n",
-      "\"$ZED_CUSTOM_RUBY_TEST_NAME\""
+      "\"$VELA_CUSTOM_RUBY_TEST_NAME\""
     ],
-    "cwd": "$ZED_WORKTREE_ROOT",
+    "cwd": "$VELA_WORKTREE_ROOT",
     "tags": ["ruby-test"]
   }
 ]
@@ -329,22 +329,22 @@ To run tests in your Ruby project, you can set up custom tasks in your local `.z
 
 ### Minitest
 
-Plain minitest does not support running tests by line number, only by name, so we need to use `$ZED_CUSTOM_RUBY_TEST_NAME` instead:
+Plain minitest does not support running tests by line number, only by name, so we need to use `$VELA_CUSTOM_RUBY_TEST_NAME` instead:
 
 ```json [tasks]
 [
   {
-    "label": "-Itest $ZED_RELATIVE_FILE -n /$ZED_CUSTOM_RUBY_TEST_NAME/",
+    "label": "-Itest $VELA_RELATIVE_FILE -n /$VELA_CUSTOM_RUBY_TEST_NAME/",
     "command": "bundle",
     "args": [
       "exec",
       "ruby",
       "-Itest",
-      "$ZED_RELATIVE_FILE",
+      "$VELA_RELATIVE_FILE",
       "-n",
-      "\"$ZED_CUSTOM_RUBY_TEST_NAME\""
+      "\"$VELA_CUSTOM_RUBY_TEST_NAME\""
     ],
-    "cwd": "$ZED_WORKTREE_ROOT",
+    "cwd": "$VELA_WORKTREE_ROOT",
     "tags": ["ruby-test"]
   }
 ]
@@ -355,10 +355,10 @@ Plain minitest does not support running tests by line number, only by name, so w
 ```json [tasks]
 [
   {
-    "label": "test $ZED_RELATIVE_FILE:$ZED_ROW",
+    "label": "test $VELA_RELATIVE_FILE:$VELA_ROW",
     "command": "bundle",
-    "args": ["exec", "rspec", "\"$ZED_RELATIVE_FILE:$ZED_ROW\""],
-    "cwd": "$ZED_WORKTREE_ROOT",
+    "args": ["exec", "rspec", "\"$VELA_RELATIVE_FILE:$VELA_ROW\""],
+    "cwd": "$VELA_WORKTREE_ROOT",
     "tags": ["ruby-test"]
   }
 ]
@@ -368,7 +368,7 @@ Similar task syntax can be used for other test frameworks such as `quickdraw` or
 
 ## Debugging
 
-The Ruby extension provides a debug adapter for debugging Ruby code. Zed's name for the adapter (in the UI and `debug.json`) is `rdbg`, and under the hood, it uses the [`debug`](https://github.com/ruby/debug) gem. The extension uses the [same activation logic](#language-server-activation) as the language servers.
+The Ruby extension provides a debug adapter for debugging Ruby code. Vela's name for the adapter (in the UI and `debug.json`) is `rdbg`, and under the hood, it uses the [`debug`](https://github.com/ruby/debug) gem. The extension uses the [same activation logic](#language-server-activation) as the language servers.
 
 ### Examples
 
@@ -380,8 +380,8 @@ The Ruby extension provides a debug adapter for debugging Ruby code. Zed's name 
     "label": "Debug current file",
     "adapter": "rdbg",
     "request": "launch",
-    "script": "$ZED_FILE",
-    "cwd": "$ZED_WORKTREE_ROOT"
+    "script": "$VELA_FILE",
+    "cwd": "$VELA_WORKTREE_ROOT"
   }
 ]
 ```
@@ -396,7 +396,7 @@ The Ruby extension provides a debug adapter for debugging Ruby code. Zed's name 
     "request": "launch",
     "command": "./bin/rails",
     "args": ["server"],
-    "cwd": "$ZED_WORKTREE_ROOT",
+    "cwd": "$VELA_WORKTREE_ROOT",
     "env": {
       "RUBY_DEBUG_OPEN": "true"
     }
@@ -410,7 +410,7 @@ The Ruby extension provides a debug adapter for debugging Ruby code. Zed's name 
 
 To format ERB templates, you can use the `erb-formatter` formatter. This formatter uses the [`erb-formatter`](https://rubygems.org/gems/erb-formatter) gem to format ERB templates.
 
-Configure formatting in Settings ({#kb zed::OpenSettings}) under Languages > HTML+ERB, or add to your settings file:
+Configure formatting in Settings ({#kb vela::OpenSettings}) under Languages > HTML+ERB, or add to your settings file:
 
 ```json [settings]
 {

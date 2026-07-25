@@ -50,7 +50,7 @@ See [Sandboxing](./sandboxing.md) for the default writable locations and network
 
 ## Quick Start
 
-Use Zed's Settings Editor to [configure tool permissions](zed://settings/agent.tool_permissions), or add the mode and rules directly to your settings file:
+Use Vela's Settings Editor to [configure tool permissions](vela://settings/agent.tool_permissions), or add the mode and rules directly to your settings file:
 
 ```json [settings]
 {
@@ -84,7 +84,7 @@ The `tool_permissions` setting adds per-tool defaults and regex patterns that:
 - **Always confirm** sensitive actions
 
 Custom rules apply normally in Manual and Auto modes. In Full Access, explicit deny rules still block actions, while confirmation rules are treated as allowed so the agent does not pause for approval.
-These settings apply to Zed's native agent; external agents connected through the Agent Client Protocol (ACP) may also apply their own permission system.
+These settings apply to Vela's native agent; external agents connected through the Agent Client Protocol (ACP) may also apply their own permission system.
 
 ## Supported Tools
 
@@ -203,7 +203,7 @@ Full Access should only be enabled when you understand and accept the risk of un
 
 ## Shell Compatibility
 
-For the `terminal` tool, Zed parses chained commands (e.g., `echo hello && rm file`) to check each sub-command against your patterns.
+For the `terminal` tool, Vela parses chained commands (e.g., `echo hello && rm file`) to check each sub-command against your patterns.
 
 All supported shells work with tool permission patterns, including sh, bash, zsh, dash, fish, PowerShell 7+, pwsh, cmd, xonsh, csh, tcsh, Nushell, Elvish, and rc (Plan 9).
 
@@ -222,7 +222,7 @@ You can use the "Test Your Rules" checker, available in each individual tool pag
 
 ## Built-in Security Rules
 
-Zed includes a small set of hardcoded security rules that **cannot be overridden** by any setting.
+Vela includes a small set of hardcoded security rules that **cannot be overridden** by any setting.
 These only apply to the **terminal** tool and block recursive deletion of critical directories:
 
 - `rm -rf /` and `rm -rf /*` — filesystem root
@@ -235,7 +235,7 @@ These patterns catch any flag combination (e.g., `-fr`, `-rfv`, `-r -f`, `--recu
 They are checked against both the raw command and each parsed sub-command in chained commands (e.g., `ls && rm -rf /`).
 
 There are no other built-in rules.
-The default settings file ({#action zed::OpenDefaultSettings}) includes commented-out examples for protecting `.env` files, secrets directories, and private keys — you can uncomment or adapt these to suit your needs.
+The default settings file ({#action vela::OpenDefaultSettings}) includes commented-out examples for protecting `.env` files, secrets directories, and private keys — you can uncomment or adapt these to suit your needs.
 
 ## Permission Request in the UI
 

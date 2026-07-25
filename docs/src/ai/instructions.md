@@ -1,31 +1,31 @@
 ---
-title: Agent Instructions - Zed
-description: Configure always-on personal and project instructions for Zed Agent with AGENTS.md and compatible project instruction files.
+title: Agent Instructions - Vela
+description: Configure always-on personal and project instructions for Vela Agent with AGENTS.md and compatible project instruction files.
 ---
 
 # Instructions
 
-Instructions are always-on context for the Zed Agent. Use instructions for persistent guidance that should apply to every relevant agent interaction.
+Instructions are always-on context for the Vela Agent. Use instructions for persistent guidance that should apply to every relevant agent interaction.
 
 Use [Skills](./skills.md) instead when you want reusable task instructions that can be invoked by name.
 
-Zed supports [`AGENTS.md`](https://agents.md/) as the primary instruction file for personal and project-level agent guidance.
+Vela supports [`AGENTS.md`](https://agents.md/) as the primary instruction file for personal and project-level agent guidance.
 
 ## Personal Instructions {#personal-instructions}
 
-Personal instructions apply to every project you open with the Zed Agent.
+Personal instructions apply to every project you open with the Vela Agent.
 
 Create or edit:
 
 ```text
-~/.config/zed/AGENTS.md
+~/.config/vela/AGENTS.md
 ```
 
-On Windows, the equivalent file is under `%APPDATA%\Zed\AGENTS.md`.
+On Windows, the equivalent file is under `%APPDATA%\Vela\AGENTS.md`.
 
 ## Project Instructions {#project-instructions}
 
-Project instruction files apply to the current project. Zed uses the first matching file in this list:
+Project instruction files apply to the current project. Vela uses the first matching file in this list:
 
 - `.rules`
 - `.cursorrules`
@@ -41,14 +41,14 @@ Project instructions override personal `AGENTS.md` when they conflict.
 
 ## Instruction File Support {#support}
 
-| File                              | Zed Agent                                              | External Agents       | Terminal Threads                 |
+| File                              | Vela Agent                                              | External Agents       | Terminal Threads                 |
 | --------------------------------- | ------------------------------------------------------ | --------------------- | -------------------------------- |
-| `~/.config/zed/AGENTS.md`         | Loaded as personal instructions                        | Not generally used    | Not used unless the CLI reads it |
+| `~/.config/vela/AGENTS.md`         | Loaded as personal instructions                        | Not generally used    | Not used unless the CLI reads it |
 | Project `AGENTS.md`               | Loaded as project instructions                         | Depends on the agent  | Depends on the CLI               |
-| `CLAUDE.md`                       | Loaded as compatible project instructions by Zed Agent | Claude reads natively | Claude Code CLI reads natively   |
-| `.github/copilot-instructions.md` | Loaded as compatible project instructions by Zed Agent | Depends on the agent  | Depends on the CLI               |
+| `CLAUDE.md`                       | Loaded as compatible project instructions by Vela Agent | Claude reads natively | Claude Code CLI reads natively   |
+| `.github/copilot-instructions.md` | Loaded as compatible project instructions by Vela Agent | Depends on the agent  | Depends on the CLI               |
 
-External Agents and Terminal Threads may read their own native instruction files directly. Do not assume Zed's instruction loader controls those agents.
+External Agents and Terminal Threads may read their own native instruction files directly. Do not assume Vela's instruction loader controls those agents.
 
 ## Instructions vs. Skills {#instructions-vs-skills}
 

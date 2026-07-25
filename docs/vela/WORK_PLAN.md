@@ -2,13 +2,13 @@
 
 > 依据：`docs/vela/PROJECT_PLAN.md`、`docs/vela/ESTIMATE.md`  
 > 目标：先交付 macOS arm64 可日用 Alpha，再完成稳定 Beta  
-> 技术路线：Zed fork + 进程内 Rust Agent + UI-first + TOML 配置
+> 技术路线：Vela fork + 进程内 Rust Agent + UI-first + TOML 配置
 
 ## 1. 计划基准
 
 本计划按 **3 人全职团队、约 26–30 周交付稳定 Beta** 编排：
 
-- **A：Editor/UI**——Zed、GPUI、文件树、聊天、Diff；
+- **A：Editor/UI**——Vela、GPUI、文件树、聊天、Diff；
 - **B：Agent/Model**——Rust Agent、模型供应商、上下文、语义工具；
 - **C：Platform/Quality**——TOML、Git、权限、语言环境、测试与发布。
 
@@ -18,7 +18,7 @@
 
 | 阶段 | 周期（三人） | 主要交付物 | 里程碑 |
 |---|---:|---|---|
-| P0 项目基线 | 第 1–2 周 | 可重复构建的 Zed fork | Build Green |
+| P0 项目基线 | 第 1–2 周 | 可重复构建的 Vela fork | Build Green |
 | P1 技术验证 | 第 3–5 周 | 进程内 Agent、选择代码、基础 Diff | Architecture Proven |
 | P2 编辑器与配置基线 | 第 6–9 周 | 文件树、Action、TOML facade | Editor Baseline |
 | P3 聊天与多轮上下文 | 第 10–13 周 | 结构化聊天、Context Chip | Conversation Ready |
@@ -33,8 +33,8 @@
 
 #### 工作项
 
-- [ ] `BASE-001` 建立 CodeIDE 的 Zed fork 与上游 remote；
-- [x] `BASE-002` 创建 `upstream.lock`，固定 Zed/Pi 调研 commit 和工具链；
+- [ ] `BASE-001` 建立 CodeIDE 的 Vela fork 与上游 remote；
+- [x] `BASE-002` 创建 `upstream.lock`，固定 Vela/Pi 调研 commit 和工具链；
 - [x] `BASE-003` 安装 Rust 1.95.0、Xcode、cmake 等 macOS 构建依赖；
 - [x] `BASE-004` 完成 debug/release 构建脚本；
 - [ ] `BASE-005` 建立格式化、Clippy、单元测试和 smoke test CI；
@@ -55,7 +55,7 @@
 #### Agent 与模型
 
 - [x] `SPIKE-001` 梳理 `agent`、`agent_ui`、`language_model*`、`project` 依赖图；
-- [x] `SPIKE-002` 使用 Zed 原生 Rust Agent 跑通一次流式模型请求；
+- [x] `SPIKE-002` 使用 Vela 原生 Rust Agent 跑通一次流式模型请求；
 - [x] `SPIKE-003` 验证取消、超时、错误和 UI 恢复；
 - [x] `SPIKE-004` 验证 Agent 直接调用 `Entity<Project>`；
 - [x] `SPIKE-005` 形成 ADR-001：进程内 Agent crate 边界。
@@ -65,7 +65,7 @@
 - [ ] `SPIKE-006` 将当前 selection 加入 Agent 消息；
 - [ ] `SPIKE-007` Agent 修改一个文件并打开修改前后 Diff；
 - [ ] `SPIKE-008` 聊天中的文件路径可跳转到编辑器；
-- [x] `SPIKE-009` 验证 Zed 文件树、Git Panel、Diff Editor 的可复用范围。
+- [x] `SPIKE-009` 验证 Vela 文件树、Git Panel、Diff Editor 的可复用范围。
 
 #### 语言能力
 
@@ -98,14 +98,14 @@
 
 #### TOML 配置
 
-- [x] `CFG-001` 形成 ADR-002：TOML schema 和 Zed Settings 映射；
+- [x] `CFG-001` 形成 ADR-002：TOML schema 和 Vela Settings 映射；
 - [ ] `CFG-002` 实现全局、项目和会话层级合并；
 - [ ] `CFG-003` 使用 `toml_edit` 保留注释、顺序和未知字段；
 - [ ] `CFG-004` 实现校验、临时文件、fsync 和原子 rename；
 - [ ] `CFG-005` 实现文件监听、热加载和冲突 UI；
 - [ ] `CFG-006` 设置 UI 显示默认值、生效值和来源；
 - [ ] `CFG-007` 增加 schema version、备份和迁移报告；
-- [ ] `CFG-008` 第一阶段覆盖 CodeIDE 新配置及高频 Zed 设置。
+- [ ] `CFG-008` 第一阶段覆盖 CodeIDE 新配置及高频 Vela 设置。
 
 #### 退出条件
 
@@ -277,11 +277,11 @@
 
 - 周一：确认本周目标、依赖和风险；
 - 每日：小 PR 合并，避免长期大分支；
-- 周三：运行集成测试并同步一次 Zed 上游风险；
+- 周三：运行集成测试并同步一次 Vela 上游风险；
 - 周五：演示真实用户流程，更新指标和计划；
 - 每阶段结束：完成 ADR、退出条件和回归测试后再进入下一阶段。
 
-建议每两周同步一次 Zed 上游；若发生大规模 Agent/Settings 重构，暂停功能开发，先完成兼容评估。
+建议每两周同步一次 Vela 上游；若发生大规模 Agent/Settings 重构，暂停功能开发，先完成兼容评估。
 
 ## 5. Definition of Done
 
@@ -295,14 +295,14 @@
 - 敏感字段不会进入日志、TOML 或会话；
 - 新 Action 可以在快捷键 UI 中发现和重绑定；
 - 用户可见行为有 E2E 或明确的手工验收步骤；
-- 对 Zed 核心的修改记录了上游同步影响。
+- 对 Vela 核心的修改记录了上游同步影响。
 
 ## 6. 首周立即执行
 
-1. 建立 Zed fork 和 `upstream.lock`；
+1. 建立 Vela fork 和 `upstream.lock`；
 2. 安装 Rust 1.95.0 与 macOS 构建依赖；
-3. 完成一次 Zed debug build；
-4. 运行 Zed 原生 Agent，记录模型、工具和会话调用链；
+3. 完成一次 Vela debug build；
+4. 运行 Vela 原生 Agent，记录模型、工具和会话调用链；
 5. 创建四种 P0 语言 fixture 目录；
 6. 创建 ADR-001 草稿和功能验收 checklist；
 7. 建立 CI 的 fmt、Clippy、test 和构建缓存。

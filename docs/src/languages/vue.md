@@ -1,11 +1,11 @@
 ---
 title: Vue
-description: "Configure Vue language support in Zed, including language servers, formatting, and debugging."
+description: "Configure Vue language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # Vue
 
-Vue support is available through the [Vue extension](https://github.com/zed-extensions/vue).
+Vue support is available through the [Vue extension](https://github.com/vela-extensions/vue).
 
 - Tree-sitter: [tree-sitter-grammars/tree-sitter-vue](https://github.com/tree-sitter-grammars/tree-sitter-vue)
 - Language Server: [vuejs/language-tools](https://github.com/vuejs/language-tools)
@@ -19,7 +19,7 @@ the TypeScript SDK inside that directory.
 
 This may not always be true; for example, when working in a project that uses Yarn PnP, there is no `node_modules`. For
 editor support, the [documented](https://yarnpkg.com/getting-started/editor-sdks) approach is to run something like
-`yarn dlx @yarnpkg/sdks`. In that case, you can provide the following initialization options in your Zed settings:
+`yarn dlx @yarnpkg/sdks`. In that case, you can provide the following initialization options in your Vela settings:
 
 ```json
 {

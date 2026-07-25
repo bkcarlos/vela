@@ -1,11 +1,11 @@
 ---
-title: Developing Zed
-description: "Guide to building and developing Zed from source."
+title: Developing Vela
+description: "Guide to building and developing Vela from source."
 ---
 
-# Developing Zed
+# Developing Vela
 
-See the platform-specific instructions for building Zed from source:
+See the platform-specific instructions for building Vela from source:
 
 - [macOS](./development/macos.md)
 - [Linux](./development/linux.md)
@@ -13,9 +13,9 @@ See the platform-specific instructions for building Zed from source:
 
 ## Keychain access
 
-Zed stores secrets in the system keychain.
+Vela stores secrets in the system keychain.
 
-However, when running a development build of Zed on macOS (and perhaps other
+However, when running a development build of Vela on macOS (and perhaps other
 platforms) trying to access the keychain results in a lot of keychain prompts
 that require entering your password over and over.
 
@@ -25,32 +25,32 @@ your password again the next time something changes in the binary.
 
 This quickly becomes annoying and impedes development speed.
 
-That is why, by default, when running a development build of Zed an alternative
+That is why, by default, when running a development build of Vela an alternative
 credential provider is used to bypass the system keychain.
 
 > **Note:** This is **only** the case for development builds. For all non-development
 > release channels the system keychain is always used.
 
 If you need to test something out using the real system keychain in a
-development build, run Zed with the following environment variable set:
+development build, run Vela with the following environment variable set:
 
 ```
-ZED_DEVELOPMENT_USE_KEYCHAIN=1
+VELA_DEVELOPMENT_USE_KEYCHAIN=1
 ```
 
 ## Performance Measurements
 
-Zed includes a frame time measurement system that can be used to profile how long it takes to render each frame. This is particularly useful when comparing rendering performance between different versions or when optimizing frame rendering code.
+Vela includes a frame time measurement system that can be used to profile how long it takes to render each frame. This is particularly useful when comparing rendering performance between different versions or when optimizing frame rendering code.
 
-### Using ZED_MEASUREMENTS
+### Using VELA_MEASUREMENTS
 
-To enable performance measurements, set the `ZED_MEASUREMENTS` environment variable:
+To enable performance measurements, set the `VELA_MEASUREMENTS` environment variable:
 
 ```sh
-export ZED_MEASUREMENTS=1
+export VELA_MEASUREMENTS=1
 ```
 
-When enabled, Zed will print frame rendering timing information to stderr, showing how long each frame takes to render.
+When enabled, Vela will print frame rendering timing information to stderr, showing how long each frame takes to render.
 
 ### Performance Comparison Workflow
 
@@ -59,18 +59,18 @@ Here's a typical workflow for comparing frame rendering performance between diff
 1. **Enable measurements:**
 
    ```sh
-   export ZED_MEASUREMENTS=1
+   export VELA_MEASUREMENTS=1
    ```
 
 2. **Test the first version:**
 
    - Checkout the commit you want to measure
-   - Run Zed in release mode and use it for 5-10 seconds: `cargo run --release &> version-a`
+   - Run Vela in release mode and use it for 5-10 seconds: `cargo run --release &> version-a`
 
 3. **Test the second version:**
 
    - Checkout another commit you want to compare
-   - Run Zed in release mode and use it for 5-10 seconds: `cargo run --release &> version-b`
+   - Run Vela in release mode and use it for 5-10 seconds: `cargo run --release &> version-b`
 
 4. **Generate comparison:**
 
@@ -88,7 +88,7 @@ in-depth examples and explanations.
 
 ## ETW Profiling on Windows
 
-Zed supports performance profiling with Event Tracing for Windows (ETW) to capture detailed performance data, including CPU, GPU, memory, disk, and file I/O activity. Data is saved to an `.etl` file, which can be opened in standard profiling tools for analysis.
+Vela supports performance profiling with Event Tracing for Windows (ETW) to capture detailed performance data, including CPU, GPU, memory, disk, and file I/O activity. Data is saved to an `.etl` file, which can be opened in standard profiling tools for analysis.
 
 ETW recordings may contain personally identifiable or security-sensitive information, such as paths to files and registry keys accessed, as well as process names. Please keep this in mind when sharing traces with others.
 
@@ -96,23 +96,23 @@ ETW recordings may contain personally identifiable or security-sensitive informa
 
 Open the command palette and run one of the following:
 
-- `zed: record etw trace`: records CPU, GPU, memory, and I/O activity
-- `zed: record etw trace with heap tracing`: includes heap allocation data for the Zed process
+- `vela: record etw trace`: records CPU, GPU, memory, and I/O activity
+- `vela: record etw trace with heap tracing`: includes heap allocation data for the Vela process
 
-Zed will prompt you to choose a save location for the `.etl` file, then request administrator permission. Once granted, recording will begin.
+Vela will prompt you to choose a save location for the `.etl` file, then request administrator permission. Once granted, recording will begin.
 
 ### Saving or canceling
 
 While a trace is recording, open the command palette and run one of the following:
 
-- `zed: save etw trace`: stops recording and saves the trace to disk
-- `zed: cancel etw trace`: stops recording without saving
+- `vela: save etw trace`: stops recording and saves the trace to disk
+- `vela: cancel etw trace`: stops recording without saving
 
 Recordings automatically save after 60 seconds if not stopped manually.
 
 ## Contributor links
 
-- [CONTRIBUTING.md](https://github.com/zed-industries/zed/blob/main/CONTRIBUTING.md)
+- [CONTRIBUTING.md](https://github.com/vela-industries/vela/blob/main/CONTRIBUTING.md)
 - [Debugging Crashes](./development/debugging-crashes.md)
-- [Code of Conduct](https://zed.dev/code-of-conduct)
-- [Zed Contributor License](https://zed.dev/cla)
+- [Code of Conduct](https://vela.dev/code-of-conduct)
+- [Vela Contributor License](https://vela.dev/cla)

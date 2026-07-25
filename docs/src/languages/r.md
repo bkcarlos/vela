@@ -1,18 +1,18 @@
 ---
 title: R
-description: "Configure R language support in Zed, including language servers, formatting, and debugging."
+description: "Configure R language support in Vela, including language servers, formatting, and debugging."
 ---
 
 # R
 
-R support is available via multiple R Zed extensions:
+R support is available via multiple R Vela extensions:
 
-- [ocsmit/zed-r](https://github.com/ocsmit/zed-r)
+- [ocsmit/vela-r](https://github.com/ocsmit/vela-r)
 
   - Tree-sitter: [r-lib/tree-sitter-r](https://github.com/r-lib/tree-sitter-r)
   - Language-Server: [REditorSupport/languageserver](https://github.com/REditorSupport/languageserver)
 
-- [posit-dev/air](https://github.com/posit-dev/air/tree/main/editors/zed)
+- [posit-dev/air](https://github.com/posit-dev/air/tree/main/editors/vela)
   - Formatter: [posit-dev/air](https://posit-dev.github.io/air/)
 
 ## Installation
@@ -25,9 +25,9 @@ install.packages("languageserver")
 install.packages("lintr")
 ```
 
-3. Install the [R](https://github.com/ocsmit/zed-r) extension through Zed's extensions manager for basic R language support (syntax highlighting, tree-sitter support) and for [REditorSupport/languageserver](https://github.com/REditorSupport/languageserver) support.
+3. Install the [R](https://github.com/ocsmit/vela-r) extension through Vela's extensions manager for basic R language support (syntax highlighting, tree-sitter support) and for [REditorSupport/languageserver](https://github.com/REditorSupport/languageserver) support.
 
-4. Install the [Air](https://posit-dev.github.io/air/) extension through Zed's extensions manager for R code formatting via Air.
+4. Install the [Air](https://posit-dev.github.io/air/) extension through Vela's extensions manager for R code formatting via Air.
 
 ## Linting
 
@@ -57,11 +57,11 @@ See [Using lintr](https://lintr.r-lib.org/articles/lintr.html) for a complete li
 
 ### Air
 
-[Air](https://posit-dev.github.io/air/) provides code formatting for R, including support for format-on-save. The [Air documentation for Zed](https://posit-dev.github.io/air/editor-zed.html) contains the most up-to-date advice for running Air in Zed.
+[Air](https://posit-dev.github.io/air/) provides code formatting for R, including support for format-on-save. The [Air documentation for Vela](https://posit-dev.github.io/air/editor-vela.html) contains the most up-to-date advice for running Air in Vela.
 
-Ensure that you have installed both the [ocsmit/zed-r](https://github.com/ocsmit/zed-r) extension (for general R language awareness in Zed) and the [Air](https://posit-dev.github.io/air/) extension.
+Ensure that you have installed both the [ocsmit/vela-r](https://github.com/ocsmit/vela-r) extension (for general R language awareness in Vela) and the [Air](https://posit-dev.github.io/air/) extension.
 
-Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages > R, or add to your settings file:
+Configure language servers in Settings ({#kb vela::OpenSettings}) under Languages > R, or add to your settings file:
 
 ```json [settings]
 {
@@ -73,7 +73,7 @@ Configure language servers in Settings ({#kb zed::OpenSettings}) under Languages
 }
 ```
 
-If you use the `"r_language_server"` from `REditorSupport/languageserver`, but would still like to use Air for formatting, configure in Settings ({#kb zed::OpenSettings}) under Languages > R, or add to your settings file:
+If you use the `"r_language_server"` from `REditorSupport/languageserver`, but would still like to use Air for formatting, configure in Settings ({#kb vela::OpenSettings}) under Languages > R, or add to your settings file:
 
 ```json [settings]
 {
@@ -111,7 +111,7 @@ TBD: Get this working
 
 ### REditorSupport/languageserver Configuration
 
-You can configure the [R languageserver settings](https://github.com/REditorSupport/languageserver#settings) via Zed Project Settings `.zed/settings.json` or Zed User Settings `~/.config/zed/settings.json`:
+You can configure the [R languageserver settings](https://github.com/REditorSupport/languageserver#settings) via Vela Project Settings `.vela/settings.json` or Vela User Settings `~/.config/vela/settings.json`:
 
 For example to disable Lintr linting and suppress code snippet suggestions (both enabled by default):
 
@@ -141,7 +141,7 @@ TBD: R REPL Docs
 
 ### Ark Installation
 
-To use the Zed REPL with R you need to install [Ark](https://github.com/posit-dev/ark), an R Kernel for Jupyter applications.
+To use the Vela REPL with R you need to install [Ark](https://github.com/posit-dev/ark), an R Kernel for Jupyter applications.
 You can download the latest version from the [Ark GitHub Releases](https://github.com/posit-dev/ark/releases) and then extract the `ark` binary to a directory in your `PATH`.
 
 For example to install the latest non-debug build:
