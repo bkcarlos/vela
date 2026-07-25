@@ -13,7 +13,7 @@ Use Zed Agent when you want the agent to:
 - edit files
 - run terminal commands
 - use Zed-managed MCP tools
-- follow [Agent Profiles](./agent-profiles.md)
+- follow [Tool Permissions](./tool-permissions.md)
 - use Zed [Skills](./skills.md) and [Instructions](./instructions.md)
 - show changes in Zed's review UI
 
@@ -23,7 +23,6 @@ Use Zed Agent when you want the agent to:
 | -------------------------- | ----------------------------------------- |
 | Model access               | [LLM Providers](./llm-providers.md)       |
 | Panel workflow             | [Agent Panel](./agent-panel.md)           |
-| Tool availability          | [Agent Profiles](./agent-profiles.md)     |
 | Tool approval behavior     | [Tool Permissions](./tool-permissions.md) |
 | Built-in tools             | [Tools](./tools.md)                       |
 | External tools             | [MCP](./mcp.md)                           |

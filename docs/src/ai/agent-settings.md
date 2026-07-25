@@ -118,7 +118,6 @@ Some AI settings are not configured on the AI settings pages:
 
 | Task                                                         | Go to                                          |
 | ------------------------------------------------------------ | ---------------------------------------------- |
-| Choose which tools are available in a Zed Agent thread       | [Agent Profiles](./agent-profiles.md)          |
 | Control whether tool calls are allowed, denied, or confirmed | [Tool Permissions](./tool-permissions.md)      |
 | Configure reusable task instructions                         | [Skills](./skills.md)                          |
 | Configure always-on personal or project instructions         | [Instructions](./instructions.md)              |

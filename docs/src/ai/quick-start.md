@@ -11,7 +11,7 @@ Use this page to choose the right AI setup path in Zed. If you already know the 
 
 Use [Zed Agent](./zed-agent.md) when you want Zed's native agent to read, edit, search, and run code in your project.
 
-Zed Agent uses Zed-configured models from [LLM Providers](./llm-providers.md). It also uses Zed's built-in tools, [Agent Profiles](./agent-profiles.md), [Skills](./skills.md), [Instructions](./instructions.md), and [MCP servers](./mcp.md).
+Zed Agent uses Zed-configured models from [LLM Providers](./llm-providers.md). It also uses Zed's built-in tools, [Tool Permissions](./tool-permissions.md), [Skills](./skills.md), [Instructions](./instructions.md), and [MCP servers](./mcp.md).
 
 Start in the [Agent Panel](./agent-panel.md) to prompt the agent, add context, review changes, and manage threads.
 
@@ -19,7 +19,7 @@ Start in the [Agent Panel](./agent-panel.md) to prompt the agent, add context, r
 
 | If you want to...                         | Use                                       |
 | ----------------------------------------- | ----------------------------------------- |
-| Control tools and permissions             | [Agent Profiles](./agent-profiles.md)     |
+| Choose Manual, Auto, or Full Access       | [Tool Permissions](./tool-permissions.md) |
 | Approve or deny individual tools          | [Tool Permissions](./tool-permissions.md) |
 | Add reusable task instructions            | [Skills](./skills.md)                     |
 | Add always-on personal or project context | [Instructions](./instructions.md)         |

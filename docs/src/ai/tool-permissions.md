@@ -22,6 +22,8 @@ Existing `agent.tool_permissions.default` settings remain supported when `permis
 - **Auto** (`"auto"`): Automatically performs low-risk actions and asks for confirmation before high-risk actions.
 - **Full Access** (`"full_access"`): Skips normal permission confirmations and disables the terminal sandbox.
 
+All three modes expose the same provider-compatible built-in and MCP tools. The selected mode changes how tool actions are approved and isolated, not which capabilities the agent can see.
+
 <div class="warning">
 
 Full Access allows the agent to run arbitrary commands and modify files without confirmation, and terminal commands are not isolated by the sandbox.
@@ -127,14 +129,14 @@ For model-invoked [Skills](./skills.md), use the `skill` tool. A user-invoked `/
 
 ### Options
 
-| Option                                | Description                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------ |
-| `permission_mode`                     | Overall mode: `"manual"` (default), `"auto"`, or `"full_access"`                   |
-| `tools.<tool_name>.default`            | Per-tool fallback when no patterns match: `"confirm"`, `"allow"`, or `"deny"`      |
-| `tools.<tool_name>.always_allow`       | Patterns that auto-approve unless a deny or confirm rule also matches                |
-| `tools.<tool_name>.always_deny`        | Patterns that block immediately—highest custom-rule priority                        |
-| `tools.<tool_name>.always_confirm`     | Patterns that require confirmation unless an `always_deny` rule also matches         |
-| `tool_permissions.default`             | Legacy global fallback used only when `permission_mode` is omitted                   |
+| Option                             | Description                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `permission_mode`                  | Overall mode: `"manual"` (default), `"auto"`, or `"full_access"`              |
+| `tools.<tool_name>.default`        | Per-tool fallback when no patterns match: `"confirm"`, `"allow"`, or `"deny"` |
+| `tools.<tool_name>.always_allow`   | Patterns that auto-approve unless a deny or confirm rule also matches         |
+| `tools.<tool_name>.always_deny`    | Patterns that block immediately—highest custom-rule priority                  |
+| `tools.<tool_name>.always_confirm` | Patterns that require confirmation unless an `always_deny` rule also matches  |
+| `tool_permissions.default`         | Legacy global fallback used only when `permission_mode` is omitted            |
 
 ### Compatibility with `tool_permissions.default`
 
@@ -144,7 +146,9 @@ The default `"confirm"` behavior corresponds to Manual mode.
 
 When `agent.permission_mode` is present, the permission mode supplies the inherited fallback instead.
 Tool-specific defaults and regex rules remain supported and keep their normal precedence.
-You do not need to migrate existing settings immediately, but new configurations should use `agent.permission_mode` for the overall behavior.
+You do not need to migrate existing permission settings immediately, but new configurations should use `agent.permission_mode` for the overall behavior.
+
+The removed `agent.default_profile` and `agent.profiles` settings are still accepted when older settings files are loaded, but they no longer select models or change tool availability.
 
 ### Pattern Syntax
 

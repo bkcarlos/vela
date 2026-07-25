@@ -171,11 +171,11 @@ You can mark specific models as favorites either through the model selector, by 
 
 Cycle through your favorites with {#kb agent::CycleFavoriteModels} without opening the model selector.
 
-## Using Tools and Profiles {#using-tools}
+## Using Tools and Permissions {#using-tools}
 
 The Agent Panel supports tool calling, which enables agentic editing. Zed includes [built-in tools](./tools.md) for searching your codebase, editing files, running terminal commands, and more.
 
-Use [Agent Profiles](./agent-profiles.md) to choose which built-in tools and MCP tools are available in a Zed Agent thread. Use [Tool Permissions](./tool-permissions.md) to control whether permission-gated tool calls are allowed, denied, or confirmed.
+The Zed Agent makes provider-compatible built-in tools and MCP tools available to each thread. Use [Tool Permissions](./tool-permissions.md) to choose Manual, Auto, or Full Access and to control whether permission-gated tool calls are allowed, denied, or confirmed.
 
 You can add external tools with [MCP Servers](./mcp.md).
 

@@ -52,7 +52,6 @@
   - [Terminal Threads](./ai/terminal-threads.md)
 - [Agent Panel](./ai/agent-panel.md)
   - [Agent Settings](./ai/agent-settings.md)
-  - [Agent Profiles](./ai/agent-profiles.md)
   - [Tools](./ai/tools.md)
     - [Tool Permissions](./ai/tool-permissions.md)
     - [Agent Sandboxing](./ai/sandboxing.md)

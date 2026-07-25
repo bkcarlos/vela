@@ -96,7 +96,7 @@ Once installation is complete, you can return to the Agent Panel and start promp
 How reliably MCP tools get called can vary from model to model.
 Mentioning the MCP server by name can help the model pick tools from that server.
 
-However, if you want to _ensure_ a given MCP server will be used, you can create [a custom profile](./agent-profiles.md) where all built-in tools (or the ones that could cause conflicts with the server's tools) are turned off and only the tools coming from the MCP server are turned on.
+MCP tools are available alongside compatible built-in tools. If you want to encourage use of a specific server, name the server and tool explicitly in your prompt.
 
 As an example, [the Dagger team suggests](https://container-use.com/agent-integrations#zed) doing that with their [Container Use MCP server](https://zed.dev/extensions/mcp-server-container-use):
 

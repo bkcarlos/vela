@@ -32,9 +32,8 @@ Zed Agent sandboxing currently applies to the `terminal` and `fetch` tools.
 | `terminal` | Filesystem writes and outbound network access for commands the agent runs; Git metadata is protected. |
 | `fetch`    | Hosts which can be accessed.                                                                          |
 
-Tools are still governed by [Tool Permissions](./tool-permissions.md), [Agent
-Profiles](./agent-profiles.md), and project trust, but they are not currently
-run inside this OS sandbox.
+Tools are still governed by [Tool Permissions](./tool-permissions.md) and project
+trust, but they are not currently run inside this OS sandbox.
 
 ## Requirements {#requirements}
 
