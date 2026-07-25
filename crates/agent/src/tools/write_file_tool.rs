@@ -1047,7 +1047,7 @@ mod tests {
             setup_test(cx, json!({"file.txt": "original content"})).await;
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 
@@ -1115,7 +1115,7 @@ mod tests {
             setup_test(cx, json!({"dir": {}})).await;
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 

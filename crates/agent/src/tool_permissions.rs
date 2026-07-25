@@ -226,7 +226,7 @@ impl ToolPermissionDecision {
     ///    the tool call proceeds without prompting.
     /// 5. **Tool-specific `default`** - If no patterns match and the tool has an explicit
     ///    `default` configured, that mode is used.
-    /// 6. **Global `default`** - Falls back to `tool_permissions.default` when no
+    /// 6. **Permission mode default** - Falls back to the active permission mode when no
     ///    tool-specific default is set, or when the tool has no entry at all.
     ///
     /// # Shell Compatibility (Terminal Tool Only)
@@ -250,26 +250,11 @@ impl ToolPermissionDecision {
     ///   substring.
     /// - Patterns are case-insensitive by default. Set `case_sensitive: true` for exact matching.
     /// - Use `^` and `$` anchors to match the start/end of the input.
-    pub fn from_input(
+    fn from_input(
         tool_name: &str,
         inputs: &[String],
         permissions: &ToolPermissions,
-        shell_kind: ShellKind,
-    ) -> ToolPermissionDecision {
-        Self::from_input_with_default(
-            tool_name,
-            inputs,
-            permissions,
-            permissions.default,
-            shell_kind,
-        )
-    }
-
-    fn from_input_with_default(
-        tool_name: &str,
-        inputs: &[String],
-        permissions: &ToolPermissions,
-        global_default: ToolPermissionMode,
+        mode_default: ToolPermissionMode,
         shell_kind: ShellKind,
     ) -> ToolPermissionDecision {
         // First, check hardcoded security rules, such as banning `rm -rf /` in terminal tool.
@@ -287,10 +272,9 @@ impl ToolPermissionDecision {
         }
 
         if tool_name == TerminalTool::NAME
-            && !rules.map_or(
-                matches!(global_default, ToolPermissionMode::Allow),
-                |rules| is_unconditional_allow_all(rules, global_default),
-            )
+            && !rules.map_or(matches!(mode_default, ToolPermissionMode::Allow), |rules| {
+                is_unconditional_allow_all(rules, mode_default)
+            })
             && inputs.iter().any(|input| {
                 matches!(
                     validate_terminal_command(input),
@@ -304,12 +288,12 @@ impl ToolPermissionDecision {
         let rules = match rules {
             Some(rules) => rules,
             None => {
-                // No tool-specific rules, use the global default
-                return match global_default {
+                // No tool-specific rules, use the permission mode default
+                return match mode_default {
                     ToolPermissionMode::Allow => ToolPermissionDecision::Allow,
-                    ToolPermissionMode::Deny => {
-                        ToolPermissionDecision::Deny("Blocked by global default: deny".into())
-                    }
+                    ToolPermissionMode::Deny => ToolPermissionDecision::Deny(
+                        "Blocked by permission mode default: deny".into(),
+                    ),
                     ToolPermissionMode::Confirm => ToolPermissionDecision::Confirm,
                 };
             }
@@ -345,7 +329,7 @@ impl ToolPermissionDecision {
                     rules,
                     tool_name,
                     false,
-                    global_default,
+                    mode_default,
                 );
             }
 
@@ -367,7 +351,7 @@ impl ToolPermissionDecision {
                 rules,
                 tool_name,
                 !any_parse_failed,
-                global_default,
+                mode_default,
             )
         } else {
             check_commands(
@@ -375,7 +359,7 @@ impl ToolPermissionDecision {
                 rules,
                 tool_name,
                 true,
-                global_default,
+                mode_default,
             )
         }
     }
@@ -396,7 +380,7 @@ fn check_commands(
     rules: &ToolRules,
     tool_name: &str,
     allow_enabled: bool,
-    global_default: ToolPermissionMode,
+    mode_default: ToolPermissionMode,
 ) -> ToolPermissionDecision {
     // Single pass through all commands:
     // - DENY: If ANY command matches a deny pattern, deny immediately (short-circuit)
@@ -437,7 +421,7 @@ fn check_commands(
         return ToolPermissionDecision::Allow;
     }
 
-    match rules.default.unwrap_or(global_default) {
+    match rules.default.unwrap_or(mode_default) {
         ToolPermissionMode::Deny => {
             ToolPermissionDecision::Deny(format!("{} tool is disabled", tool_name))
         }
@@ -446,14 +430,14 @@ fn check_commands(
     }
 }
 
-fn is_unconditional_allow_all(rules: &ToolRules, global_default: ToolPermissionMode) -> bool {
+fn is_unconditional_allow_all(rules: &ToolRules, mode_default: ToolPermissionMode) -> bool {
     // `always_allow` is intentionally not checked here: when the effective default
     // is already Allow and there are no deny/confirm restrictions, allow patterns
     // are redundant — the user has opted into allowing everything.
     rules.always_deny.is_empty()
         && rules.always_confirm.is_empty()
         && matches!(
-            rules.default.unwrap_or(global_default),
+            rules.default.unwrap_or(mode_default),
             ToolPermissionMode::Allow
         )
 }
@@ -712,7 +696,7 @@ pub fn decide_permission_from_settings(
     inputs: &[String],
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
-    let permission_mode = settings.effective_permission_mode();
+    let permission_mode = settings.permission_mode;
     if permission_mode == AgentPermissionMode::Auto
         && tool_name == TerminalTool::NAME
         && inputs.iter().any(|input| {
@@ -725,11 +709,11 @@ pub fn decide_permission_from_settings(
         return ToolPermissionDecision::Deny(INVALID_TERMINAL_COMMAND_MESSAGE.into());
     }
 
-    let decision = ToolPermissionDecision::from_input_with_default(
+    let decision = ToolPermissionDecision::from_input(
         tool_name,
         inputs,
         &settings.tool_permissions,
-        settings.effective_tool_permission_default(),
+        permission_mode.tool_permission_default(),
         ShellKind::system(),
     );
 
@@ -873,7 +857,7 @@ mod tests {
             cancel_generation_on_terminal_stop: true,
             use_modifier_to_send: true,
             message_editor_min_lines: 1,
-            permission_mode: None,
+            permission_mode: AgentPermissionMode::Manual,
             tool_permissions,
             sandbox_permissions: Default::default(),
             show_turn_stats: false,
@@ -898,7 +882,7 @@ mod tests {
         allow: Vec<(&'static str, bool)>,
         deny: Vec<(&'static str, bool)>,
         confirm: Vec<(&'static str, bool)>,
-        global_default: ToolPermissionMode,
+        mode_default: ToolPermissionMode,
         shell: ShellKind,
     }
 
@@ -911,7 +895,7 @@ mod tests {
                 allow: vec![],
                 deny: vec![],
                 confirm: vec![],
-                global_default: ToolPermissionMode::Confirm,
+                mode_default: ToolPermissionMode::Confirm,
                 shell: ShellKind::Posix,
             }
         }
@@ -944,8 +928,8 @@ mod tests {
             self.confirm = p.iter().map(|s| (*s, false)).collect();
             self
         }
-        fn global_default(mut self, m: ToolPermissionMode) -> Self {
-            self.global_default = m;
+        fn mode_default(mut self, m: ToolPermissionMode) -> Self {
+            self.mode_default = m;
             self
         }
         fn shell(mut self, s: ShellKind) -> Self {
@@ -1013,10 +997,8 @@ mod tests {
             ToolPermissionDecision::from_input(
                 self.tool,
                 &[self.input.to_string()],
-                &ToolPermissions {
-                    default: self.global_default,
-                    tools,
-                },
+                &ToolPermissions { tools },
+                self.mode_default,
                 self.shell,
             )
         }
@@ -1026,37 +1008,22 @@ mod tests {
         PermTest::new(input)
     }
 
-    fn no_rules(input: &str, global_default: ToolPermissionMode) -> ToolPermissionDecision {
+    fn no_rules(input: &str, mode_default: ToolPermissionMode) -> ToolPermissionDecision {
         ToolPermissionDecision::from_input(
             TerminalTool::NAME,
             &[input.to_string()],
             &ToolPermissions {
-                default: global_default,
                 tools: collections::HashMap::default(),
             },
+            mode_default,
             ShellKind::Posix,
         )
     }
 
     fn settings_with_permission_mode(mode: AgentPermissionMode) -> AgentSettings {
         let mut settings = test_agent_settings(ToolPermissions::default());
-        settings.permission_mode = Some(mode);
+        settings.permission_mode = mode;
         settings
-    }
-
-    #[test]
-    fn legacy_tool_default_infers_permission_mode() {
-        let manual = test_agent_settings(ToolPermissions::default());
-        assert_eq!(
-            manual.effective_permission_mode(),
-            AgentPermissionMode::Manual
-        );
-
-        let auto = test_agent_settings(ToolPermissions {
-            default: ToolPermissionMode::Allow,
-            tools: Default::default(),
-        });
-        assert_eq!(auto.effective_permission_mode(), AgentPermissionMode::Auto);
     }
 
     #[test]
@@ -1209,7 +1176,7 @@ mod tests {
     fn allow_no_match_global_allows() {
         t("python x.py")
             .allow(&[pattern("cargo")])
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_allow();
     }
     #[test]
@@ -1217,7 +1184,7 @@ mod tests {
         t("python x.py")
             .allow(&[pattern("cargo")])
             .mode(ToolPermissionMode::Confirm)
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_confirm();
     }
     #[test]
@@ -1225,7 +1192,7 @@ mod tests {
         t("python x.py")
             .allow(&[pattern("cargo")])
             .mode(ToolPermissionMode::Allow)
-            .global_default(ToolPermissionMode::Confirm)
+            .mode_default(ToolPermissionMode::Confirm)
             .is_allow();
     }
 
@@ -1234,12 +1201,12 @@ mod tests {
     fn deny_blocks() {
         t("rm -rf ./temp").deny(&["rm\\s+-rf"]).is_deny();
     }
-    // global default: allow does NOT bypass user-configured deny rules
+    // permission mode default: allow does NOT bypass user-configured deny rules
     #[test]
-    fn deny_not_bypassed_by_global_default_allow() {
+    fn deny_not_bypassed_by_mode_default_allow() {
         t("rm -rf ./temp")
             .deny(&["rm\\s+-rf"])
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
     }
     #[test]
@@ -1268,12 +1235,12 @@ mod tests {
             .confirm(&[pattern("sudo")])
             .is_confirm();
     }
-    // global default: allow does NOT bypass user-configured confirm rules
+    // permission mode default: allow does NOT bypass user-configured confirm rules
     #[test]
-    fn global_default_allow_does_not_override_confirm_pattern() {
+    fn mode_default_allow_does_not_override_confirm_pattern() {
         t("sudo reboot")
             .confirm(&[pattern("sudo")])
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_confirm();
     }
     #[test]
@@ -1349,26 +1316,26 @@ mod tests {
     fn default_deny() {
         t("python x.py").mode(ToolPermissionMode::Deny).is_deny();
     }
-    // Tool-specific default takes precedence over global default
+    // Tool-specific default takes precedence over permission mode default
     #[test]
     fn tool_default_deny_overrides_global_allow() {
         t("python x.py")
             .mode(ToolPermissionMode::Deny)
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
     }
 
-    // Tool-specific default takes precedence over global default
+    // Tool-specific default takes precedence over permission mode default
     #[test]
     fn tool_default_confirm_overrides_global_allow() {
         t("x")
             .mode(ToolPermissionMode::Confirm)
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_confirm();
     }
 
     #[test]
-    fn no_rules_uses_global_default() {
+    fn no_rules_uses_mode_default() {
         assert_eq!(
             no_rules("x", ToolPermissionMode::Confirm),
             ToolPermissionDecision::Confirm
@@ -1438,15 +1405,13 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let p = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let p = ToolPermissions { tools };
         assert!(matches!(
             ToolPermissionDecision::from_input(
                 TerminalTool::NAME,
                 &["x".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Deny(_)
@@ -1456,6 +1421,7 @@ mod tests {
                 EditFileTool::NAME,
                 &["x".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Allow
@@ -1475,16 +1441,14 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let p = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let p = ToolPermissions { tools };
         // "terminal" should not match "term" rules, so falls back to Confirm (no rules)
         assert_eq!(
             ToolPermissionDecision::from_input(
                 TerminalTool::NAME,
                 &["x".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Confirm
@@ -1509,16 +1473,14 @@ mod tests {
                 }],
             },
         );
-        let p = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let p = ToolPermissions { tools };
         // Invalid patterns block the tool regardless of other settings
         assert!(matches!(
             ToolPermissionDecision::from_input(
                 TerminalTool::NAME,
                 &["echo hi".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Deny(_)
@@ -1556,16 +1518,14 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let permissions = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let permissions = ToolPermissions { tools };
 
         assert_eq!(
             ToolPermissionDecision::from_input(
                 TerminalTool::NAME,
                 &["echo $(whoami)".to_string()],
                 &permissions,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix,
             ),
             ToolPermissionDecision::Allow
@@ -1856,7 +1816,7 @@ mod tests {
         t("")
             .tool("mcp:gh:issue")
             .mode(ToolPermissionMode::Confirm)
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_confirm();
     }
 
@@ -1883,15 +1843,13 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let p = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let p = ToolPermissions { tools };
         assert!(matches!(
             ToolPermissionDecision::from_input(
                 TerminalTool::NAME,
                 &["x".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Deny(_)
@@ -1901,6 +1859,7 @@ mod tests {
                 "mcp:srv:terminal",
                 &["x".to_string()],
                 &p,
+                ToolPermissionMode::Confirm,
                 ShellKind::Posix
             ),
             ToolPermissionDecision::Allow
@@ -1998,15 +1957,13 @@ mod tests {
                 ],
             },
         );
-        let p = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let p = ToolPermissions { tools };
 
         let result = ToolPermissionDecision::from_input(
             TerminalTool::NAME,
             &["echo hi".to_string()],
             &p,
+            ToolPermissionMode::Confirm,
             ShellKind::Posix,
         );
         match result {
@@ -2071,11 +2028,11 @@ mod tests {
             .deny(&["\\.env$"])
             .is_deny();
 
-        // global default allow does not bypass confirm on non-terminal tools
+        // permission mode default allow does not bypass confirm on non-terminal tools
         t("/etc/passwd")
             .tool(EditFileTool::NAME)
             .confirm(&["/etc/"])
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_confirm();
     }
 
@@ -2188,21 +2145,21 @@ mod tests {
 
     #[test]
     fn hardcoded_cannot_be_bypassed_by_global() {
-        // Even with global default Allow, hardcoded rules block
+        // Even with permission mode default Allow, hardcoded rules block
         t("rm -rf /")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf ~")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf $HOME")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf .")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf ..")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
     }
 
@@ -2250,7 +2207,7 @@ mod tests {
         t("ls && rm -rf /").is_deny();
         t("echo hello; rm -rf ~").is_deny();
         t("cargo build && rm -rf /")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("echo hello; rm -rf $HOME").is_deny();
         t("echo hello; rm -rf .").is_deny();
@@ -2418,7 +2375,7 @@ mod tests {
         t("echo hello; rm -rf /./").is_deny();
         // Traversal cannot be bypassed by global or allow patterns
         t("rm -rf /tmp/../../")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf /./").allow(&[".*"]).is_deny();
         // Safe paths with traversal should still be allowed
@@ -2481,11 +2438,11 @@ mod tests {
         t("sudo rm -rf --no-preserve-root /").is_deny();
         // Traversal cannot be bypassed even with global allow or allow patterns
         t("rm -rf /etc/../")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf /etc/../").allow(&[".*"]).is_deny();
         t("rm -rf --no-preserve-root /")
-            .global_default(ToolPermissionMode::Allow)
+            .mode_default(ToolPermissionMode::Allow)
             .is_deny();
         t("rm -rf --no-preserve-root /").allow(&[".*"]).is_deny();
     }
@@ -2640,7 +2597,6 @@ mod tests {
         // When the path has no `.` or `..`, normalize_path returns the same string,
         // so decide_permission_for_path returns the raw decision directly.
         let settings = test_agent_settings(ToolPermissions {
-            default: ToolPermissionMode::Confirm,
             tools: Default::default(),
         });
         let decision = decide_permission_for_path(EditFileTool::NAME, "src/main.rs", &settings);
@@ -2661,10 +2617,7 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let settings = test_agent_settings(ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        });
+        let settings = test_agent_settings(ToolPermissions { tools });
 
         let decision =
             decide_permission_for_path(EditFileTool::NAME, "/tmp/../etc/passwd", &settings);
@@ -2730,14 +2683,12 @@ mod tests {
                 invalid_patterns: vec![],
             },
         );
-        let permissions = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        let permissions = ToolPermissions { tools };
         let raw_decision = ToolPermissionDecision::from_input(
             tool,
             &[input.to_string()],
             &permissions,
+            ToolPermissionMode::Confirm,
             ShellKind::Posix,
         );
 
@@ -2746,8 +2697,13 @@ mod tests {
             return raw_decision;
         }
 
-        let simplified_decision =
-            ToolPermissionDecision::from_input(tool, &[simplified], &permissions, ShellKind::Posix);
+        let simplified_decision = ToolPermissionDecision::from_input(
+            tool,
+            &[simplified],
+            &permissions,
+            ToolPermissionMode::Confirm,
+            ShellKind::Posix,
+        );
 
         most_restrictive(raw_decision, simplified_decision)
     }

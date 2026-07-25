@@ -336,15 +336,13 @@ pub struct AgentSettingsContent {
     ///
     /// Default: true
     pub show_merge_conflict_indicator: Option<bool>,
-    /// The native Agent's permission policy. When unset, this is inferred from
-    /// `tool_permissions.default` for compatibility with older settings.
+    /// The native Agent's permission policy.
     ///
     /// Default: manual
     pub permission_mode: Option<AgentPermissionMode>,
     /// Per-tool permission rules for granular control over which tool actions
     /// require confirmation.
     ///
-    /// The global `default` applies when no tool-specific rules match.
     /// For external agent servers (e.g. Claude Agent) that define their own
     /// permission modes, "deny" and "confirm" still take precedence — the
     /// external agent's permission system is only used when Zed would allow
@@ -826,10 +824,9 @@ pub struct SandboxPermissionsContent {
 #[with_fallible_options]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema, MergeFrom)]
 pub struct ToolPermissionsContent {
-    /// Global default permission when no tool-specific rules match.
-    /// Individual tools can override this with their own default.
-    /// Default: confirm
+    /// Legacy global permission retained only so older settings can be migrated.
     #[serde(alias = "default_mode")]
+    #[schemars(skip)]
     pub default: Option<ToolPermissionMode>,
 
     /// Per-tool permission rules.
@@ -844,7 +841,7 @@ pub struct ToolPermissionsContent {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema, MergeFrom)]
 pub struct ToolRulesContent {
     /// Default mode when no regex rules match.
-    /// When unset, inherits from the global `tool_permissions.default`.
+    /// When unset, inherits from the active `permission_mode`.
     #[serde(alias = "default_mode")]
     pub default: Option<ToolPermissionMode>,
 

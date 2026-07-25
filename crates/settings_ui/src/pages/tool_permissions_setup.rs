@@ -1,4 +1,4 @@
-use agent::{AgentTool, TerminalTool, ToolPermissionDecision};
+use agent::{AgentTool, TerminalTool, ToolPermissionDecision, decide_permission_from_settings};
 use agent_settings::AgentSettings;
 use gpui::{
     Focusable, HighlightStyle, ReadGlobal, ScrollHandle, StyledText, TextStyleRefinement, point,
@@ -10,7 +10,6 @@ use std::sync::Arc;
 use theme_settings::ThemeSettings;
 use ui::{Banner, ContextMenu, Divider, PopoverMenu, Severity, Tooltip, prelude::*};
 use util::ResultExt as _;
-use util::shell::ShellKind;
 
 use crate::{SettingsWindow, components::SettingsInputField};
 
@@ -164,7 +163,7 @@ pub(crate) fn render_tool_permissions_setup_page(
         .collect();
 
     let settings = AgentSettings::get_global(cx);
-    let permission_mode = settings.effective_permission_mode();
+    let permission_mode = settings.permission_mode;
 
     let scroll_step = px(40.);
 
@@ -723,16 +722,7 @@ fn render_matched_patterns(patterns: &[MatchedPattern], cx: &App) -> AnyElement 
 }
 
 fn evaluate_test_input(tool_id: &str, input: &str, cx: &App) -> ToolPermissionDecision {
-    let settings = AgentSettings::get_global(cx);
-
-    // ShellKind is only used for terminal tool's hardcoded security rules;
-    // for other tools, the check returns None immediately.
-    ToolPermissionDecision::from_input(
-        tool_id,
-        &[input.to_string()],
-        &settings.tool_permissions,
-        ShellKind::system(),
-    )
+    decide_permission_from_settings(tool_id, &[input.to_string()], AgentSettings::get_global(cx))
 }
 
 fn decision_to_mode(decision: &ToolPermissionDecision) -> ToolPermissionMode {
@@ -1206,7 +1196,7 @@ struct ToolRulesView {
 
 fn get_tool_rules(tool_name: &str, cx: &App) -> ToolRulesView {
     let settings = AgentSettings::get_global(cx);
-    let inherited_default = settings.effective_tool_permission_default();
+    let inherited_default = settings.permission_mode.tool_permission_default();
 
     let tool_rules = settings.tool_permissions.tools.get(tool_name);
 

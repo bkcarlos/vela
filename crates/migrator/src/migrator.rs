@@ -257,6 +257,7 @@ pub fn migrate_settings(text: &str) -> Result<Option<String>> {
             migrations::m_2026_05_04::SETTINGS_PATTERNS,
             &SETTINGS_QUERY_2026_05_04,
         ),
+        MigrationType::Json(migrations::m_2026_07_25::migrate_agent_permission_modes),
     ];
     run_migrations(text, migrations)
 }

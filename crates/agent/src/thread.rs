@@ -1786,8 +1786,7 @@ impl Thread {
         }
         let agent_settings = AgentSettings::get_global(cx);
         let persistent = agent_settings.sandbox_permissions.clone();
-        let full_access =
-            agent_settings.effective_permission_mode() == AgentPermissionMode::FullAccess;
+        let full_access = agent_settings.permission_mode == AgentPermissionMode::FullAccess;
         let git_dirs = sandbox_git_dirs(self.project.read(cx), cx);
         let grants = self.sandbox_grants.borrow();
         let settings = crate::sandboxing::settings_thread_sandbox(&persistent, full_access)
@@ -1806,8 +1805,7 @@ impl Thread {
 
         let agent_settings = AgentSettings::get_global(cx);
         let persistent = agent_settings.sandbox_permissions.clone();
-        let full_access =
-            agent_settings.effective_permission_mode() == AgentPermissionMode::FullAccess;
+        let full_access = agent_settings.permission_mode == AgentPermissionMode::FullAccess;
         let settings_sandbox = crate::sandboxing::settings_thread_sandbox(&persistent, full_access);
         let grants = self.sandbox_grants.borrow();
         let thread_sandbox = grants.thread_sandbox();
@@ -5583,8 +5581,7 @@ impl ToolCallEventStream {
         let options = context.build_permission_options();
         let check_full_access: Box<dyn Fn(&App) -> ToolPermissionDecision> =
             Box::new(|cx: &App| {
-                if AgentSettings::get_global(cx).effective_permission_mode()
-                    == AgentPermissionMode::FullAccess
+                if AgentSettings::get_global(cx).permission_mode == AgentPermissionMode::FullAccess
                 {
                     ToolPermissionDecision::Allow
                 } else {
@@ -5608,8 +5605,7 @@ impl ToolCallEventStream {
         reason: String,
         cx: &mut App,
     ) -> Task<Result<()>> {
-        if AgentSettings::get_global(cx).effective_permission_mode()
-            == AgentPermissionMode::FullAccess
+        if AgentSettings::get_global(cx).permission_mode == AgentPermissionMode::FullAccess
             || Self::sandbox_request_covered_by_grants(&request, &self.sandbox_grants, cx)
         {
             return Task::ready(Ok(()));
@@ -5748,7 +5744,7 @@ impl ToolCallEventStream {
         cx: &App,
     ) -> bool {
         let settings = AgentSettings::get_global(cx);
-        settings.effective_permission_mode() == AgentPermissionMode::FullAccess
+        settings.permission_mode == AgentPermissionMode::FullAccess
             || sandbox_grants
                 .borrow()
                 .covers_with_persistent(request, &settings.sandbox_permissions)
@@ -5887,8 +5883,7 @@ impl ToolCallEventStream {
     pub(crate) fn unsandboxed_access_granted(&self, cx: &App) -> bool {
         self.unsandboxed_granted_for_thread()
             || self.sandbox_fallback_granted_for_thread()
-            || AgentSettings::get_global(cx).effective_permission_mode()
-                == AgentPermissionMode::FullAccess
+            || AgentSettings::get_global(cx).permission_mode == AgentPermissionMode::FullAccess
             || AgentSettings::get_global(cx)
                 .sandbox_permissions
                 .allow_unsandboxed
@@ -7586,7 +7581,7 @@ mod tests {
         crate::tests::init_test(cx);
         cx.update(|cx| {
             let mut settings = AgentSettings::get_global(cx).clone();
-            settings.permission_mode = Some(AgentPermissionMode::FullAccess);
+            settings.permission_mode = AgentPermissionMode::FullAccess;
             AgentSettings::override_global(settings, cx);
         });
 

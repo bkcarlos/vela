@@ -285,7 +285,7 @@ mod tests {
         });
         cx.update(|cx| {
             let mut settings = AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             AgentSettings::override_global(settings, cx);
         });
     }
@@ -566,7 +566,7 @@ mod tests {
         init_test(cx);
         cx.update(|cx| {
             let mut settings = AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Confirm;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             AgentSettings::override_global(settings, cx);
         });
 

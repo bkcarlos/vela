@@ -193,7 +193,7 @@ pub(crate) fn sandboxing_enabled_for_project(project: &Project, cx: &App) -> boo
     let settings = AgentSettings::get_global(cx);
     sandboxing_available_for_project(project, cx)
         && !settings.sandbox_permissions.allow_unsandboxed
-        && settings.effective_permission_mode() != settings::AgentPermissionMode::FullAccess
+        && settings.permission_mode != settings::AgentPermissionMode::FullAccess
 }
 
 /// Whether agent-run terminal commands should be wrapped in an OS-level

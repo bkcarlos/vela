@@ -1225,12 +1225,7 @@ impl ThreadView {
 
     pub fn current_mode_id(&self, cx: &App) -> Option<Arc<str>> {
         if self.as_native_thread(cx).is_some() {
-            Some(
-                AgentSettings::get_global(cx)
-                    .effective_permission_mode()
-                    .id()
-                    .into(),
-            )
+            Some(AgentSettings::get_global(cx).permission_mode.id().into())
         } else {
             let mode_selector = self.mode_selector.as_ref()?;
             Some(mode_selector.read(cx).mode().0)
@@ -5339,7 +5334,7 @@ impl ThreadView {
     fn render_permission_mode_selector(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.as_native_thread(cx)?;
 
-        let current_mode = AgentSettings::get_global(cx).effective_permission_mode();
+        let current_mode = AgentSettings::get_global(cx).permission_mode;
         let color = permission_mode_color(current_mode);
         let icon = if self.permission_mode_menu_handle.is_deployed() {
             IconName::ChevronUp
@@ -12284,9 +12279,8 @@ impl Render for ThreadView {
                 }
 
                 if this.as_native_thread(cx).is_some() {
-                    let next_mode = next_permission_mode(
-                        AgentSettings::get_global(cx).effective_permission_mode(),
-                    );
+                    let next_mode =
+                        next_permission_mode(AgentSettings::get_global(cx).permission_mode);
                     Self::select_permission_mode(cx.weak_entity(), next_mode, window, cx);
                     return;
                 }

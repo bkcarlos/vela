@@ -275,7 +275,7 @@ impl crate::ThreadEnvironment for MultiTerminalEnvironment {
 fn always_allow_tools(cx: &mut TestAppContext) {
     cx.update(|cx| {
         let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-        settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+        settings.permission_mode = settings::AgentPermissionMode::Auto;
         agent_settings::AgentSettings::override_global(settings, cx);
     });
 }
@@ -5053,7 +5053,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
         );
     }
 
-    // Test 3: global default: allow does NOT override always_confirm patterns
+    // Test 3: permission mode default: allow does NOT override always_confirm patterns
     {
         let environment = Rc::new(cx.update(|cx| {
             FakeThreadEnvironment::default()
@@ -5062,7 +5062,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -5095,7 +5095,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
             )
         });
 
-        // With global default: allow, confirm patterns are still respected
+        // With permission mode default: allow, confirm patterns are still respected
         // The expect_authorization() call will panic if no authorization is requested,
         // which validates that the confirm pattern still triggers confirmation
         let _auth = rx.expect_authorization().await;
@@ -5103,7 +5103,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
         drop(_task);
     }
 
-    // Test 4: tool-specific default: deny is respected even with global default: allow
+    // Test 4: tool-specific default: deny is respected even with permission mode default: allow
     {
         let environment = Rc::new(cx.update(|cx| {
             FakeThreadEnvironment::default()
@@ -5112,7 +5112,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -5143,7 +5143,7 @@ async fn test_terminal_tool_permission_rules(cx: &mut TestAppContext) {
             )
         });
 
-        // tool-specific default: deny is respected even with global default: allow
+        // tool-specific default: deny is respected even with permission mode default: allow
         let result = task.await;
         assert!(
             result.is_err(),
@@ -7044,7 +7044,7 @@ async fn test_edit_file_tool_allow_still_prompts_for_local_settings(cx: &mut Tes
 
     cx.update(|cx| {
         let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-        settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+        settings.permission_mode = settings::AgentPermissionMode::Auto;
         agent_settings::AgentSettings::override_global(settings, cx);
     });
 
@@ -7072,7 +7072,7 @@ async fn test_edit_file_tool_allow_still_prompts_for_local_settings(cx: &mut Tes
         language_registry,
     ));
 
-    // Editing a file inside .zed/ should still prompt even with global default: allow,
+    // Editing a file inside .zed/ should still prompt even with permission mode default: allow,
     // because local settings paths are sensitive and require confirmation regardless.
     let (event_stream, mut rx) = crate::ToolCallEventStream::test();
     let _task = cx.update(|cx| {

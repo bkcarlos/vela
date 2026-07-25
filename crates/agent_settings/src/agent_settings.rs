@@ -235,7 +235,7 @@ pub struct AgentSettings {
     pub message_editor_min_lines: usize,
     pub show_turn_stats: bool,
     pub show_merge_conflict_indicator: bool,
-    pub permission_mode: Option<AgentPermissionMode>,
+    pub permission_mode: AgentPermissionMode,
     pub tool_permissions: ToolPermissions,
     pub sandbox_permissions: SandboxPermissions,
 }
@@ -272,23 +272,6 @@ impl AgentSettings {
 
     pub fn set_message_editor_max_lines(&self) -> usize {
         self.message_editor_min_lines * 2
-    }
-
-    pub fn effective_permission_mode(&self) -> AgentPermissionMode {
-        self.permission_mode.unwrap_or_else(|| {
-            if self.tool_permissions.default == ToolPermissionMode::Allow {
-                AgentPermissionMode::Auto
-            } else {
-                AgentPermissionMode::Manual
-            }
-        })
-    }
-
-    pub fn effective_tool_permission_default(&self) -> ToolPermissionMode {
-        self.permission_mode
-            .map_or(self.tool_permissions.default, |mode| {
-                mode.tool_permission_default()
-            })
     }
 
     pub fn favorite_model_ids(&self) -> HashSet<SharedString> {
@@ -468,8 +451,6 @@ impl Default for SandboxPermissions {
 
 #[derive(Clone, Debug, Default)]
 pub struct ToolPermissions {
-    /// Global default permission when no tool-specific rules or patterns match.
-    pub default: ToolPermissionMode,
     pub tools: collections::HashMap<Arc<str>, ToolRules>,
 }
 
@@ -813,7 +794,7 @@ impl Settings for AgentSettings {
             message_editor_min_lines: agent.message_editor_min_lines.unwrap(),
             show_turn_stats: agent.show_turn_stats.unwrap(),
             show_merge_conflict_indicator: agent.show_merge_conflict_indicator.unwrap(),
-            permission_mode: agent.permission_mode,
+            permission_mode: agent.permission_mode.unwrap_or_default(),
             tool_permissions: compile_tool_permissions(agent.tool_permissions),
             sandbox_permissions: compile_sandbox_permissions(agent.sandbox_permissions),
         }
@@ -896,7 +877,7 @@ fn compile_tool_permissions(content: Option<settings::ToolPermissionsContent>) -
             }
 
             let rules = ToolRules {
-                // Preserve tool-specific default; None means fall back to global default at decision time
+                // Preserve tool-specific defaults as overrides of the active permission mode.
                 default: rules_content.default,
                 always_allow,
                 always_deny,
@@ -907,10 +888,7 @@ fn compile_tool_permissions(content: Option<settings::ToolPermissionsContent>) -
         })
         .collect();
 
-    ToolPermissions {
-        default: content.default.unwrap_or_default(),
-        tools,
-    }
+    ToolPermissions { tools }
 }
 
 fn compile_regex_rules(
@@ -1118,7 +1096,6 @@ mod tests {
     fn test_tool_permissions_empty() {
         let permissions = compile_tool_permissions(None);
         assert!(permissions.tools.is_empty());
-        assert_eq!(permissions.default, ToolPermissionMode::Confirm);
     }
 
     #[test]
@@ -1556,15 +1533,19 @@ mod tests {
         let agent = value
             .get("agent")
             .expect("default.json should have 'agent' key");
+        assert_eq!(
+            agent
+                .get("permission_mode")
+                .and_then(|value| value.as_str()),
+            Some("manual")
+        );
+
         let tool_permissions_value = agent
             .get("tool_permissions")
             .expect("agent should have 'tool_permissions' key");
-
         let content: ToolPermissionsContent =
             serde_json_lenient::from_value(tool_permissions_value.clone()).unwrap();
         let permissions = compile_tool_permissions(Some(content));
-
-        assert_eq!(permissions.default, ToolPermissionMode::Confirm);
 
         assert!(
             permissions.tools.is_empty(),
@@ -1574,20 +1555,13 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_permissions_explicit_global_default() {
-        let json_allow = json!({
-            "default": "allow"
-        });
-        let content: ToolPermissionsContent = serde_json::from_value(json_allow).unwrap();
-        let permissions = compile_tool_permissions(Some(content));
-        assert_eq!(permissions.default, ToolPermissionMode::Allow);
-
-        let json_deny = json!({
-            "default": "deny"
-        });
-        let content: ToolPermissionsContent = serde_json::from_value(json_deny).unwrap();
-        let permissions = compile_tool_permissions(Some(content));
-        assert_eq!(permissions.default, ToolPermissionMode::Deny);
+    fn test_legacy_global_tool_permission_default_is_ignored_at_runtime() {
+        for legacy_default in ["allow", "confirm", "deny"] {
+            let content: ToolPermissionsContent =
+                serde_json::from_value(json!({ "default": legacy_default })).unwrap();
+            let permissions = compile_tool_permissions(Some(content));
+            assert!(permissions.tools.is_empty());
+        }
     }
 
     #[gpui::test]

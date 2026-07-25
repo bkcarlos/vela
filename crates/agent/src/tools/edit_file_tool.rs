@@ -1325,11 +1325,11 @@ mod tests {
             Some("Edit `root/.zed/tasks.json` (local settings)".into())
         );
 
-        // Test 5: When global default is allow, sensitive and outside-project
+        // Test 5: When permission mode default is allow, sensitive and outside-project
         // paths still require confirmation
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 
@@ -1360,7 +1360,7 @@ mod tests {
         // 5.4: With Confirm default, non-project paths still prompt
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Confirm;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 
@@ -1605,7 +1605,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 
@@ -2669,7 +2669,7 @@ mod tests {
             setup_test(cx, json!({"file.txt": "line 1\nline 2\nline 3\n"})).await;
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             agent_settings::AgentSettings::override_global(settings, cx);
         });
 

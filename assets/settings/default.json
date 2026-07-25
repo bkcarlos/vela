@@ -1116,13 +1116,10 @@
     // Only use it in environments you trust.
     //
     // Default: "manual"
-    // "permission_mode": "manual",
+    "permission_mode": "manual",
     //
     // Permission rules for tool actions.
     //
-    // `tool_permissions.default` is retained for compatibility with existing
-    // settings. When `permission_mode` is omitted, it supplies the inherited
-    // default for tools without a tool-specific rule.
     // For external agents that define their own permission modes, "deny" and
     // "confirm" still take precedence — the external agent's permission system
     // is only used when Zed would allow the action.
@@ -1132,12 +1129,6 @@
     // patterns are matched independently against each path (source and
     // destination).
     "tool_permissions": {
-      // Legacy global default permission when `permission_mode` is omitted and
-      // no tool-specific rules match.
-      // "allow" - Auto-approve without prompting
-      // "deny" - Auto-reject
-      // "confirm" - Always prompt (default, equivalent to Manual)
-      "default": "confirm",
       // Per-tool permission rules. Regex patterns match against tool input text.
       // The per-tool "default" also applies to MCP tools.
       // Each tool can have its own default and regex patterns.

@@ -2316,7 +2316,7 @@ fn run_tool_permissions_visual_tests(
 ) -> Result<TestResult> {
     use agent_settings::{AgentSettings, CompiledRegex, ToolPermissions, ToolRules};
     use collections::HashMap;
-    use settings::ToolPermissionMode;
+    use settings::AgentPermissionMode;
     use zed_actions::OpenSettingsAt;
 
     // Set up tool permissions with "hi" as both always_deny and always_allow for terminal
@@ -2333,10 +2333,8 @@ fn run_tool_permissions_visual_tests(
             },
         );
         let mut settings = AgentSettings::get_global(cx).clone();
-        settings.tool_permissions = ToolPermissions {
-            default: ToolPermissionMode::Confirm,
-            tools,
-        };
+        settings.permission_mode = AgentPermissionMode::Manual;
+        settings.tool_permissions = ToolPermissions { tools };
         AgentSettings::override_global(settings, cx);
     });
 

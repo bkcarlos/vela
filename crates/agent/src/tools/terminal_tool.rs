@@ -1868,7 +1868,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Confirm;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -1936,7 +1936,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::FullAccess;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -1998,7 +1998,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::FullAccess;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -2056,7 +2056,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -2135,7 +2135,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -2194,7 +2194,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -2243,7 +2243,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -2388,7 +2388,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Confirm;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -2547,7 +2547,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -2617,7 +2617,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -2684,7 +2684,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -2759,7 +2759,7 @@ mod tests {
 
         cx.update(|cx| {
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Deny;
+            settings.permission_mode = settings::AgentPermissionMode::Manual;
             settings.tool_permissions.tools.insert(
                 TerminalTool::NAME.into(),
                 agent_settings::ToolRules {
@@ -3002,7 +3002,7 @@ mod tests {
         cx.update(|cx| {
             cx.update_flags(true, vec!["sandboxing".to_string()]);
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -3094,7 +3094,7 @@ mod tests {
         cx.update(|cx| {
             cx.update_flags(true, vec!["sandboxing".to_string()]);
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             agent_settings::AgentSettings::override_global(settings, cx);
         });
@@ -3200,7 +3200,7 @@ mod tests {
         cx.update(|cx| {
             cx.update_flags(true, vec!["sandboxing".to_string()]);
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             settings.sandbox_permissions = agent_settings::SandboxPermissions::default();
             agent_settings::AgentSettings::override_global(settings, cx);
@@ -3325,7 +3325,7 @@ mod tests {
         cx.update(|cx| {
             cx.update_flags(true, vec!["sandboxing".to_string()]);
             let mut settings = agent_settings::AgentSettings::get_global(cx).clone();
-            settings.tool_permissions.default = settings::ToolPermissionMode::Allow;
+            settings.permission_mode = settings::AgentPermissionMode::Auto;
             settings.tool_permissions.tools.remove(TerminalTool::NAME);
             settings.sandbox_permissions = persistent;
             agent_settings::AgentSettings::override_global(settings, cx);
