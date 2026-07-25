@@ -24,7 +24,7 @@ use zed_actions::agent::ToggleModelSelector;
 
 use crate::ui::documentation_aside_side;
 use crate::{
-    CycleFavoriteModels, CycleModeSelector, CycleThinkingEffort, ToggleProfileSelector,
+    CycleFavoriteModels, CycleModeSelector, CycleThinkingEffort, ToggleModeSelector,
     ToggleThinkingEffortMenu,
 };
 
@@ -494,7 +494,7 @@ impl Render for ConfigOptionSelector {
                                 content = content
                                     .child(action_tooltip_container(
                                         "Change Mode",
-                                        KeyBinding::for_action(&ToggleProfileSelector, cx),
+                                        KeyBinding::for_action(&ToggleModeSelector, cx),
                                     ))
                                     .child(action_tooltip_container(
                                         "Cycle Through Modes",

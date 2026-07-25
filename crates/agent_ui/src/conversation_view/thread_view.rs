@@ -56,6 +56,22 @@ use super::*;
 
 const DATA_RETENTION_LEARN_MORE_URL: &str = "https://support.claude.com/en/articles/15425996-data-retention-practices-for-mythos-class-models";
 
+fn permission_mode_color(mode: settings::AgentPermissionMode) -> Color {
+    match mode {
+        settings::AgentPermissionMode::Manual => Color::Accent,
+        settings::AgentPermissionMode::Auto => Color::Success,
+        settings::AgentPermissionMode::FullAccess => Color::Error,
+    }
+}
+
+fn next_permission_mode(mode: settings::AgentPermissionMode) -> settings::AgentPermissionMode {
+    match mode {
+        settings::AgentPermissionMode::Manual => settings::AgentPermissionMode::Auto,
+        settings::AgentPermissionMode::Auto => settings::AgentPermissionMode::FullAccess,
+        settings::AgentPermissionMode::FullAccess => settings::AgentPermissionMode::Manual,
+    }
+}
+
 #[derive(Default)]
 struct ThreadFeedbackState {
     feedback: Option<ThreadFeedback>,
@@ -581,7 +597,6 @@ pub struct ThreadView {
     pub config_options_view: Option<Entity<ConfigOptionsView>>,
     pub mode_selector: Option<Entity<ModeSelector>>,
     pub model_selector: Option<Entity<ModelSelectorPopover>>,
-    pub profile_selector: Option<Entity<ProfileSelector>>,
     pub permission_dropdown_handle: PopoverMenuHandle<ContextMenu>,
     pub thread_retry_status: Option<RetryStatus>,
     pub(super) thread_error: Option<ThreadError>,
@@ -782,7 +797,6 @@ impl ThreadView {
         config_options_view: Option<Entity<ConfigOptionsView>>,
         mode_selector: Option<Entity<ModeSelector>>,
         model_selector: Option<Entity<ModelSelectorPopover>>,
-        profile_selector: Option<Entity<ProfileSelector>>,
         list_state: ListState,
         session_capabilities: SharedSessionCapabilities,
         resumed_without_history: bool,
@@ -995,7 +1009,6 @@ impl ThreadView {
             config_options_view,
             mode_selector,
             model_selector,
-            profile_selector,
             list_state,
             session_capabilities,
             resumed_without_history,
@@ -1196,22 +1209,12 @@ impl ThreadView {
             .thread(acp_thread.session_id(), cx)
     }
 
-    /// Resolves the message editor's contents into content blocks. For profiles
-    /// that do not enable any tools, directory mentions are expanded to inline
-    /// file contents since the agent can't read files on its own.
     fn resolve_message_contents(
         &self,
         message_editor: &Entity<MessageEditor>,
         cx: &mut App,
     ) -> Task<Result<(Vec<acp::ContentBlock>, Vec<Entity<Buffer>>)>> {
-        let expand = self.as_native_thread(cx).is_some_and(|thread| {
-            let thread = thread.read(cx);
-            AgentSettings::get_global(cx)
-                .profiles
-                .get(thread.profile())
-                .is_some_and(|profile| profile.tools.is_empty())
-        });
-        message_editor.update(cx, |message_editor, cx| message_editor.contents(expand, cx))
+        message_editor.update(cx, |message_editor, cx| message_editor.contents(false, cx))
     }
 
     pub fn current_model_id(&self, cx: &App) -> Option<String> {
@@ -1221,8 +1224,13 @@ impl ThreadView {
     }
 
     pub fn current_mode_id(&self, cx: &App) -> Option<Arc<str>> {
-        if let Some(thread) = self.as_native_thread(cx) {
-            Some(thread.read(cx).profile().0.clone())
+        if self.as_native_thread(cx).is_some() {
+            Some(
+                AgentSettings::get_global(cx)
+                    .effective_permission_mode()
+                    .id()
+                    .into(),
+            )
         } else {
             let mode_selector = self.mode_selector.as_ref()?;
             Some(mode_selector.read(cx).mode().0)
@@ -4378,7 +4386,6 @@ impl ThreadView {
                                     .flex_wrap()
                                     .gap_1()
                                     .children(self.render_token_usage(cx))
-                                    .children(self.profile_selector.clone())
                                     .map(|this| match self.config_options_view.clone() {
                                         Some(config_view) => this.child(config_view),
                                         None => this
@@ -5333,15 +5340,16 @@ impl ThreadView {
         self.as_native_thread(cx)?;
 
         let current_mode = AgentSettings::get_global(cx).effective_permission_mode();
-        let (color, icon) = if self.permission_mode_menu_handle.is_deployed() {
-            (Color::Accent, IconName::ChevronUp)
+        let color = permission_mode_color(current_mode);
+        let icon = if self.permission_mode_menu_handle.is_deployed() {
+            IconName::ChevronUp
         } else {
-            (Color::Muted, IconName::ChevronDown)
+            IconName::ChevronDown
         };
         let trigger = Button::new("permission-mode-selector-trigger", current_mode.label())
             .label_size(LabelSize::Small)
             .color(color)
-            .end_icon(Icon::new(icon).size(IconSize::XSmall).color(Color::Muted));
+            .end_icon(Icon::new(icon).size(IconSize::XSmall).color(color));
         let weak_self = cx.weak_entity();
 
         Some(
@@ -5349,52 +5357,33 @@ impl ThreadView {
                 .trigger_with_tooltip(trigger, Tooltip::text(current_mode.description()))
                 .menu(move |window, cx| {
                     let weak_self = weak_self.clone();
-                    Some(ContextMenu::build(window, cx, move |mut menu, _window, _cx| {
-                        for mode in settings::AgentPermissionMode::ALL {
-                            let is_selected = mode == current_mode;
-                            let entry = ContextMenuEntry::new(mode.label())
-                                .toggleable(IconPosition::End, is_selected);
+                    Some(ContextMenu::build(
+                        window,
+                        cx,
+                        move |mut menu, _window, _cx| {
+                            for mode in settings::AgentPermissionMode::ALL {
+                                let is_selected = mode == current_mode;
+                                let entry = ContextMenuEntry::new(mode.label())
+                                    .toggleable(IconPosition::End, is_selected);
 
-                            menu.push_item(entry.handler({
-                                let weak_self = weak_self.clone();
-                                move |window, cx| {
-                                    if is_selected {
-                                        return;
+                                menu.push_item(entry.handler({
+                                    let weak_self = weak_self.clone();
+                                    move |window, cx| {
+                                        if !is_selected {
+                                            Self::select_permission_mode(
+                                                weak_self.clone(),
+                                                mode,
+                                                window,
+                                                cx,
+                                            );
+                                        }
                                     }
+                                }));
+                            }
 
-                                    if mode == settings::AgentPermissionMode::FullAccess {
-                                        let answer = window.prompt(
-                                            PromptLevel::Critical,
-                                            "Enable Full Access?",
-                                            Some(
-                                                "Full Access skips tool confirmations and disables the terminal sandbox. Only enable it in an isolated environment that you can recover.",
-                                            ),
-                                            &["Enable Full Access", "Cancel"],
-                                            cx,
-                                        );
-                                        let weak_self = weak_self.clone();
-                                        cx.spawn(async move |cx| -> anyhow::Result<()> {
-                                            if answer.await? == 0 {
-                                                weak_self.update(cx, |this, cx| {
-                                                    this.set_permission_mode(mode, cx);
-                                                })?;
-                                            }
-                                            Ok(())
-                                        })
-                                        .detach_and_log_err(cx);
-                                    } else {
-                                        weak_self
-                                            .update(cx, |this, cx| {
-                                                this.set_permission_mode(mode, cx);
-                                            })
-                                            .log_err();
-                                    }
-                                }
-                            }));
-                        }
-
-                        menu
-                    }))
+                            menu
+                        },
+                    ))
                 })
                 .with_handle(self.permission_mode_menu_handle.clone())
                 .offset(gpui::Point {
@@ -5404,6 +5393,38 @@ impl ThreadView {
                 .anchor(gpui::Anchor::BottomRight)
                 .into_any_element(),
         )
+    }
+
+    fn select_permission_mode(
+        weak_self: WeakEntity<Self>,
+        mode: settings::AgentPermissionMode,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if mode == settings::AgentPermissionMode::FullAccess {
+            let answer = window.prompt(
+                PromptLevel::Critical,
+                "Enable Full Access?",
+                Some(
+                    "Full Access skips tool confirmations and disables the terminal sandbox. Only enable it in an isolated environment that you can recover.",
+                ),
+                &["Enable Full Access", "Cancel"],
+                cx,
+            );
+            cx.spawn(async move |cx| -> anyhow::Result<()> {
+                if answer.await? == 0 {
+                    weak_self.update(cx, |this, cx| {
+                        this.set_permission_mode(mode, cx);
+                    })?;
+                }
+                Ok(())
+            })
+            .detach_and_log_err(cx);
+        } else {
+            weak_self
+                .update(cx, |this, cx| this.set_permission_mode(mode, cx))
+                .log_err();
+        }
     }
 
     fn set_permission_mode(&self, mode: settings::AgentPermissionMode, cx: &mut App) {
@@ -12234,7 +12255,12 @@ impl Render for ThreadView {
             .on_action(cx.listener(|this, _: &ClearMessageQueue, _, cx| {
                 this.clear_queue(cx);
             }))
-            .on_action(cx.listener(|this, _: &ToggleProfileSelector, window, cx| {
+            .on_action(cx.listener(|this, _: &ToggleModeSelector, window, cx| {
+                if this.as_native_thread(cx).is_some() {
+                    this.permission_mode_menu_handle.toggle(window, cx);
+                    return;
+                }
+
                 if let Some(config_options_view) = this.config_options_view.clone() {
                     let handled = config_options_view.update(cx, |view, cx| {
                         view.toggle_category_picker(
@@ -12248,9 +12274,7 @@ impl Render for ThreadView {
                     }
                 }
 
-                if let Some(profile_selector) = this.profile_selector.clone() {
-                    profile_selector.read(cx).menu_handle().toggle(window, cx);
-                } else if let Some(mode_selector) = this.mode_selector.clone() {
+                if let Some(mode_selector) = this.mode_selector.clone() {
                     mode_selector.read(cx).menu_handle().toggle(window, cx);
                 }
             }))
@@ -12258,6 +12282,15 @@ impl Render for ThreadView {
                 if this.thread.read(cx).status() != ThreadStatus::Idle {
                     return;
                 }
+
+                if this.as_native_thread(cx).is_some() {
+                    let next_mode = next_permission_mode(
+                        AgentSettings::get_global(cx).effective_permission_mode(),
+                    );
+                    Self::select_permission_mode(cx.weak_entity(), next_mode, window, cx);
+                    return;
+                }
+
                 if let Some(config_options_view) = this.config_options_view.clone() {
                     let handled = config_options_view.update(cx, |view, cx| {
                         view.cycle_category_option(
@@ -12271,11 +12304,7 @@ impl Render for ThreadView {
                     }
                 }
 
-                if let Some(profile_selector) = this.profile_selector.clone() {
-                    profile_selector.update(cx, |profile_selector, cx| {
-                        profile_selector.cycle_profile(cx);
-                    });
-                } else if let Some(mode_selector) = this.mode_selector.clone() {
+                if let Some(mode_selector) = this.mode_selector.clone() {
                     mode_selector.update(cx, |mode_selector, cx| {
                         mode_selector.cycle_mode(window, cx);
                     });
@@ -12543,6 +12572,15 @@ fn strip_leading_command(text: &str, command_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn permission_modes_cycle_in_order() {
+        use settings::AgentPermissionMode::{Auto, FullAccess, Manual};
+
+        assert_eq!(next_permission_mode(Manual), Auto);
+        assert_eq!(next_permission_mode(Auto), FullAccess);
+        assert_eq!(next_permission_mode(FullAccess), Manual);
+    }
     use project::{FakeFs, Project};
     use serde_json::json;
     use std::path::Path;

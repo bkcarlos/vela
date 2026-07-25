@@ -834,7 +834,7 @@ mod tests {
     use crate::pattern_extraction::extract_terminal_pattern;
     use crate::tools::{DeletePathTool, FetchTool, TerminalTool};
     use crate::{AgentTool, EditFileTool};
-    use agent_settings::{AgentProfileId, CompiledRegex, InvalidRegexPattern, ToolRules};
+    use agent_settings::{CompiledRegex, InvalidRegexPattern, ToolRules};
     use gpui::px;
     use settings::{DockPosition, NotifyWhenAgentWaiting, PlaySoundWhenAgentDone};
     use std::sync::Arc;
@@ -858,8 +858,6 @@ mod tests {
             thread_summary_model: None,
             inline_alternatives: vec![],
             favorite_models: vec![],
-            default_profile: AgentProfileId::default(),
-            profiles: Default::default(),
             notify_when_agent_waiting: NotifyWhenAgentWaiting::default(),
             play_sound_when_agent_done: PlaySoundWhenAgentDone::default(),
             single_file_review: false,

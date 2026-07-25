@@ -42,7 +42,7 @@
       "cmd-l": "workspace::ToggleRightDock",
       "cmd-shift-l": "workspace::ToggleRightDock",
       "cmd-w": "workspace::ToggleRightDock", // technically should close chat
-      "cmd-.": "agent::ToggleProfileSelector",
+      "cmd-.": "agent::ToggleModeSelector",
       "cmd-/": "agent::ToggleModelSelector",
       "cmd-shift-backspace": "editor::Cancel",
       "cmd-r": "agent::NewThread",

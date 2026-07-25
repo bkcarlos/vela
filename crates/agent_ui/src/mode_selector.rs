@@ -11,7 +11,7 @@ use ui::{
     prelude::*,
 };
 
-use crate::{CycleModeSelector, ToggleProfileSelector, ui::documentation_aside_side};
+use crate::{CycleModeSelector, ToggleModeSelector, ui::documentation_aside_side};
 
 pub struct ModeSelector {
     connection: Rc<dyn AgentSessionModes>,
@@ -166,7 +166,7 @@ impl Render for ModeSelector {
                                     .gap_2()
                                     .justify_between()
                                     .child(Label::new("Change Mode"))
-                                    .child(KeyBinding::for_action(&ToggleProfileSelector, cx)),
+                                    .child(KeyBinding::for_action(&ToggleModeSelector, cx)),
                             )
                             .child(
                                 h_flex()

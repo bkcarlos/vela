@@ -4,7 +4,6 @@ use acp_thread::{
     ThreadStatus,
 };
 use agent_client_protocol::schema::v1 as acp;
-use agent_settings::AgentProfileId;
 use anyhow::Result;
 use client::{Client, RefreshLlmTokenListener, UserStore};
 use collections::IndexMap;
@@ -1464,21 +1463,11 @@ async fn test_mcp_tools(cx: &mut TestAppContext) {
     } = setup(cx, TestModel::Fake).await;
     let fake_model = model.as_fake();
 
-    // Override profiles and wait for settings to be loaded.
     fs.insert_file(
         paths::settings_file(),
         json!({
             "agent": {
-                "tool_permissions": { "default": "allow" },
-                "profiles": {
-                    "test": {
-                        "name": "Test Profile",
-                        "enable_all_context_servers": true,
-                        "tools": {
-                            EchoTool::NAME: true,
-                        }
-                    },
-                }
+                "permission_mode": "full_access"
             }
         })
         .to_string()
@@ -1486,9 +1475,6 @@ async fn test_mcp_tools(cx: &mut TestAppContext) {
     )
     .await;
     cx.run_until_parked();
-    thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("test".into()), cx)
-    });
 
     let mut mcp_tool_calls = setup_context_server(
         "test_server",
@@ -1637,13 +1623,7 @@ async fn test_mcp_tool_names_are_sanitized_for_providers(cx: &mut TestAppContext
         paths::settings_file(),
         json!({
             "agent": {
-                "tool_permissions": { "default": "allow" },
-                "profiles": {
-                    "test": {
-                        "name": "Test Profile",
-                        "enable_all_context_servers": true,
-                    },
-                }
+                "permission_mode": "full_access"
             }
         })
         .to_string()
@@ -1651,9 +1631,6 @@ async fn test_mcp_tool_names_are_sanitized_for_providers(cx: &mut TestAppContext
     )
     .await;
     cx.run_until_parked();
-    thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("test".into()), cx)
-    });
 
     let mut mcp_tool_calls = setup_context_server(
         "Superluminal",
@@ -1729,14 +1706,7 @@ async fn test_mcp_tool_multi_content_response(cx: &mut TestAppContext) {
         paths::settings_file(),
         json!({
             "agent": {
-                "tool_permissions": { "default": "allow" },
-                "profiles": {
-                    "test": {
-                        "name": "Test Profile",
-                        "enable_all_context_servers": true,
-                        "tools": {}
-                    },
-                }
+                "permission_mode": "full_access"
             }
         })
         .to_string()
@@ -1744,9 +1714,6 @@ async fn test_mcp_tool_multi_content_response(cx: &mut TestAppContext) {
     )
     .await;
     cx.run_until_parked();
-    thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("test".into()), cx)
-    });
 
     let mut mcp_tool_calls = setup_context_server(
         "screenshot_server",
@@ -1863,14 +1830,7 @@ async fn test_mcp_tool_result_displayed_when_server_disconnected(cx: &mut TestAp
         paths::settings_file(),
         json!({
             "agent": {
-                "always_allow_tool_actions": true,
-                "profiles": {
-                    "test": {
-                        "name": "Test Profile",
-                        "enable_all_context_servers": true,
-                        "tools": {}
-                    },
-                }
+                "permission_mode": "full_access"
             }
         })
         .to_string()
@@ -1878,9 +1838,6 @@ async fn test_mcp_tool_result_displayed_when_server_disconnected(cx: &mut TestAp
     )
     .await;
     cx.run_until_parked();
-    thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("test".into()), cx)
-    });
 
     // Setup a context server with a tool
     let mut mcp_tool_calls = setup_context_server(
@@ -2038,39 +1995,11 @@ async fn test_mcp_tool_truncation(cx: &mut TestAppContext) {
         model,
         thread,
         context_server_store,
-        fs,
         ..
     } = setup(cx, TestModel::Fake).await;
     let fake_model = model.as_fake();
 
-    // Set up a profile with all tools enabled
-    fs.insert_file(
-        paths::settings_file(),
-        json!({
-            "agent": {
-                "profiles": {
-                    "test": {
-                        "name": "Test Profile",
-                        "enable_all_context_servers": true,
-                        "tools": {
-                            EchoTool::NAME: true,
-                            DelayTool::NAME: true,
-                            WordListTool::NAME: true,
-                            ToolRequiringPermission::NAME: true,
-                            InfiniteTool::NAME: true,
-                        }
-                    },
-                }
-            }
-        })
-        .to_string()
-        .into_bytes(),
-    )
-    .await;
-    cx.run_until_parked();
-
-    thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("test".into()), cx);
+    thread.update(cx, |thread, _cx| {
         thread.add_tool(EchoTool);
         thread.add_tool(DelayTool);
         thread.add_tool(WordListTool);

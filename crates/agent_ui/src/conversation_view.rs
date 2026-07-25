@@ -12,7 +12,7 @@ use agent_client_protocol::schema::v1 as acp;
 #[cfg(test)]
 use agent_servers::AgentServerDelegate;
 use agent_servers::{AgentServer, GEMINI_TERMINAL_AUTH_METHOD_ID};
-use agent_settings::{AgentProfileId, AgentSettings};
+use agent_settings::AgentSettings;
 use anyhow::{Result, anyhow};
 #[cfg(feature = "audio")]
 use audio::{Audio, Sound};
@@ -24,7 +24,9 @@ use editor::{
     Editor, EditorEvent, EditorMode, MultiBuffer, PathKey, SelectionEffects, SizingBehavior,
 };
 use file_icons::FileIcons;
+#[cfg(test)]
 use fs::Fs;
+
 use futures::FutureExt as _;
 use gpui::{
     Action, Animation, AnimationExt, App, ClickEvent, ClipboardItem, CursorStyle, ElementId, Empty,
@@ -86,7 +88,6 @@ use crate::agent_diff::AgentDiff;
 use crate::completion_provider::{AgentContextSelection, AvailableSkill};
 use crate::entry_view_state::{EntryViewEvent, ViewEvent};
 use crate::message_editor::{InputAttempt, MessageEditor, MessageEditorEvent};
-use crate::profile_selector::{ProfileProvider, ProfileSelector};
 
 use crate::thread_metadata_store::{ThreadId, ThreadMetadataStore};
 use crate::ui::{AgentNotification, AgentNotificationEvent};
@@ -97,9 +98,8 @@ use crate::{
     OpenAddContextMenu, OpenAgentDiff, RejectAll, RejectOnce, RemoveFirstQueuedMessage,
     ScrollOutputLineDown, ScrollOutputLineUp, ScrollOutputPageDown, ScrollOutputPageUp,
     ScrollOutputToBottom, ScrollOutputToNextMessage, ScrollOutputToPreviousMessage,
-    ScrollOutputToTop, SendImmediately, SendNextQueuedMessage, ToggleFastMode,
-    ToggleProfileSelector, ToggleSteerFirstQueuedMessage, ToggleThinkingEffortMenu,
-    ToggleThinkingMode, UndoLastReject,
+    ScrollOutputToTop, SendImmediately, SendNextQueuedMessage, ToggleFastMode, ToggleModeSelector,
+    ToggleSteerFirstQueuedMessage, ToggleThinkingEffortMenu, ToggleThinkingMode, UndoLastReject,
 };
 
 const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(30);
@@ -225,40 +225,6 @@ impl From<anyhow::Error> for ThreadError {
                 acp_error_code,
             }
         }
-    }
-}
-
-impl ProfileProvider for Entity<agent::Thread> {
-    fn profile_id(&self, cx: &App) -> AgentProfileId {
-        self.read(cx).profile().clone()
-    }
-
-    fn set_profile(&self, profile_id: AgentProfileId, cx: &mut App) {
-        self.update(cx, |thread, cx| {
-            // Apply the profile and let the thread swap to its default model.
-            thread.set_profile(profile_id, cx);
-        });
-    }
-
-    fn profiles_supported(&self, cx: &App) -> bool {
-        self.read(cx)
-            .model()
-            .is_some_and(|model| model.supports_tools())
-    }
-
-    fn model_selected(&self, cx: &App) -> bool {
-        self.read(cx).model().is_some()
-    }
-
-    fn is_restricted(&self, cx: &App) -> bool {
-        project::trusted_worktrees::TrustedWorktrees::has_restricted_worktrees(
-            &self.read(cx).project().read(cx).worktree_store(),
-            cx,
-        )
-    }
-
-    fn profile_downgraded(&self, cx: &App) -> bool {
-        self.read(cx).profile_was_downgraded()
     }
 }
 
@@ -1363,21 +1329,6 @@ impl ConversationView {
             .detach();
         }
 
-        let profile_selector: Option<Rc<agent::NativeAgentConnection>> =
-            connection.clone().downcast();
-        let profile_selector = profile_selector
-            .and_then(|native_connection| native_connection.thread(&session_id, cx))
-            .map(|native_thread| {
-                cx.new(|cx| {
-                    ProfileSelector::new(
-                        <dyn Fs>::global(cx),
-                        Arc::new(native_thread),
-                        self.focus_handle(cx),
-                        cx,
-                    )
-                })
-            });
-
         let agent_display_name = self
             .agent_server_store
             .read(cx)
@@ -1414,7 +1365,6 @@ impl ConversationView {
                 config_options_view,
                 mode_selector,
                 model_selector,
-                profile_selector,
                 list_state,
                 session_capabilities,
                 resumed_without_history,

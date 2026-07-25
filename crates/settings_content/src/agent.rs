@@ -261,8 +261,10 @@ pub struct AgentSettingsContent {
     /// Additional models with which to generate alternatives when performing inline assists.
     pub inline_alternatives: Option<Vec<LanguageModelSelection>>,
     /// Legacy profile selection retained for loading older settings.
+    #[schemars(skip)]
     pub default_profile: Option<Arc<str>>,
     /// Legacy profile definitions retained for loading older settings.
+    #[schemars(skip)]
     pub profiles: Option<IndexMap<Arc<str>, AgentProfileContent>>,
     /// Where to show a popup notification when the agent is waiting for user input.
     ///
@@ -382,10 +384,6 @@ impl AgentSettingsContent {
             effort: None,
             speed: None,
         });
-    }
-
-    pub fn set_profile(&mut self, profile_id: Arc<str>) {
-        self.default_profile = Some(profile_id);
     }
 
     pub fn add_favorite_model(&mut self, model: LanguageModelSelection) {
@@ -909,6 +907,14 @@ pub enum AgentPermissionMode {
 
 impl AgentPermissionMode {
     pub const ALL: [Self; 3] = [Self::Manual, Self::Auto, Self::FullAccess];
+
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::Auto => "auto",
+            Self::FullAccess => "full_access",
+        }
+    }
 
     pub const fn label(self) -> &'static str {
         match self {

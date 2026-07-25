@@ -255,9 +255,8 @@
     "bindings": {
       "ctrl-n": "agent::NewThread",
       "ctrl--": "pane::GoBack",
-      "ctrl-alt-p": "agent::ManageProfiles",
       "ctrl-alt-l": "agent::ManageSkills",
-      "ctrl-i": "agent::ToggleProfileSelector",
+      "ctrl-i": "agent::ToggleModeSelector",
       "shift-tab": "agent::CycleModeSelector",
       "ctrl-alt-/": "agent::ToggleModelSelector",
       "alt-tab": "agent::CycleFavoriteModels",
@@ -336,7 +335,7 @@
       "ctrl-alt-s": "agent::ToggleSteerFirstQueuedMessage",
       "ctrl-alt-backspace": "agent::ClearMessageQueue",
       "ctrl-shift-v": "agent::PasteRaw",
-      "ctrl-i": "agent::ToggleProfileSelector",
+      "ctrl-i": "agent::ToggleModeSelector",
       "shift-tab": "agent::CycleModeSelector",
       "alt-tab": "agent::CycleFavoriteModels",
       // `alt-l` is provided as an alternative to `alt-tab` as the latter breaks on Linux under the `AcpThread > Editor` context

@@ -1,7 +1,7 @@
 use std::{cell::Cell, fmt, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
 use acp_thread::{AcpThread, AcpThreadEvent, MentionUri, ThreadStatus, line_range_suffix};
-use agent::{ContextServerRegistry, SharedThread, ThreadStore};
+use agent::{SharedThread, ThreadStore};
 use agent_client_protocol::schema::v1 as acp;
 use agent_servers::AgentServer;
 use agent_settings::UserAgentsMd;
@@ -25,7 +25,6 @@ use zed_actions::{
 };
 
 use crate::ExpandMessageEditor;
-use crate::ManageProfiles;
 use crate::agent_connection_store::AgentConnectionStore;
 use crate::completion_provider::{AgentContextSelection, AgentContextSource};
 use crate::terminal_thread_metadata_store::{
@@ -1143,7 +1142,6 @@ pub struct AgentPanel {
     connection_store: Entity<AgentConnectionStore>,
     threads_view: Entity<ThreadsArchiveView>,
     active_section: AgentPanelSection,
-    context_server_registry: Entity<ContextServerRegistry>,
     focus_handle: FocusHandle,
     base_view: BaseView,
     last_created_entry_kind: AgentPanelEntryKind,
@@ -1471,9 +1469,6 @@ impl AgentPanel {
         let workspace_id = workspace.database_id();
         let workspace = workspace.weak_handle();
 
-        let context_server_registry =
-            cx.new(|cx| ContextServerRegistry::new(project.read(cx).context_server_store(), cx));
-
         let thread_store = ThreadStore::global(cx);
 
         let base_view = BaseView::Uninitialized;
@@ -1572,7 +1567,6 @@ impl AgentPanel {
             threads_view,
             active_section: AgentPanelSection::Chat,
             focus_handle: cx.focus_handle(),
-            context_server_registry,
             draft_thread: None,
             retained_threads: HashMap::default(),
             terminals: HashMap::default(),
@@ -1718,10 +1712,6 @@ impl AgentPanel {
             agent, None, session_id, work_dirs, title, None, source, window, cx,
         );
         self.set_base_view(thread.into(), focus, window, cx);
-    }
-
-    pub(crate) fn context_server_registry(&self) -> &Entity<ContextServerRegistry> {
-        &self.context_server_registry
     }
 
     pub fn is_visible(workspace: &Entity<Workspace>, cx: &App) -> bool {
@@ -5736,10 +5726,6 @@ impl AgentPanel {
                                     );
                                 }
                             }
-
-                            menu = menu
-                                .separator()
-                                .action("Profiles", Box::new(ManageProfiles::default()));
                         }
 
                         menu = menu.action("Settings", Box::new(OpenSettings));

@@ -1,4 +1,3 @@
-mod agent_profile;
 mod user_agents_md;
 
 use std::cmp::Ordering::{Equal, Greater, Less};
@@ -7,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
 use anyhow::Context as _;
-use collections::{HashSet, IndexMap};
+use collections::HashSet;
 use fs::Fs;
 use futures::channel::oneshot;
 use gpui::{App, Pixels, SharedString, px};
@@ -23,7 +22,6 @@ use settings::{
 };
 use util::ResultExt as _;
 
-pub use crate::agent_profile::*;
 pub use crate::user_agents_md::{UserAgentsMd, UserAgentsMdState, init as init_user_agents_md};
 
 pub const SUMMARIZE_THREAD_PROMPT: &str = include_str!("prompts/summarize_thread_prompt.txt");
@@ -221,8 +219,6 @@ pub struct AgentSettings {
     pub thread_summary_model: Option<LanguageModelSelection>,
     pub inline_alternatives: Vec<LanguageModelSelection>,
     pub favorite_models: Vec<LanguageModelSelection>,
-    pub default_profile: AgentProfileId,
-    pub profiles: IndexMap<AgentProfileId, AgentProfileSettings>,
 
     pub notify_when_agent_waiting: NotifyWhenAgentWaiting,
     pub play_sound_when_agent_done: PlaySoundWhenAgentDone,
@@ -790,16 +786,6 @@ impl Settings for AgentSettings {
             thread_summary_model: agent.thread_summary_model,
             inline_alternatives: agent.inline_alternatives.unwrap_or_default(),
             favorite_models: agent.favorite_models,
-            default_profile: agent
-                .default_profile
-                .map(AgentProfileId)
-                .unwrap_or_default(),
-            profiles: agent
-                .profiles
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(key, val)| (AgentProfileId(key), val.into()))
-                .collect(),
 
             notify_when_agent_waiting: agent.notify_when_agent_waiting.unwrap(),
             play_sound_when_agent_done: agent.play_sound_when_agent_done.unwrap_or_default(),

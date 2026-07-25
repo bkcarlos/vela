@@ -1069,19 +1069,23 @@ fn render_add_pattern_input(
         .into_any_element()
 }
 
+fn permission_mode_color(mode: AgentPermissionMode) -> Color {
+    match mode {
+        AgentPermissionMode::Manual => Color::Accent,
+        AgentPermissionMode::Auto => Color::Success,
+        AgentPermissionMode::FullAccess => Color::Error,
+    }
+}
+
 fn render_global_permission_mode_section(current_mode: AgentPermissionMode) -> AnyElement {
     let mode_label = current_mode.label().to_string();
+    let mode_color = permission_mode_color(current_mode);
     let mode_descriptions = AgentPermissionMode::ALL
         .iter()
         .map(|mode| {
-            let is_full_access = *mode == AgentPermissionMode::FullAccess;
             Label::new(format!("{} — {}", mode.label(), mode.description()))
                 .size(LabelSize::Small)
-                .color(if is_full_access {
-                    Color::Error
-                } else {
-                    Color::Muted
-                })
+                .color(permission_mode_color(*mode))
         })
         .collect::<Vec<_>>();
 
@@ -1104,7 +1108,12 @@ fn render_global_permission_mode_section(current_mode: AgentPermissionMode) -> A
                         .tab_index(0_isize)
                         .style(ButtonStyle::Outlined)
                         .size(ButtonSize::Medium)
-                        .end_icon(Icon::new(IconName::ChevronDown).size(IconSize::Small)),
+                        .color(mode_color)
+                        .end_icon(
+                            Icon::new(IconName::ChevronDown)
+                                .size(IconSize::Small)
+                                .color(mode_color),
+                        ),
                 )
                 .menu(move |window, cx| {
                     Some(ContextMenu::build(window, cx, move |mut menu, _, _| {

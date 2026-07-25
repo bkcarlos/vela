@@ -41,7 +41,7 @@
       "ctrl-l": "workspace::ToggleRightDock",
       "ctrl-shift-l": "workspace::ToggleRightDock",
       "ctrl-w": "workspace::ToggleRightDock", // technically should close chat
-      "ctrl-.": "agent::ToggleProfileSelector",
+      "ctrl-.": "agent::ToggleModeSelector",
       "ctrl-/": "agent::ToggleModelSelector",
       "ctrl-shift-backspace": "editor::Cancel",
       "ctrl-r": "agent::NewThread",

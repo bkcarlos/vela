@@ -23,7 +23,6 @@ mod message_editor;
 mod mode_selector;
 mod model_selector;
 mod model_selector_popover;
-mod profile_selector;
 mod terminal_codegen;
 mod terminal_inline_assistant;
 pub mod terminal_thread_metadata_store;
@@ -42,7 +41,7 @@ use std::sync::Arc;
 
 use ::ui::IconName;
 use agent_client_protocol::schema::v1 as acp;
-use agent_settings::{AgentProfileId, AgentSettings};
+use agent_settings::AgentSettings;
 use command_palette_hooks::CommandPaletteFilter;
 use editor::{Editor, SelectionEffects, scroll::Autoscroll};
 use feature_flags::FeatureFlagAppExt as _;
@@ -68,7 +67,6 @@ use std::any::TypeId;
 use std::path::{Path, PathBuf};
 use workspace::{OpenOptions, Workspace};
 
-use crate::agent_configuration::ManageProfilesModal;
 pub use crate::agent_connection_store::{ActiveAcpConnection, AgentConnectionStore};
 pub use crate::agent_panel::{
     AgentPanel, AgentPanelEvent, AgentPanelTerminalInfo, MaxIdleRetainedThreads, TerminalId,
@@ -217,9 +215,9 @@ actions!(
         ToggleNewThreadMenu,
         /// Toggles the options menu for agent settings and preferences.
         ToggleOptionsMenu,
-        /// Toggles the profile or mode selector for switching between agent profiles.
-        ToggleProfileSelector,
-        /// Cycles through available session modes.
+        /// Toggles the permission mode selector for the native agent or the mode selector for ACP agents.
+        ToggleModeSelector,
+        /// Cycles through native permission modes or ACP session modes.
         CycleModeSelector,
         /// Cycles through favorited models in the ACP model selector.
         CycleFavoriteModels,
@@ -511,23 +509,6 @@ impl From<ExternalSourcePrompt> for AgentInitialContent {
     }
 }
 
-/// Opens the profile management interface for configuring agent tools and settings.
-#[derive(PartialEq, Clone, Default, Debug, Deserialize, JsonSchema, Action)]
-#[action(namespace = agent)]
-#[serde(deny_unknown_fields)]
-pub struct ManageProfiles {
-    #[serde(default)]
-    pub customize_tools: Option<AgentProfileId>,
-}
-
-impl ManageProfiles {
-    pub fn customize_tools(profile_id: AgentProfileId) -> Self {
-        Self {
-            customize_tools: Some(profile_id),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub(crate) enum ModelUsageContext {
     InlineAssistant,
@@ -648,7 +629,6 @@ pub fn init(
         );
     })
     .detach();
-    cx.observe_new(ManageProfilesModal::register).detach();
     cx.observe_new(|workspace: &mut Workspace, _window, _cx| {
         workspace.register_action(
             |workspace: &mut Workspace,
@@ -944,7 +924,7 @@ fn update_active_language_model_from_settings(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_settings::{AgentProfileId, AgentSettings};
+    use agent_settings::AgentSettings;
     use command_palette_hooks::CommandPaletteFilter;
     use db::kvp::KeyValueStore;
     use editor::actions::AcceptEditPrediction;
@@ -984,8 +964,6 @@ mod tests {
             thread_summary_model: None,
             inline_alternatives: vec![],
             favorite_models: vec![],
-            default_profile: AgentProfileId::default(),
-            profiles: Default::default(),
             notify_when_agent_waiting: NotifyWhenAgentWaiting::default(),
             play_sound_when_agent_done: PlaySoundWhenAgentDone::Never,
             single_file_review: false,

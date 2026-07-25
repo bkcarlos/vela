@@ -1340,7 +1340,7 @@ impl Thread {
         cx: &mut Context<Self>,
     ) -> Self {
         let settings = AgentSettings::get_global(cx);
-        let profile_id = settings.default_profile.clone();
+        let profile_id = AgentProfileId::default();
         let enable_thinking = settings
             .default_model
             .as_ref()
@@ -1698,10 +1698,7 @@ impl Thread {
         templates: Arc<Templates>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let settings = AgentSettings::get_global(cx);
-        let profile_id = db_thread
-            .profile
-            .unwrap_or_else(|| settings.default_profile.clone());
+        let profile_id = db_thread.profile.unwrap_or_default();
 
         let saved_selection = db_thread.model.map(|model| SelectedModel {
             provider: model.provider.into(),
@@ -2171,24 +2168,6 @@ impl Thread {
     #[cfg(any(test, feature = "test-support"))]
     pub fn remove_tool(&mut self, name: &str) -> bool {
         self.tools.remove(name).is_some()
-    }
-
-    pub fn profile(&self) -> &AgentProfileId {
-        &self.profile_id
-    }
-
-    pub fn set_profile(&mut self, profile_id: AgentProfileId, cx: &mut Context<Self>) {
-        if self.profile_id == profile_id {
-            return;
-        }
-
-        self.profile_id = profile_id.clone();
-
-        for subagent in &self.running_subagents {
-            subagent
-                .update(cx, |thread, cx| thread.set_profile(profile_id.clone(), cx))
-                .ok();
-        }
     }
 
     pub fn cancel(&mut self, cx: &mut Context<Self>) -> Task<()> {
@@ -8153,7 +8132,6 @@ mod tests {
                 thread.set_speed(Speed::Fast, cx);
                 thread.set_thinking_enabled(true, cx);
                 thread.set_thinking_effort(Some("high".to_string()), cx);
-                thread.set_profile(AgentProfileId("custom-profile".into()), cx);
             });
         });
 
@@ -8164,7 +8142,6 @@ mod tests {
             assert_eq!(sub.speed(), Some(Speed::Fast));
             assert!(sub.thinking_enabled());
             assert_eq!(sub.thinking_effort().map(|s| s.as_str()), Some("high"));
-            assert_eq!(sub.profile(), &AgentProfileId("custom-profile".into()));
         });
     }
 
