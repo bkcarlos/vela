@@ -7145,7 +7145,7 @@ impl LspStore {
         let mut new_label = match completion_item {
             Some(completion_item) => {
                 // Some language servers always return `detail` lazily via resolve, regardless of
-                // the resolvable properties Zed advertises. Regenerate labels here to handle this.
+                // the resolvable properties Vela advertises. Regenerate labels here to handle this.
                 // See: https://github.com/yioneko/vtsls/issues/213
                 let language = snapshot.language();
                 match language {
@@ -7394,8 +7394,8 @@ impl LspStore {
                             // rust-analyzer's ref-match `&` insertions) only overlap the primary
                             // edit when they fall strictly inside it. Touching its boundary is fine.
                             //
-                            // Ref: https://github.com/zed-industries/zed/issues/26136
-                            // Ref: https://github.com/zed-industries/zed/issues/56973
+                            // Ref: https://github.com/vela-industries/vela/issues/26136
+                            // Ref: https://github.com/vela-industries/vela/issues/56973
                             let is_insertion = range.start.cmp(&range.end, buffer).is_eq();
                             let has_overlap = if is_insertion {
                                 let insert_offset = range.start.to_offset(buffer);
@@ -7416,7 +7416,7 @@ impl LspStore {
                             };
 
                             // Skip additional edits which overlap with the primary completion edit
-                            // https://github.com/zed-industries/zed/pull/1871
+                            // https://github.com/vela-industries/vela/pull/1871
                             if !has_overlap {
                                 buffer.edit([(range, text)], None, cx);
                             }

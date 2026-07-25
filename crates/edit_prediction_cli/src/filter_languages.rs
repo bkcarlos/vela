@@ -516,7 +516,7 @@ mod tests {
         );
         // Gentoo ebuild files are a subset of bash
         assert_eq!(
-            detect_language("app-editors/zed-1.5.4.ebuild", &map),
+            detect_language("app-editors/vela-1.5.4.ebuild", &map),
             Some("Shell Script".to_string())
         );
     }

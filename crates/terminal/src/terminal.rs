@@ -662,14 +662,14 @@ const DEBUG_TERMINAL_HEIGHT: Pixels = px(30.);
 const DEBUG_CELL_WIDTH: Pixels = px(5.);
 const DEBUG_LINE_HEIGHT: Pixels = px(5.);
 
-/// Inserts Zed-specific environment variables for terminal sessions.
+/// Inserts Vela-specific environment variables for terminal sessions.
 /// Used by both local terminals and remote terminals (via SSH).
-pub fn insert_zed_terminal_env(
+pub fn insert_vela_terminal_env(
     env: &mut HashMap<String, String>,
     version: &impl std::fmt::Display,
 ) {
-    env.insert("ZED_TERM".to_string(), "true".to_string());
-    env.insert("TERM_PROGRAM".to_string(), "zed".to_string());
+    env.insert("VELA_TERM".to_string(), "true".to_string());
+    env.insert("TERM_PROGRAM".to_string(), "vela".to_string());
     env.insert("TERM".to_string(), "xterm-256color".to_string());
     env.insert("COLORTERM".to_string(), "truecolor".to_string());
     env.insert("TERM_PROGRAM_VERSION".to_string(), version.to_string());
@@ -902,7 +902,7 @@ const DEFAULT_SCROLL_HISTORY_LINES: usize = 10_000;
 pub const MAX_SCROLL_HISTORY_LINES: usize = 100_000;
 static NEXT_INIT_COMMAND_STARTUP_MARKER_ID: AtomicU64 = AtomicU64::new(1);
 
-const INIT_COMMAND_STARTUP_MARKER_PREFIX: &str = "__zed_init_command_ready_";
+const INIT_COMMAND_STARTUP_MARKER_PREFIX: &str = "__vela_init_command_ready_";
 const INIT_COMMAND_STARTUP_MARKER_SUFFIX: &str = "__";
 const INIT_COMMAND_STARTUP_MARKER_SEARCH_LINES: usize = 64;
 
@@ -919,7 +919,7 @@ fn init_command_startup_marker_command(shell_kind: ShellKind, marker_id: u64) ->
         ),
         ShellKind::Cmd => {
             format!(
-                "<nul set /p zed_init_ready={INIT_COMMAND_STARTUP_MARKER_PREFIX}&echo {marker_id}{INIT_COMMAND_STARTUP_MARKER_SUFFIX}"
+                "<nul set /p vela_init_ready={INIT_COMMAND_STARTUP_MARKER_PREFIX}&echo {marker_id}{INIT_COMMAND_STARTUP_MARKER_SUFFIX}"
             )
         }
         ShellKind::Nushell => {
@@ -1088,7 +1088,7 @@ impl TerminalBuilder {
                     .or_insert_with(|| "en_US.UTF-8".to_string());
             }
 
-            insert_zed_terminal_env(&mut env, &version);
+            insert_vela_terminal_env(&mut env, &version);
 
             #[derive(Default)]
             struct ShellParams {
@@ -1346,7 +1346,7 @@ impl TerminalBuilder {
         // as soon as the `on_app_quit` futures resolve. Perform the same
         // escalation in a quit observer, whose future keeps the app alive for
         // the grace period, so that processes ignoring SIGHUP/SIGTERM don't
-        // outlive Zed (#47412). The subscription can't be stored on `Terminal`
+        // outlive Vela (#47412). The subscription can't be stored on `Terminal`
         // (`Subscription` is not `Send`, and `TerminalBuilder` is built on a
         // background thread), so its lifetime is tied to the entity's release
         // instead.
@@ -2780,7 +2780,7 @@ impl Terminal {
     /// that's running inside the terminal.
     ///
     /// This does *not* return the working directory of the shell that runs on the
-    /// remote host, in case Zed is connected to a remote host.
+    /// remote host, in case Vela is connected to a remote host.
     fn client_side_working_directory(&self) -> Option<PathBuf> {
         match &self.terminal_type {
             TerminalType::Pty { info, .. } => info
@@ -2952,7 +2952,7 @@ impl Terminal {
         if !lines_to_show.is_empty() {
             // SAFETY: the invocation happens on non `TaskStatus::Running` tasks, once,
             // after either `AlacTermEvent::Exit` or `AlacTermEvent::ChildExit` events that are spawned
-            // when Zed task finishes and no more output is made.
+            // when Vela task finishes and no more output is made.
             // After the task summary is output once, no more text is appended to the terminal.
             unsafe { append_text_to_term(&mut self.term.lock(), &lines_to_show) };
         }
@@ -4606,7 +4606,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_hyperlink_ctrl_click_same_position(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         terminal.update(cx, |terminal, cx| {
             let click_position = point(px(80.0), px(10.0));
@@ -4625,7 +4625,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_hyperlink_ctrl_click_same_position_in_mouse_mode(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         terminal.update(cx, |terminal, cx| {
             terminal.last_content.mode = Modes::MOUSE_MODE;
@@ -4654,7 +4654,7 @@ mod tests {
     ) {
         let terminal = init_ctrl_click_hyperlink_test(
             cx,
-            b"Visit https://zed.dev/ for more\r\nThis is another line\r\n",
+            b"Visit https://vela.dev/ for more\r\nThis is another line\r\n",
         );
 
         terminal.update(cx, |terminal, cx| {
@@ -4692,7 +4692,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_plain_click_on_hyperlink_in_mouse_mode_is_reported(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         terminal.update(cx, |terminal, cx| {
             terminal.last_content.mode = Modes::MOUSE_MODE;
@@ -4720,7 +4720,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_ctrl_click_on_non_hyperlink_in_mouse_mode_is_reported(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         terminal.update(cx, |terminal, cx| {
             terminal.last_content.mode = Modes::MOUSE_MODE;
@@ -4749,7 +4749,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_ctrl_click_in_mouse_mode_forwards_when_setting_disabled(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         cx.update_global(|store: &mut settings::SettingsStore, cx| {
             store.update_user_settings(cx, |settings| {
@@ -4787,7 +4787,7 @@ mod tests {
     async fn test_hyperlink_ctrl_click_drag_outside_bounds(cx: &mut TestAppContext) {
         let terminal = init_ctrl_click_hyperlink_test(
             cx,
-            b"Visit https://zed.dev/ for more\r\nThis is another line\r\n",
+            b"Visit https://vela.dev/ for more\r\nThis is another line\r\n",
         );
 
         terminal.update(cx, |terminal, cx| {
@@ -4810,7 +4810,7 @@ mod tests {
 
     #[gpui::test]
     async fn test_hyperlink_ctrl_click_drag_within_bounds(cx: &mut TestAppContext) {
-        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://zed.dev/ for more\r\n");
+        let terminal = init_ctrl_click_hyperlink_test(cx, b"Visit https://vela.dev/ for more\r\n");
 
         terminal.update(cx, |terminal, cx| {
             let down_position = point(px(70.0), px(10.0));
@@ -4940,7 +4940,7 @@ mod tests {
             })
     }
 
-    /// Regression test for <https://github.com/zed-industries/zed/issues/47412>:
+    /// Regression test for <https://github.com/vela-industries/vela/issues/47412>:
     /// closing a terminal must not orphan processes that ignore SIGHUP and
     /// SIGTERM. The shell ignores both signals and the `sleep`s inherit the
     /// ignored dispositions, so only the SIGKILL escalation can terminate them.

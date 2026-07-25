@@ -261,7 +261,7 @@ impl Component for TerminalToolHeader {
     }
 
     fn preview(_window: &mut Window, cx: &mut App) -> AnyElement {
-        let working_dir = "/Users/you/projects/zed";
+        let working_dir = "/Users/you/projects/vela";
 
         let card = |_id: &'static str, header: TerminalToolHeader| {
             v_flex()
@@ -285,7 +285,7 @@ impl Component for TerminalToolHeader {
         let sandbox_warning = || TerminalSandboxWarning {
             title: "Ran without sandbox".into(),
             detail: "Unsandboxed execution is allowed for the rest of this thread.".into(),
-            docs_url: "https://zed.dev/docs/ai/sandboxing".into(),
+            docs_url: "https://vela.dev/docs/ai/sandboxing".into(),
         };
 
         v_flex()

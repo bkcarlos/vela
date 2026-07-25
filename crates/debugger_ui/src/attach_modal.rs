@@ -6,7 +6,7 @@ use gpui::{Subscription, WeakEntity};
 use picker::{Picker, PickerDelegate};
 use project::Project;
 use rpc::proto;
-use task::ZedDebugConfig;
+use task::VelaDebugConfig;
 use util::debug_panic;
 
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub(super) struct Candidate {
 
 pub(crate) enum ModalIntent {
     ResolveProcessId(Option<oneshot::Sender<Option<i32>>>),
-    AttachToProcess(ZedDebugConfig),
+    AttachToProcess(VelaDebugConfig),
 }
 
 pub(crate) struct AttachModalDelegate {
@@ -268,7 +268,7 @@ impl PickerDelegate for AttachModalDelegate {
 
                 let definition = definition.clone();
                 cx.spawn_in(window, async move |this, cx| {
-                    let Ok(scenario) = adapter.config_from_zed_format(definition).await else {
+                    let Ok(scenario) = adapter.config_from_vela_format(definition).await else {
                         return;
                     };
 

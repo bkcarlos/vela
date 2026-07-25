@@ -19,8 +19,8 @@ use ui::{
 };
 
 use util::{ResultExt, truncate_and_trailoff};
+pub use vela_actions::{Rerun, Spawn};
 use workspace::{ModalView, Workspace};
-pub use zed_actions::{Rerun, Spawn};
 
 /// A modal used to spawn new tasks.
 pub struct TasksModalDelegate {
@@ -759,7 +759,7 @@ mod tests {
         fs.insert_tree(
             path!("/dir"),
             json!({
-                ".zed": {
+                ".vela": {
                     "tasks.json": r#"[
                         {
                             "label": "example task",
@@ -932,17 +932,17 @@ mod tests {
         fs.insert_tree(
             path!("/dir"),
             json!({
-                ".zed": {
+                ".vela": {
                     "tasks.json": r#"[
                         {
-                            "label": "hello from $ZED_FILE:$ZED_ROW:$ZED_COLUMN",
+                            "label": "hello from $VELA_FILE:$VELA_ROW:$VELA_COLUMN",
                             "command": "echo",
-                            "args": ["hello", "from", "$ZED_FILE", ":", "$ZED_ROW", ":", "$ZED_COLUMN"]
+                            "args": ["hello", "from", "$VELA_FILE", ":", "$VELA_ROW", ":", "$VELA_COLUMN"]
                         },
                         {
-                            "label": "opened now: $ZED_WORKTREE_ROOT",
+                            "label": "opened now: $VELA_WORKTREE_ROOT",
                             "command": "echo",
-                            "args": ["opened", "now:", "$ZED_WORKTREE_ROOT"]
+                            "args": ["opened", "now:", "$VELA_WORKTREE_ROOT"]
                         }
                     ]"#,
                 },
@@ -1150,12 +1150,12 @@ mod tests {
                             ..TaskTemplate::default()
                         },
                         TaskTemplate {
-                            label: "TypeScript task from file $ZED_FILE".to_string(),
+                            label: "TypeScript task from file $VELA_FILE".to_string(),
                             command: "npm run build".to_string(),
                             ..TaskTemplate::default()
                         },
                         TaskTemplate {
-                            label: "Another task from file $ZED_FILE".to_string(),
+                            label: "Another task from file $VELA_FILE".to_string(),
                             command: "npm run lint".to_string(),
                             ..TaskTemplate::default()
                         },

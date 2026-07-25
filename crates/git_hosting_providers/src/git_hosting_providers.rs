@@ -85,11 +85,11 @@ mod tests {
                 Some("github.com".to_string()),
             ),
             (
-                "git@github.com:zed-industries/zed.git",
+                "git@github.com:vela-industries/vela.git",
                 Some("github.com".to_string()),
             ),
             (
-                "git@my.super.long.subdomain.com:zed-industries/zed.git",
+                "git@my.super.long.subdomain.com:vela-industries/vela.git",
                 Some("my.super.long.subdomain.com".to_string()),
             ),
         ];

@@ -714,7 +714,7 @@ mod tests {
             "/root",
             json!({
                 ".config": {
-                    "zed": {
+                    "vela": {
                         "settings.json": r#"{ "formatter": "auto" }"#,
                     },
                 },
@@ -749,7 +749,7 @@ mod tests {
             Prettier::locate_prettier_installation(
                 fs.as_ref(),
                 &HashSet::default(),
-                Path::new("/root/.config/zed/settings.json"),
+                Path::new("/root/.config/vela/settings.json"),
             )
             .await
             .unwrap(),

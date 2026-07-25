@@ -598,7 +598,7 @@ impl fmt::Display for SandboxError {
             }
             SandboxError::BwrapSetuidRejected => write!(
                 formatter,
-                "the only available `bwrap` is setuid-root, which Zed refuses to run"
+                "the only available `bwrap` is setuid-root, which Vela refuses to run"
             ),
             SandboxError::SandboxProbeFailed => {
                 write!(
@@ -665,13 +665,13 @@ pub struct Sandbox {
     /// with writable binds); a `Sandbox` normally wraps a single command.
     #[cfg(target_os = "linux")]
     validation_fd_sender: Option<linux_bubblewrap::ValidationFdSender>,
-    /// Windows only: `(release channel, version)` of the Linux `zed` to
+    /// Windows only: `(release channel, version)` of the Linux `vela` to
     /// provision inside WSL as the `--wsl-sandbox-helper` (version `latest` for
     /// dev builds). Set by the caller (which has the running release info);
     /// `None` falls back to exec'ing bwrap directly without in-sandbox bind
     /// validation.
     #[cfg(target_os = "windows")]
-    wsl_zed_release: Option<(String, String)>,
+    wsl_vela_release: Option<(String, String)>,
     #[cfg(target_os = "macos")]
     seatbelt_config: Option<macos_seatbelt::SeatbeltConfigFile>,
 }
@@ -721,21 +721,21 @@ impl Sandbox {
             #[cfg(target_os = "linux")]
             validation_fd_sender: None,
             #[cfg(target_os = "windows")]
-            wsl_zed_release: None,
+            wsl_vela_release: None,
             #[cfg(target_os = "macos")]
             seatbelt_config: None,
         })
     }
 
-    /// Windows only: record the `(release channel, version)` of the Linux `zed`
+    /// Windows only: record the `(release channel, version)` of the Linux `vela`
     /// to provision inside WSL as the sandbox helper (version `latest` for dev
     /// builds). The caller resolves these from the running app's release info
     /// (which this low-level crate can't read) and sets them before `wrap`. When
     /// unset, the WSL backend falls back to exec'ing bwrap directly without
     /// in-sandbox bind validation.
     #[cfg(target_os = "windows")]
-    pub fn set_wsl_zed_release(&mut self, channel: String, version: String) {
-        self.wsl_zed_release = Some((channel, version));
+    pub fn set_wsl_vela_release(&mut self, channel: String, version: String) {
+        self.wsl_vela_release = Some((channel, version));
     }
 
     /// Check whether the platform sandbox can be created on this host without
@@ -1069,7 +1069,7 @@ impl Sandbox {
             permissions,
             command.cwd.clone(),
             command.env.clone(),
-            self.wsl_zed_release.clone(),
+            self.wsl_vela_release.clone(),
         )
         .await
         .map_err(map_anyhow_error)?;
@@ -1455,7 +1455,7 @@ mod tests {
         assert_eq!(upstream.host, "lower");
         assert_eq!(upstream.port, 1111);
         assert!(upstream.bypasses("internal.example", 443));
-        assert!(!upstream.bypasses("zed.dev", 443));
+        assert!(!upstream.bypasses("vela.dev", 443));
     }
 
     #[test]

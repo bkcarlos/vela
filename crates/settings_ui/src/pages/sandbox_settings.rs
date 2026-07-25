@@ -63,7 +63,7 @@ pub(crate) fn render_sandbox_settings_page(
                 "sandbox-enabled",
                 Some("Enable Sandbox"),
                 Some(
-                    "Wrap agent-run terminal commands in an OS-level sandbox. When off, commands run with Zed's own permissions."
+                    "Wrap agent-run terminal commands in an OS-level sandbox. When off, commands run with Vela's own permissions."
                         .into(),
                 ),
                 sandbox_enabled,
@@ -75,7 +75,7 @@ pub(crate) fn render_sandbox_settings_page(
         )
         .child({
             let docs_url =
-                client::zed_urls::sandboxing_docs(Some("persistent-sandbox-permissions"), cx);
+                client::vela_urls::sandboxing_docs(Some("persistent-sandbox-permissions"), cx);
             let tooltip = format!("Opens {docs_url}");
             // Wrap in a row so the button shrinks to its content width instead
             // of stretching across the settings page.

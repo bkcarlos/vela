@@ -56,14 +56,14 @@ const BWRAP_UNUSABLE_EXIT_CODE: i32 = 42;
 
 /// Prefix of the probe script's single result line, so it can be picked out
 /// of any stdout noise printed by the login shell's profile scripts.
-const PROBE_RESULT_PREFIX: &str = "zed-wsl-probe:";
+const PROBE_RESULT_PREFIX: &str = "vela-wsl-probe:";
 
 /// Prefix of the helper-provisioning script's single result line (the absolute
-/// in-WSL path of the Linux `zed` to run as the sandbox helper), picked out of
+/// in-WSL path of the Linux `vela` to run as the sandbox helper), picked out of
 /// login-shell stdout noise just like [`PROBE_RESULT_PREFIX`].
-const HELPER_RESULT_PREFIX: &str = "zed-wsl-helper:";
+const HELPER_RESULT_PREFIX: &str = "vela-wsl-helper:";
 
-/// Ensures a Linux `zed` matching the running release is available inside WSL to
+/// Ensures a Linux `vela` matching the running release is available inside WSL to
 /// act as the sandbox helper (`--wsl-sandbox-helper`), and prints its absolute
 /// in-WSL path on a [`HELPER_RESULT_PREFIX`] line. `$1` is the release channel,
 /// `$2` the version (`latest` for dev builds, which have no matching release and
@@ -71,38 +71,38 @@ const HELPER_RESULT_PREFIX: &str = "zed-wsl-helper:";
 /// a version/channel string can't inject shell.
 ///
 /// Unlike a normal Linux install, this deliberately does **not** consult the WSL
-/// `PATH`: inside WSL `zed` typically resolves to the *Windows* `zed.exe` via
+/// `PATH`: inside WSL `vela` typically resolves to the *Windows* `vela.exe` via
 /// interop, which is not a Linux binary and so can't be the helper. It also does
-/// not use the public install script (`install.sh`), which puts `zed` on the
+/// not use the public install script (`install.sh`), which puts `vela` on the
 /// user's `PATH` and writes desktop entries we don't want. Instead the Windows
-/// side resolves the exact channel+version (see `wsl_zed_release`) and this
+/// side resolves the exact channel+version (see `wsl_vela_release`) and this
 /// script downloads that release's Linux tarball straight from
-/// `cloud.zed.dev/releases` and unpacks it into a private, off-`PATH` location
-/// (`~/.local/libexec/zed/<channel>`, the conventional spot for executables run
+/// `cloud.vela.dev/releases` and unpacks it into a private, off-`PATH` location
+/// (`~/.local/libexec/vela/<channel>`, the conventional spot for executables run
 /// by other programs rather than directly by the user). One managed copy per
 /// channel is kept, tracked by a marker file so an exact channel+version match
 /// is reused rather than re-downloaded. The floating `latest` version (dev
 /// builds) is the exception: it always re-downloads so it tracks the newest
 /// nightly rather than pinning to the first copy fetched.
 ///
-/// We ship no `zed` (nor `bwrap`) into WSL ourselves; this downloads `zed` on
+/// We ship no `vela` (nor `bwrap`) into WSL ourselves; this downloads `vela` on
 /// demand. A missing `curl`/`wget` (or a failed download) is a hard error the
 /// caller surfaces to the user, exactly like a missing `bwrap`.
 const HELPER_PROVISION_SCRIPT: &str = r#"
 set -eu
 channel="$1"
 version="$2"
-dest="$HOME/.local/libexec/zed/$channel"
-marker="$dest/.zed-wsl-helper-version"
+dest="$HOME/.local/libexec/vela/$channel"
+marker="$dest/.vela-wsl-helper-version"
 want="$channel $version"
 
 # Reuse an exact, already-installed channel+version — but never for the floating
 # "latest" tag (dev builds), which must always re-fetch so they track the most
 # recent nightly instead of pinning to whatever was downloaded first.
 if [ "$version" != "latest" ] && [ "$(cat "$marker" 2>/dev/null || true)" = "$want" ]; then
-    helper=$(find "$dest" -type f -path '*/libexec/zed-editor' -print 2>/dev/null | head -n 1 || true)
+    helper=$(find "$dest" -type f -path '*/libexec/vela-editor' -print 2>/dev/null | head -n 1 || true)
     if [ -n "$helper" ] && [ -x "$helper" ]; then
-        printf 'zed-wsl-helper: %s\n' "$helper"
+        printf 'vela-wsl-helper: %s\n' "$helper"
         exit 0
     fi
 fi
@@ -111,27 +111,27 @@ arch=$(uname -m)
 case "$arch" in
     x86_64 | amd64) arch="x86_64" ;;
     aarch64 | arm64) arch="aarch64" ;;
-    *) echo "unsupported WSL architecture for the zed sandbox helper: $arch" >&2; exit 1 ;;
+    *) echo "unsupported WSL architecture for the vela sandbox helper: $arch" >&2; exit 1 ;;
 esac
-url="https://cloud.zed.dev/releases/$channel/$version/download?asset=zed&arch=$arch&os=linux&source=zed-wsl-sandbox"
+url="https://cloud.vela.dev/releases/$channel/$version/download?asset=vela&arch=$arch&os=linux&source=vela-wsl-sandbox"
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/zed-wsl-helper-XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/vela-wsl-helper-XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-tarball="$tmp/zed.tar.gz"
+tarball="$tmp/vela.tar.gz"
 if command -v curl >/dev/null 2>&1; then
     curl -fL "$url" -o "$tarball"
 elif command -v wget >/dev/null 2>&1; then
     wget -O "$tarball" "$url"
 else
-    echo 'neither curl nor wget is available in WSL to download zed' >&2
+    echo 'neither curl nor wget is available in WSL to download vela' >&2
     exit 1
 fi
 
 mkdir -p "$tmp/unpacked"
 tar -xzf "$tarball" -C "$tmp/unpacked"
-helper_src=$(find "$tmp/unpacked" -type f -path '*/libexec/zed-editor' -print 2>/dev/null | head -n 1 || true)
+helper_src=$(find "$tmp/unpacked" -type f -path '*/libexec/vela-editor' -print 2>/dev/null | head -n 1 || true)
 if [ -z "$helper_src" ]; then
-    echo 'the downloaded zed tarball did not contain a libexec/zed-editor binary' >&2
+    echo 'the downloaded vela tarball did not contain a libexec/vela-editor binary' >&2
     exit 1
 fi
 app=$(dirname "$(dirname "$helper_src")")
@@ -148,12 +148,12 @@ mv "$dest.new" "$dest"
 rm -rf "$dest.old"
 printf '%s' "$want" > "$marker"
 
-helper=$(find "$dest" -type f -path '*/libexec/zed-editor' -print 2>/dev/null | head -n 1 || true)
+helper=$(find "$dest" -type f -path '*/libexec/vela-editor' -print 2>/dev/null | head -n 1 || true)
 if [ -z "$helper" ] || [ ! -x "$helper" ]; then
-    echo "the installed zed sandbox helper is missing or not executable under $dest" >&2
+    echo "the installed vela sandbox helper is missing or not executable under $dest" >&2
     exit 1
 fi
-printf 'zed-wsl-helper: %s\n' "$helper"
+printf 'vela-wsl-helper: %s\n' "$helper"
 exit 0
 "#;
 
@@ -275,13 +275,13 @@ pub async fn wrap_invocation<S: std::hash::BuildHasher>(
     permissions: SandboxPermissions,
     cwd: Option<PathBuf>,
     env: HashMap<String, String, S>,
-    // `(release channel, version)` of the Linux `zed` to provision inside WSL as
+    // `(release channel, version)` of the Linux `vela` to provision inside WSL as
     // the `--wsl-sandbox-helper` (the version is `latest` for dev builds). When
     // `None`, no helper is used and bwrap is exec'd directly — the legacy path,
     // which binds writable paths by string and so carries the bind-source TOCTOU
     // the helper closes. Callers that can determine the running release should
     // always pass `Some`.
-    wsl_zed_release: Option<(String, String)>,
+    wsl_vela_release: Option<(String, String)>,
 ) -> Result<(String, Vec<String>)> {
     // Mapping failures are bad requests (a path that doesn't exist or has a
     // shape WSL can't address), not environment problems, so no
@@ -368,13 +368,13 @@ pub async fn wrap_invocation<S: std::hash::BuildHasher>(
         &env,
     );
 
-    match wsl_zed_release {
-        // Preferred path: run the in-WSL `zed` as the sandbox helper, which
+    match wsl_vela_release {
+        // Preferred path: run the in-WSL `vela` as the sandbox helper, which
         // captures the writable binds' inodes WSL-side and validates them after
         // bwrap's mounts (the same in-sandbox check native Linux performs).
         Some((channel, version)) => {
             let helper =
-                ensure_wsl_zed_helper(&wsl_exe, distro.as_deref(), &channel, &version).await?;
+                ensure_wsl_vela_helper(&wsl_exe, distro.as_deref(), &channel, &version).await?;
             wsl_args.extend(["--exec".to_string(), helper]);
             // Protocol (decoded by `linux_bubblewrap::decode_wsl_helper_args`):
             //   <flag> <bwrap_path> <n_base> <base...> <n_writable> <writable...> -- <prog> <args>
@@ -506,9 +506,9 @@ fn probe_script() -> String {
 ///
 /// Successful results are cached per distro for the life of the process —
 /// like `linux_bubblewrap::is_available`, the answers can't realistically
-/// change while Zed runs. Failures are deliberately *not* cached so a user
+/// change while Vela runs. Failures are deliberately *not* cached so a user
 /// who installs `bwrap` (or lifts a user-namespace restriction) after seeing
-/// the error can retry the command without restarting Zed.
+/// the error can retry the command without restarting Vela.
 async fn probe_environment(wsl_exe: &Path, distro: Option<&str>) -> Result<EnvironmentProbe> {
     static CACHE: OnceLock<Mutex<HashMap<Option<String>, EnvironmentProbe>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -605,7 +605,7 @@ fn parse_probe_output(stdout: &str) -> Result<EnvironmentProbe> {
     })
 }
 
-/// Ensure a Linux `zed` of the given release `channel`/`version` is available
+/// Ensure a Linux `vela` of the given release `channel`/`version` is available
 /// inside WSL and return its absolute in-WSL path, to be `--exec`'d as the
 /// `--wsl-sandbox-helper`. Runs [`HELPER_PROVISION_SCRIPT`] (which downloads the
 /// matching release tarball into an off-`PATH` location on first use).
@@ -613,8 +613,8 @@ fn parse_probe_output(stdout: &str) -> Result<EnvironmentProbe> {
 /// Successful resolutions are cached per `(distro, channel, version)` for the
 /// life of the process — once provisioned, the path won't change. Failures are
 /// not cached, so a user who installs `curl` (or fixes networking) after an
-/// error can retry without restarting Zed.
-async fn ensure_wsl_zed_helper(
+/// error can retry without restarting Vela.
+async fn ensure_wsl_vela_helper(
     wsl_exe: &Path,
     distro: Option<&str>,
     channel: &str,
@@ -637,7 +637,7 @@ async fn ensure_wsl_zed_helper(
         return Ok(path.clone());
     }
 
-    // A login shell (`-lc`) is used so a profile-managed PATH (where `zed` or
+    // A login shell (`-lc`) is used so a profile-managed PATH (where `vela` or
     // `curl` may live) is honored. `channel`/`version` are passed as positional
     // args (`$1`/`$2`), never interpolated into the script body.
     let output = run_wsl_command(
@@ -648,18 +648,18 @@ async fn ensure_wsl_zed_helper(
             "sh",
             "-lc",
             HELPER_PROVISION_SCRIPT,
-            "zed-wsl-sandbox-helper",
+            "vela-wsl-sandbox-helper",
             channel,
             version,
         ],
-        "provision the Linux `zed` sandbox helper",
+        "provision the Linux `vela` sandbox helper",
     )
     .await?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stderr = stderr.trim();
         return Err(unavailable(format!(
-            "failed to provision a Linux `zed` sandbox helper in {}{}",
+            "failed to provision a Linux `vela` sandbox helper in {}{}",
             wsl_distro_label(distro),
             if stderr.is_empty() {
                 String::new()
@@ -683,7 +683,7 @@ async fn ensure_wsl_zed_helper(
         })?;
     ensure!(
         path.starts_with('/'),
-        "the WSL `zed` sandbox helper resolved to {path:?} rather than an absolute path"
+        "the WSL `vela` sandbox helper resolved to {path:?} rather than an absolute path"
     );
 
     cache
@@ -804,7 +804,7 @@ async fn resolve_uncached_paths(
         "-c".to_string(),
         PATH_RESOLUTION_SCRIPT.to_string(),
         // argv[0] for the script; the path triples follow as "$@".
-        "zed-resolve-paths".to_string(),
+        "vela-resolve-paths".to_string(),
     ];
     args.extend(path_resolution_args(
         mappings.iter().map(|mapping| &mapping.0),
@@ -1339,7 +1339,7 @@ mod tests {
 
     #[test]
     fn probe_output_reports_interop_and_bwrap_path() {
-        let probe = parse_probe_output("zed-wsl-probe: interop /usr/bin/bwrap\n").unwrap();
+        let probe = parse_probe_output("vela-wsl-probe: interop /usr/bin/bwrap\n").unwrap();
         assert_eq!(
             probe,
             EnvironmentProbe {
@@ -1349,7 +1349,7 @@ mod tests {
         );
 
         let probe =
-            parse_probe_output("zed-wsl-probe: no-interop /home/me/.nix-profile/bin/bwrap\n")
+            parse_probe_output("vela-wsl-probe: no-interop /home/me/.nix-profile/bin/bwrap\n")
                 .unwrap();
         assert_eq!(
             probe,
@@ -1375,15 +1375,15 @@ mod tests {
     fn probe_output_rejects_missing_or_malformed_result_line() {
         assert!(parse_probe_output("").is_err());
         assert!(parse_probe_output("profile noise only\n").is_err());
-        assert!(parse_probe_output("zed-wsl-probe: interop\n").is_err());
-        assert!(parse_probe_output("zed-wsl-probe: maybe /usr/bin/bwrap\n").is_err());
+        assert!(parse_probe_output("vela-wsl-probe: interop\n").is_err());
+        assert!(parse_probe_output("vela-wsl-probe: maybe /usr/bin/bwrap\n").is_err());
     }
 
     #[test]
     fn probe_output_rejects_non_absolute_bwrap_path() {
         // `command -v` reports a bare name for shell functions and aliases,
         // which `wsl --exec` could never run.
-        assert!(parse_probe_output("zed-wsl-probe: interop bwrap\n").is_err());
+        assert!(parse_probe_output("vela-wsl-probe: interop bwrap\n").is_err());
     }
 
     #[test]
@@ -1491,7 +1491,7 @@ mod tests {
     #[test]
     fn bwrap_binds_explicit_writable_file_paths() {
         let args = build_bwrap_args(
-            &["/mnt/c/Users/me/AppData/Roaming/Zed/AGENTS.md".to_string()],
+            &["/mnt/c/Users/me/AppData/Roaming/Vela/AGENTS.md".to_string()],
             &[],
             SandboxPermissions::default(),
             None,
@@ -1501,8 +1501,8 @@ mod tests {
         assert!(args.windows(3).any(|window| window
             == [
                 "--bind",
-                "/mnt/c/Users/me/AppData/Roaming/Zed/AGENTS.md",
-                "/mnt/c/Users/me/AppData/Roaming/Zed/AGENTS.md"
+                "/mnt/c/Users/me/AppData/Roaming/Vela/AGENTS.md",
+                "/mnt/c/Users/me/AppData/Roaming/Vela/AGENTS.md"
             ]));
     }
 
@@ -1825,7 +1825,7 @@ mod tests {
         assert!(!format!("{mixed_distros:#}").contains(WSL_SANDBOX_UNAVAILABLE_PREFIX));
 
         let missing_path =
-            path_to_wsl(Path::new(r"C:\zed-test\definitely\does\not\exist-2769")).unwrap_err();
+            path_to_wsl(Path::new(r"C:\vela-test\definitely\does\not\exist-2769")).unwrap_err();
         assert!(
             missing_path
                 .downcast_ref::<WslSandboxUnavailable>()

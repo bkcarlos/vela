@@ -257,7 +257,7 @@ pub fn make_get_authenticated_user_response(
         plans_by_organization: BTreeMap::new(),
         configuration_by_organization: BTreeMap::new(),
         plan: PlanInfo {
-            plan: KnownOrUnknown::Known(Plan::ZedPro),
+            plan: KnownOrUnknown::Known(Plan::VelaPro),
             subscription_period: None,
             usage: CurrentUsage {
                 edit_predictions: UsageData {

@@ -1,6 +1,6 @@
 //! Loopback OAuth 2.0 callback server and shared HTML response page.
 //!
-//! Used by Zed's OAuth-based sign-in flows (e.g. MCP servers, ChatGPT
+//! Used by Vela's OAuth-based sign-in flows (e.g. MCP servers, ChatGPT
 //! Subscription) to receive the authorization code redirect from the user's
 //! browser. The HTML response page rendered to the browser is kept alongside
 //! the server so all OAuth callback presentation lives in one place.
@@ -8,7 +8,7 @@
 /// Generate a styled HTML page for OAuth callback responses.
 ///
 /// Returns a complete HTML document (no HTTP headers) with a centered card
-/// layout styled to match Zed's dark theme. The `title` is rendered as a
+/// layout styled to match Vela's dark theme. The `title` is rendered as a
 /// heading and `message` as body text below it.
 ///
 /// When `is_error` is true, a red X icon is shown instead of the green

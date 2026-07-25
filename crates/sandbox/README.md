@@ -19,7 +19,7 @@ The sandbox itself assumes all untrusted code is maximally hostile. It does
 *not* assume that the untrusted code is written by a
 well-meaning-but-perhaps-marginally-unaligned AI agent.
 
-However, practical limitations make the default profile in Zed not secure
+However, practical limitations make the default profile in Vela not secure
 against attacks. An attacker with read/write access to the current directory can:
 - create a new Rust project in the current dir
 - create a proc macro library containing malicious code
@@ -44,7 +44,7 @@ The implementations are highly platform-specific:
 Note that WSL shells can be used on all Windows projects, regardless of whether
 the files are stored in the Linux filesystem or not.
 
-Though not defined in this crate, the default grants provided by the Zed agent is:
+Though not defined in this crate, the default grants provided by the Vela agent is:
 - read-only access to all files
 - read/write access to current project directories
   - read-only access to any Git metadata, including those in project directories
@@ -58,7 +58,7 @@ however largely follow a similar approach (details omitted):
 - Disable networking in the sandbox, except for one localhost port
 - Within the sandbox, set `HTTP_PROXY` and friends to tell programs to
   communicate with that socket
-- On the Zed host side, there is a proxy that listens to that port that enforces
+- On the Vela host side, there is a proxy that listens to that port that enforces
   domain filtering
 
 On Linux specifically, there is an intermediate socket that allows data to flow
@@ -94,7 +94,7 @@ Consider the following case:
   - the second subagent tries to run `echo 'export PATH="proj/obfuscated.../evil_eavesdropping_sudo/bin:$PATH"' >> proj/cache/.bashrc`
 - The user sends a prompt, we pick up the evil `AGENTS.md` instructions, and the
   agent does them
-- Zed checks whether paths are symlinks outside the allowable paths before
+- Vela checks whether paths are symlinks outside the allowable paths before
   passing them to bubblewrap, but there is a **time delay** between this check
   and when bubblewrap mounts them.
 - In this delay, the `renameat2` may succeed, which means that:
@@ -107,22 +107,22 @@ Consider the following case:
 
 ```mermaid
 sequenceDiagram
-    participant Agent as Zed Agent
+    participant Agent as Vela Agent
     participant S1 as Subagent 1 swapper
     participant S2 as Subagent 2 writer
-    participant Zed as Zed path validation
+    participant Vela as Vela path validation
     participant BW as bubblewrap
 
     Note over Agent: Evil AGENTS.md picked up, writable path granted
     Note over Agent: Grants rw project, rw project/cache, rw /tmp, ro /
     Agent->>S1: spawn swap project/cache for a symlink to /home/alice
     Agent->>S2: spawn append PATH hijack to project/cache/.bashrc
-    Zed->>Zed: check project/cache is not an out-of-bounds symlink
-    Note over Zed: at check time it is a real subdirectory, so OK
-    Note over Zed,BW: time delay, time-of-check to time-of-use
+    Vela->>Vela: check project/cache is not an out-of-bounds symlink
+    Note over Vela: at check time it is a real subdirectory, so OK
+    Note over Vela,BW: time delay, time-of-check to time-of-use
     S1->>S1: renameat2 RENAME_EXCHANGE wins the race
     Note over S1: project/cache is now a symlink to /home/alice
-    Zed->>BW: bind project/cache into the sandbox
+    Vela->>BW: bind project/cache into the sandbox
     BW->>BW: re-resolve project/cache, following symlink to /home/alice
     S2->>BW: write project/cache/.bashrc
     BW-->>S2: write lands in /home/alice/.bashrc
@@ -152,11 +152,11 @@ disallow nested directories". In theory, this would work. A read/write grant to 
 However, this is not a viable countermeasure for two reasons:
 
 1. It requires that no two grants of this kind ever exist at the same time
-   *globally across the whole system*. For example, opening `/foo` in one zed
+   *globally across the whole system*. For example, opening `/foo` in one vela
    window and `/foo/bar` in another would re-open this exploit. Even if we did
    mitigate this by widening `/foo/bar` to have access to `/foo` (which in
    itself is an unacceptable privilege escalation), we still wouldn't be able to
-   control non-Zed processes.
+   control non-Vela processes.
 2. It prevents the potentially useful pattern of:
   - read/write access to `/foo`
   - read-only access to `/foo/bar`
@@ -177,7 +177,7 @@ This leads to a different question: how do we tell `bwrap` to use FDs instead of
 FDs into the `bwrap` process?
 
 There are two options:
-1. open the FDs in zed, clear `CLOEXEC`, then fork/exec into bwrap with the FD arguments
+1. open the FDs in vela, clear `CLOEXEC`, then fork/exec into bwrap with the FD arguments
 2. send them into a helper process inside the sandbox using an `SCM_RIGHTS`
   socket, and validate from the inside of the sandbox.
 
@@ -188,7 +188,7 @@ The flow for this approach in detail is:
 - open each *writable* path we `--bind` and get an `O_PATH` FD (which pins the
   inode without granting read/write on its contents)
 - create an `SCM_RIGHTS` socket over which we can send the FDs
-- run `bwrap --bind /path1 /path1 ... -- zed --zed-linux-sandbox-launcher <untrusted program args>`
+- run `bwrap --bind /path1 /path1 ... -- vela --vela-linux-sandbox-launcher <untrusted program args>`
   - note: we use (potentially swapped) paths
   - we also mount the socket in the sandbox
 - the sandbox bridge reads the FDs from the socket, does the following for each
@@ -202,16 +202,16 @@ The flow for this approach in detail is:
 
 ```mermaid
 sequenceDiagram
-    participant Zed as Zed host
+    participant Vela as Vela host
     participant BW as bubblewrap
     participant Bridge as sandbox-bridge in sandbox
     participant Prog as untrusted program
 
-    Zed->>Zed: open O_PATH FD per writable path, pinning the inode
-    Zed->>Zed: create SCM_RIGHTS socket
-    Zed->>BW: exec bwrap, binding paths, then zed --zed-linux-sandbox-launcher
-    Note over Zed,BW: binds use possibly-swapped paths, socket mounted in sandbox
-    Zed->>Bridge: send FDs over the SCM_RIGHTS socket
+    Vela->>Vela: open O_PATH FD per writable path, pinning the inode
+    Vela->>Vela: create SCM_RIGHTS socket
+    Vela->>BW: exec bwrap, binding paths, then vela --vela-linux-sandbox-launcher
+    Note over Vela,BW: binds use possibly-swapped paths, socket mounted in sandbox
+    Vela->>Bridge: send FDs over the SCM_RIGHTS socket
     loop each writable bind
         Bridge->>Bridge: fstat the FD to get device and inode
         Bridge->>Bridge: lstat the mount path to get device and inode
@@ -220,7 +220,7 @@ sequenceDiagram
     alt all binds match
         Bridge->>Prog: exec the untrusted command
     else any mismatch, a path was swapped
-        Bridge-->>Zed: refuse to execute
+        Bridge-->>Vela: refuse to execute
     end
 ```
 
@@ -275,12 +275,12 @@ escape is already closed there without a seccomp filter.
   implementation. 
 
 The Linux approach works perfectly on WSL in theory (WSL uses a "regular linux
-kernel"), but there is one practical thorn: the zed host code that creates the
+kernel"), but there is one practical thorn: the vela host code that creates the
 FD is now running on Windows, but we need Linux file descriptors.
 
-To work around this, we launch `zed --wsl-sandbox-helper` in WSL, which is a
+To work around this, we launch `vela --wsl-sandbox-helper` in WSL, which is a
 shim that captures the FDs and sets up the socket. We download this to
-`~/.local/libexec/zed`, so that it does not conflict with the Windows `zed.exe`
+`~/.local/libexec/vela`, so that it does not conflict with the Windows `vela.exe`
 binary that WSL will inject into the Linux `$PATH` (yes the `.exe` is stripped).
 
 ### MacOS
@@ -299,7 +299,7 @@ mixture of Codex and Chromium's rules.
 Some of the denied services are somewhat questionable (i.e.
 `com.apple.FontObjectsServer`) - there are legitimate uses for an application to
 use this, but on the other hand, fonts can contain executable code, and have
-historically been exploited to achieve RCE. Given that, in the Zed agent, it is
+historically been exploited to achieve RCE. Given that, in the Vela agent, it is
 easy to opt-out of the sandbox, denying seems like a good choice. But we may
 want to revisit this.
 

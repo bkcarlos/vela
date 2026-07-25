@@ -184,12 +184,12 @@ fn path_covered_by_recursive_registration(
 /// Returns `true` for filesystem types where inotify/FSEvents/ReadDirectoryChanges
 /// silently fail to deliver events: 9P (WSL drvfs), NFS, CIFS/SMB, FUSE (sshfs), etc.
 ///
-/// Can be overridden with the `ZED_FILE_WATCHER_MODE` environment variable:
+/// Can be overridden with the `VELA_FILE_WATCHER_MODE` environment variable:
 /// - `native` — always use native OS watcher
 /// - `poll` — always use polling
 /// - `auto` (default) — auto-detect based on filesystem type
 pub fn requires_poll_watcher(path: &Path) -> bool {
-    match std::env::var("ZED_FILE_WATCHER_MODE")
+    match std::env::var("VELA_FILE_WATCHER_MODE")
         .as_deref()
         .unwrap_or("auto")
     {
@@ -1052,7 +1052,7 @@ impl GlobalWatcher {
         // watcher along with every path registered on it.
         let mut native_watcher = self.native_watcher.lock();
         if native_watcher.is_none() {
-            // CORE excludes Access events, which Zed discards anyway. Without this,
+            // CORE excludes Access events, which Vela discards anyway. Without this,
             // the default mask subscribes to inotify OPEN/CLOSE_* on Linux, so every
             // file read in a watched directory would queue events, increasing the
             // risk of queue overflows (and thus full rescans) under read-heavy
@@ -1088,7 +1088,7 @@ fn is_max_files_watch_error(error: &anyhow::Error) -> bool {
 }
 
 static POLL_INTERVAL: LazyLock<Duration> = LazyLock::new(|| {
-    let poll_ms: u64 = std::env::var("ZED_FILE_WATCHER_POLL_MS")
+    let poll_ms: u64 = std::env::var("VELA_FILE_WATCHER_POLL_MS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(2000)
@@ -1097,7 +1097,7 @@ static POLL_INTERVAL: LazyLock<Duration> = LazyLock::new(|| {
 });
 
 static NATIVE_WATCH_LIMIT_COOLDOWN: LazyLock<Duration> = LazyLock::new(|| {
-    let cooldown_seconds: u64 = std::env::var("ZED_NATIVE_WATCH_LIMIT_COOLDOWN_SECONDS")
+    let cooldown_seconds: u64 = std::env::var("VELA_NATIVE_WATCH_LIMIT_COOLDOWN_SECONDS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(5)

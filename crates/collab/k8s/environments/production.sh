@@ -1,2 +1,2 @@
-ZED_ENVIRONMENT=production
+VELA_ENVIRONMENT=production
 RUST_LOG=info

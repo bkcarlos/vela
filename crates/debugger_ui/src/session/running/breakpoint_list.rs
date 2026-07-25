@@ -28,8 +28,8 @@ use ui::{
     ScrollAxes, StatefulInteractiveElement, Tooltip, WithScrollbar, prelude::*,
 };
 use util::rel_path::RelPath;
+use vela_actions::{ToggleEnableBreakpoint, UnsetBreakpoint};
 use workspace::Workspace;
-use zed_actions::{ToggleEnableBreakpoint, UnsetBreakpoint};
 
 actions!(
     debugger,

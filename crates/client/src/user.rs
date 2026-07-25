@@ -764,15 +764,15 @@ impl UserStore {
 
     pub fn plan(&self) -> Option<Plan> {
         #[cfg(debug_assertions)]
-        if let Ok(plan) = std::env::var("ZED_SIMULATE_PLAN").as_ref() {
+        if let Ok(plan) = std::env::var("VELA_SIMULATE_PLAN").as_ref() {
             use cloud_api_client::Plan;
 
             return match plan.as_str() {
-                "free" => Some(Plan::ZedFree),
-                "trial" => Some(Plan::ZedProTrial),
-                "pro" => Some(Plan::ZedPro),
+                "free" => Some(Plan::VelaFree),
+                "trial" => Some(Plan::VelaProTrial),
+                "pro" => Some(Plan::VelaPro),
                 _ => {
-                    panic!("ZED_SIMULATE_PLAN must be one of 'free', 'trial', or 'pro'");
+                    panic!("VELA_SIMULATE_PLAN must be one of 'free', 'trial', or 'pro'");
                 }
             };
         }
@@ -856,7 +856,7 @@ impl UserStore {
         response: GetAuthenticatedUserResponse,
         cx: &mut Context<Self>,
     ) {
-        let staff = response.user.is_staff && !*feature_flags::ZED_DISABLE_STAFF;
+        let staff = response.user.is_staff && !*feature_flags::VELA_DISABLE_STAFF;
         cx.update_flags(staff, response.feature_flags);
         if let Some(client) = self.client.upgrade() {
             client
@@ -883,7 +883,7 @@ impl UserStore {
                     KnownOrUnknown::Known(plan) => plan,
                     KnownOrUnknown::Unknown(_) => {
                         // If we get a plan that we don't recognize, fall back to the Free plan.
-                        Plan::ZedFree
+                        Plan::VelaFree
                     }
                 };
 

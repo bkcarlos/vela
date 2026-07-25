@@ -11,11 +11,11 @@ use gpui::{Context, DismissEvent, Entity, Focusable as _, Pixels, Point, Subscri
 use project::DisableAiSettings;
 use std::ops::Range;
 use text::PointUtf16;
-use workspace::OpenInTerminal;
-use zed_actions::agent::AddSelectionToThread;
-use zed_actions::preview::{
+use vela_actions::agent::AddSelectionToThread;
+use vela_actions::preview::{
     markdown::OpenPreview as OpenMarkdownPreview, svg::OpenPreview as OpenSvgPreview,
 };
+use workspace::OpenInTerminal;
 
 #[derive(Debug)]
 pub enum MenuPosition {

@@ -23,16 +23,16 @@ wasmtime::component::bindgen!({
         "worktree": ExtensionWorktree,
         "project": ExtensionProject,
         "key-value-store": ExtensionKeyValueStore,
-        "zed:extension/common": latest::zed::extension::common,
-        "zed:extension/http-client": latest::zed::extension::http_client,
-        "zed:extension/nodejs": latest::zed::extension::nodejs,
-        "zed:extension/process": latest::zed::extension::process,
-        "zed:extension/slash-command": latest::zed::extension::slash_command,
-        "zed:extension/context-server": latest::zed::extension::context_server,
+        "vela:extension/common": latest::vela::extension::common,
+        "vela:extension/http-client": latest::vela::extension::http_client,
+        "vela:extension/nodejs": latest::vela::extension::nodejs,
+        "vela:extension/process": latest::vela::extension::process,
+        "vela:extension/slash-command": latest::vela::extension::slash_command,
+        "vela:extension/context-server": latest::vela::extension::context_server,
     },
 });
 
-pub use self::zed::extension::*;
+pub use self::vela::extension::*;
 
 mod settings {
     #![allow(dead_code)]
@@ -138,7 +138,7 @@ impl From<github::GithubReleaseOptions> for latest::github::GithubReleaseOptions
     }
 }
 
-impl zed::extension::github::Host for WasmState {
+impl vela::extension::github::Host for WasmState {
     async fn github_release_by_tag_name(
         &mut self,
         repo: String,
@@ -722,7 +722,7 @@ impl TryFrom<latest::DebugAdapterBinary> for DebugAdapterBinary {
     }
 }
 
-impl zed::extension::dap::Host for WasmState {
+impl vela::extension::dap::Host for WasmState {
     async fn resolve_tcp_template(
         &mut self,
         template: dap::TcpArgumentsTemplate,

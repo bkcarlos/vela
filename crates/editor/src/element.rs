@@ -6839,7 +6839,7 @@ pub fn render_breadcrumb_text(
                                         .justify_between()
                                         .child(Label::new("Show Symbol Outline"))
                                         .child(ui::KeyBinding::for_action_in(
-                                            &zed_actions::outline::ToggleOutline,
+                                            &vela_actions::outline::ToggleOutline,
                                             &focus_handle,
                                             cx,
                                         )),
@@ -6862,7 +6862,7 @@ pub fn render_breadcrumb_text(
                             move |_, window, cx| {
                                 if let Some((editor, callback)) = editor
                                     .upgrade()
-                                    .zip(zed_actions::outline::TOGGLE_OUTLINE.get())
+                                    .zip(vela_actions::outline::TOGGLE_OUTLINE.get())
                                 {
                                     callback(editor.to_any_view(), window, cx);
                                 }
@@ -10829,7 +10829,7 @@ mod tests {
         }
     }
 
-    // Regression test for https://github.com/zed-industries/zed/issues/48141.
+    // Regression test for https://github.com/vela-industries/vela/issues/48141.
     #[gpui::test]
     fn test_selection_layout_around_inlay(cx: &mut TestAppContext) {
         init_test(cx, |_| {});

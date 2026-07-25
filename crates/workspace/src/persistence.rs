@@ -543,9 +543,9 @@ impl Domain for WorkspaceDb {
             CREATE TABLE workspaces(
                 workspace_id INTEGER PRIMARY KEY,
                 workspace_location BLOB UNIQUE,
-                dock_visible INTEGER, // Deprecated. Preserving so users can downgrade Zed.
-                dock_anchor TEXT, // Deprecated. Preserving so users can downgrade Zed.
-                dock_pane INTEGER, // Deprecated.  Preserving so users can downgrade Zed.
+                dock_visible INTEGER, // Deprecated. Preserving so users can downgrade Vela.
+                dock_anchor TEXT, // Deprecated. Preserving so users can downgrade Vela.
+                dock_pane INTEGER, // Deprecated.  Preserving so users can downgrade Vela.
                 left_sidebar_open INTEGER, // Boolean
                 timestamp TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 FOREIGN KEY(dock_pane) REFERENCES panes(pane_id)
@@ -609,9 +609,9 @@ impl Domain for WorkspaceDb {
             CREATE TABLE workspaces_2(
                 workspace_id INTEGER PRIMARY KEY,
                 workspace_location BLOB UNIQUE,
-                dock_visible INTEGER, // Deprecated. Preserving so users can downgrade Zed.
-                dock_anchor TEXT, // Deprecated. Preserving so users can downgrade Zed.
-                dock_pane INTEGER, // Deprecated.  Preserving so users can downgrade Zed.
+                dock_visible INTEGER, // Deprecated. Preserving so users can downgrade Vela.
+                dock_anchor TEXT, // Deprecated. Preserving so users can downgrade Vela.
+                dock_pane INTEGER, // Deprecated.  Preserving so users can downgrade Vela.
                 left_sidebar_open INTEGER, // Boolean
                 timestamp TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 window_state TEXT,
@@ -646,7 +646,7 @@ impl Domain for WorkspaceDb {
         ),
         // Add fullscreen field to workspace
         // Deprecated, `WindowBounds` holds the fullscreen state now.
-        // Preserving so users can downgrade Zed.
+        // Preserving so users can downgrade Vela.
         sql!(
             ALTER TABLE workspaces ADD COLUMN fullscreen INTEGER; //bool
         ),
@@ -2174,7 +2174,7 @@ impl WorkspaceDb {
     }
 
     // Returns the locations of the workspaces that were still opened when the last
-    // session was closed (i.e. when Zed was quit).
+    // session was closed (i.e. when Vela was quit).
     // If `last_session_window_order` is provided, the returned locations are ordered
     // according to that.
     pub async fn last_session_workspace_locations(

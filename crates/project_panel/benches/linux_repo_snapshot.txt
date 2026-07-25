@@ -20113,7 +20113,7 @@ f:arch/arm/boot/dts/xilinx/zynq-zc770-xm010.dts
 f:arch/arm/boot/dts/xilinx/zynq-zc770-xm011.dts
 f:arch/arm/boot/dts/xilinx/zynq-zc770-xm012.dts
 f:arch/arm/boot/dts/xilinx/zynq-zc770-xm013.dts
-f:arch/arm/boot/dts/xilinx/zynq-zed.dts
+f:arch/arm/boot/dts/xilinx/zynq-vela.dts
 f:arch/arm/boot/dts/xilinx/zynq-zturn-common.dtsi
 f:arch/arm/boot/dts/xilinx/zynq-zturn-v5.dts
 f:arch/arm/boot/dts/xilinx/zynq-zturn.dts

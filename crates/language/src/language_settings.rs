@@ -90,7 +90,7 @@ pub struct LanguageSettings {
     pub line_ending: LineEndingSetting,
     /// How to perform a buffer format.
     pub formatter: settings::FormatterList,
-    /// Zed's Prettier integration settings.
+    /// Vela's Prettier integration settings.
     pub prettier: PrettierSettings,
     /// Whether to automatically close JSX tags.
     pub jsx_tag_auto_close: bool,
@@ -246,13 +246,13 @@ pub struct LanguageTaskSettings {
     /// Extra task variables to set for a particular language.
     pub variables: HashMap<String, String>,
     pub enabled: bool,
-    /// Use LSP tasks over Zed language extension ones.
+    /// Use LSP tasks over Vela language extension ones.
     /// If no LSP tasks are returned due to error/timeout or regular execution,
-    /// Zed language extension tasks will be used instead.
+    /// Vela language extension tasks will be used instead.
     ///
-    /// Other Zed tasks will still be shown:
-    /// * Zed task from either of the task config file
-    /// * Zed task from history (e.g. one-off task was spawned before)
+    /// Other Vela tasks will still be shown:
+    /// * Vela task from either of the task config file
+    /// * Vela task from history (e.g. one-off task was spawned before)
     pub prefer_lsp: bool,
 }
 
@@ -699,7 +699,7 @@ fn merge_with_editorconfig(settings: &mut LanguageSettings, cfg: &EditorconfigPr
         .merge_from_option(preferred_line_length.as_ref());
     settings.tab_size.merge_from_option(tab_size.as_ref());
     settings.hard_tabs.merge_from_option(hard_tabs.as_ref());
-    // Avoid re-enabling destructive whitespace trimming when Zed settings have
+    // Avoid re-enabling destructive whitespace trimming when Vela settings have
     // disabled it, e.g. for Markdown hard breaks.
     if !matches!(remove_trailing_whitespace_on_save, Some(true))
         || settings.remove_trailing_whitespace_on_save

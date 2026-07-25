@@ -498,7 +498,7 @@ mod tests {
         fs.insert_tree(
             path!("/dir"),
             json!({
-                ".zed": {
+                ".vela": {
                     "tasks.json": r#"[
                             {
                                 "label": "example task",

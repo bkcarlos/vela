@@ -47,11 +47,11 @@ use util::{
     post_inc,
     rel_path::RelPath,
 };
+use vela_actions::search::ToggleIncludeIgnored;
 use workspace::{
     ModalView, OpenChannelNotesById, OpenOptions, OpenVisible, SplitDirection, Workspace,
     item::PreviewTabsSettings, notifications::NotifyResultExt, pane,
 };
-use zed_actions::search::ToggleIncludeIgnored;
 
 actions!(
     file_finder,

@@ -22,8 +22,8 @@ use ui::{
     prelude::*,
 };
 use util::rel_path::RelPath;
+use vela_actions::ShowCallStats;
 use workspace::{ParticipantLocation, notifications::DetachAndPromptErr};
-use zed_actions::ShowCallStats;
 
 use crate::TitleBar;
 
@@ -87,7 +87,7 @@ pub fn toggle_screen_sharing(
         }
         Err(e) => Task::ready(Err(e)),
     };
-    toggle_screen_sharing.detach_and_prompt_err("Sharing Screen Failed", window, cx, |e, _, _| Some(format!("{:?}\n\nPlease check that you have given Zed permissions to record your screen in Settings.", e)));
+    toggle_screen_sharing.detach_and_prompt_err("Sharing Screen Failed", window, cx, |e, _, _| Some(format!("{:?}\n\nPlease check that you have given Vela permissions to record your screen in Settings.", e)));
 }
 
 pub fn toggle_mute(cx: &mut App) {

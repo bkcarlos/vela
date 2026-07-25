@@ -9,8 +9,8 @@ use gpui::{
     ModifiersChangedEvent, Render, ScrollHandle, SharedString, prelude::*,
 };
 use ui::{AgentThreadStatus, ThreadItem, ThreadItemWorktreeInfo, WithScrollbar, prelude::*};
+use vela_actions::agents_sidebar::ToggleThreadSwitcher;
 use workspace::{ModalView, Workspace};
-use zed_actions::agents_sidebar::ToggleThreadSwitcher;
 
 use super::ThreadEntryWorkspace;
 

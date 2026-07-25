@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use settings::{DefaultOpenBehavior, Settings};
 use ui::{ButtonLike, Divider, DividerColor, KeyBinding, Vector, VectorName, prelude::*};
 use util::ResultExt;
-use zed_actions::{
+use vela_actions::{
     Extensions, OpenKeymap, OpenOnboarding, OpenSettings, assistant::ToggleFocus, command_palette,
 };
 
@@ -30,9 +30,9 @@ pub struct OpenRecentProject {
 }
 
 actions!(
-    zed,
+    vela,
     [
-        /// Show the Zed welcome screen
+        /// Show the Vela welcome screen
         ShowWelcome
     ]
 );
@@ -319,7 +319,7 @@ impl WelcomePage {
                         })
                         .log_err();
                 } else {
-                    use zed_actions::OpenRecent;
+                    use vela_actions::OpenRecent;
                     window.dispatch_action(OpenRecent::default().boxed_clone(), cx);
                 }
             }
@@ -448,9 +448,9 @@ impl Render for WelcomePage {
         };
 
         let welcome_label = if self.fallback_to_recent_projects {
-            "Welcome back to Zed"
+            "Welcome back to Vela"
         } else {
-            "Welcome to Zed"
+            "Welcome to Vela"
         };
 
         h_flex()
@@ -686,8 +686,8 @@ mod tests {
     #[test]
     fn test_project_name_multiple() {
         // PathList sorts lexicographically, so filenames appear in alpha order
-        let paths = PathList::new(&["/home/user/zed", "/home/user/api"]);
-        assert_eq!(project_name(&paths), "api, zed");
+        let paths = PathList::new(&["/home/user/vela", "/home/user/api"]);
+        assert_eq!(project_name(&paths), "api, vela");
     }
 
     #[test]

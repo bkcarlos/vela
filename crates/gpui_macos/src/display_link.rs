@@ -10,7 +10,7 @@
 //!   the link in #32116);
 //! * releasing the dispatch source that the output callback dereferenced via
 //!   its context pointer let a straggler callback read freed memory (segfault
-//!   in `dispatch_source_merge_data`, Sentry issue ZED-7XR).
+//!   in `dispatch_source_merge_data`, Sentry issue VELA-7XR).
 //!
 //! Instead of leaking one link and one source per teardown (and teardown
 //! happens on every resize tick, activation, and occlusion change), we keep a
@@ -273,7 +273,7 @@ impl Drop for WindowFrameSource {
     fn drop(&mut self) {
         self.stop();
         // Unsubscribing makes this source unreachable from the output
-        // callback, so unlike before (ZED-7XR) it is safe to actually release
+        // callback, so unlike before (VELA-7XR) it is safe to actually release
         // it. Cancelling first guarantees the event handler never runs again;
         // its context points at the window's native view, which may be
         // deallocated after this.

@@ -1,6 +1,6 @@
-//! # UI – Zed UI Primitives & Components
+//! # UI – Vela UI Primitives & Components
 //!
-//! This crate provides a set of UI primitives and components that are used to build all of the elements in Zed's UI.
+//! This crate provides a set of UI primitives and components that are used to build all of the elements in Vela's UI.
 //!
 //! ## Related Crates:
 //!

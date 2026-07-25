@@ -6,12 +6,12 @@ use crate::{KnownOrUnknown, Timestamp};
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
     #[default]
-    ZedFree,
-    ZedPro,
-    ZedProTrial,
-    ZedBusiness,
-    ZedVip,
-    ZedStudent,
+    VelaFree,
+    VelaPro,
+    VelaProTrial,
+    VelaBusiness,
+    VelaVip,
+    VelaStudent,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl PlanInfo {
             KnownOrUnknown::Known(plan) => *plan,
             KnownOrUnknown::Unknown(_) => {
                 // If we get a plan that we don't recognize, fall back to the Free plan.
-                Plan::ZedFree
+                Plan::VelaFree
             }
         }
     }
@@ -53,16 +53,16 @@ mod tests {
 
     #[test]
     fn test_plan_deserialize_snake_case() {
-        let plan = serde_json::from_value::<Plan>(json!("zed_free")).unwrap();
-        assert_eq!(plan, Plan::ZedFree);
+        let plan = serde_json::from_value::<Plan>(json!("vela_free")).unwrap();
+        assert_eq!(plan, Plan::VelaFree);
 
-        let plan = serde_json::from_value::<Plan>(json!("zed_pro")).unwrap();
-        assert_eq!(plan, Plan::ZedPro);
+        let plan = serde_json::from_value::<Plan>(json!("vela_pro")).unwrap();
+        assert_eq!(plan, Plan::VelaPro);
 
-        let plan = serde_json::from_value::<Plan>(json!("zed_pro_trial")).unwrap();
-        assert_eq!(plan, Plan::ZedProTrial);
+        let plan = serde_json::from_value::<Plan>(json!("vela_pro_trial")).unwrap();
+        assert_eq!(plan, Plan::VelaProTrial);
 
-        let plan = serde_json::from_value::<Plan>(json!("zed_student")).unwrap();
-        assert_eq!(plan, Plan::ZedStudent);
+        let plan = serde_json::from_value::<Plan>(json!("vela_student")).unwrap();
+        assert_eq!(plan, Plan::VelaStudent);
     }
 }

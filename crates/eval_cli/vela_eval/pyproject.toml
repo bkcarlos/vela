@@ -1,0 +1,17 @@
+[project]
+name = "vela-eval"
+version = "0.2.0"
+description = "Harbor agent wrapper and remote orchestration CLI for Vela's eval-cli"
+requires-python = ">=3.12"
+dependencies = ["harbor==0.15.0", "modal==1.5.0"]
+
+[project.scripts]
+vela-eval = "vela_eval.cli:main"
+
+[tool.setuptools]
+packages = ["vela_eval"]
+package-dir = { vela_eval = "." }
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

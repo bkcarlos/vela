@@ -510,14 +510,14 @@ impl Vim {
             // below could be done.
             //
             // ```
-            // (< name:ˇ'Zed' >)
+            // (< name:ˇ'Vela' >)
             // <[ name:ˇ'DeltaDB' ]>
             // ```
             //
             // After using `csb{`:
             //
             // ```
-            // (ˇ{ name:'Zed' })
+            // (ˇ{ name:'Vela' })
             // <ˇ{ name:'DeltaDB' }>
             // ```
             if let Some(selection) = selections.first() {
@@ -1354,13 +1354,13 @@ mod test {
         cx.simulate_keystrokes("c s b [");
         cx.assert_state(indoc! {"ˇ[ bracketed ]"}, Mode::Normal);
 
-        cx.set_state(indoc! {"(< name: ˇ'Zed' >)"}, Mode::Normal);
+        cx.set_state(indoc! {"(< name: ˇ'Vela' >)"}, Mode::Normal);
         cx.simulate_keystrokes("c s b }");
-        cx.assert_state(indoc! {"(ˇ{ name: 'Zed' })"}, Mode::Normal);
+        cx.assert_state(indoc! {"(ˇ{ name: 'Vela' })"}, Mode::Normal);
 
         cx.set_state(
             indoc! {"
-            (< name: ˇ'Zed' >)
+            (< name: ˇ'Vela' >)
             (< nˇame: 'DeltaDB' >)
         "},
             Mode::Normal,
@@ -1368,7 +1368,7 @@ mod test {
         cx.simulate_keystrokes("c s b {");
         cx.set_state(
             indoc! {"
-            (ˇ{ name: 'Zed' })
+            (ˇ{ name: 'Vela' })
             (ˇ{ name: 'DeltaDB' })
         "},
             Mode::Normal,
@@ -1404,13 +1404,13 @@ mod test {
         cx.simulate_keystrokes("c s b [");
         cx.assert_state(indoc! {"ˇ[ bracketed ]"}, Mode::Normal);
 
-        cx.set_state(indoc! {"(<ˇZed>)"}, Mode::Normal);
+        cx.set_state(indoc! {"(<ˇVela>)"}, Mode::Normal);
         cx.simulate_keystrokes("c s b )");
-        cx.assert_state(indoc! {"(ˇ(Zed))"}, Mode::Normal);
+        cx.assert_state(indoc! {"(ˇ(Vela))"}, Mode::Normal);
 
         cx.set_state(
             indoc! {"
-                (<ˇZed>)
+                (<ˇVela>)
                 (<ˇDeltaDB>)
             "},
             Mode::Normal,
@@ -1418,7 +1418,7 @@ mod test {
         cx.simulate_keystrokes("c s b (");
         cx.assert_state(
             indoc! {"
-                (ˇ( Zed ))
+                (ˇ( Vela ))
                 (ˇ( DeltaDB ))
             "},
             Mode::Normal,

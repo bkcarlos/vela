@@ -11,8 +11,8 @@ use theme::{Appearance, SystemAppearance, ThemeMeta, ThemeRegistry};
 use theme_settings::{IconThemeName, IconThemeSelection, ThemeSettings};
 use ui::{ListItem, ListItemSpacing, prelude::*, v_flex};
 use util::ResultExt;
+use vela_actions::{ExtensionCategoryFilter, Extensions};
 use workspace::{ModalView, ui::HighlightedLabel};
-use zed_actions::{ExtensionCategoryFilter, Extensions};
 
 pub(crate) struct IconThemeSelector {
     picker: Entity<Picker<IconThemeSelectorDelegate>>,
@@ -341,7 +341,7 @@ impl PickerDelegate for IconThemeSelectorDelegate {
                                 .color(Color::Muted),
                         )
                         .on_click(|_event, _window, cx| {
-                            cx.open_url("https://zed.dev/docs/icon-themes");
+                            cx.open_url("https://vela.dev/docs/icon-themes");
                         }),
                 )
                 .child(
@@ -427,7 +427,7 @@ mod tests {
         workspace: &Entity<workspace::Workspace>,
         cx: &mut VisualTestContext,
     ) -> Entity<Picker<IconThemeSelectorDelegate>> {
-        cx.dispatch_action(zed_actions::icon_theme_selector::Toggle {
+        cx.dispatch_action(vela_actions::icon_theme_selector::Toggle {
             themes_filter: None,
         });
         cx.run_until_parked();

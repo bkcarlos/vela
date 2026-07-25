@@ -83,11 +83,11 @@ pub fn meta_with_tool_name(tool_name: &str) -> acp::Meta {
 pub const COMMAND_CATEGORY_META_KEY: &str = "command_category";
 
 /// The source category of a slash command, used to group commands in the
-/// completion popup. Only the native Zed agent annotates its commands; commands
+/// completion popup. Only the native Vela agent annotates its commands; commands
 /// from external ACP agents carry no category and are grouped on their own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandCategory {
-    /// Built-in Zed agent commands (e.g. `/compact`).
+    /// Built-in Vela agent commands (e.g. `/compact`).
     Native,
     /// Commands sourced from MCP server prompts.
     Mcp,
@@ -2019,7 +2019,7 @@ pub const TOKEN_USAGE_WARNING_THRESHOLD: f32 = 0.8;
 impl TokenUsage {
     pub fn ratio(&self) -> TokenUsageRatio {
         #[cfg(debug_assertions)]
-        let warning_threshold: f32 = std::env::var("ZED_THREAD_WARNING_THRESHOLD")
+        let warning_threshold: f32 = std::env::var("VELA_THREAD_WARNING_THRESHOLD")
             .unwrap_or(TOKEN_USAGE_WARNING_THRESHOLD.to_string())
             .parse()
             .unwrap();
@@ -5802,7 +5802,7 @@ mod tests {
             .unwrap();
 
         thread
-            .update(cx, |thread, cx| thread.send_raw("Hello from Zed!", cx))
+            .update(cx, |thread, cx| thread.send_raw("Hello from Vela!", cx))
             .await
             .unwrap();
 
@@ -5812,7 +5812,7 @@ mod tests {
             indoc! {r#"
             ## User
 
-            Hello from Zed!
+            Hello from Vela!
 
             ## Assistant
 
@@ -5938,12 +5938,12 @@ mod tests {
             .unwrap();
 
         thread
-            .update(cx, |thread, cx| thread.send_raw("Hello from Zed!", cx))
+            .update(cx, |thread, cx| thread.send_raw("Hello from Vela!", cx))
             .await
             .unwrap();
 
         let output = thread.read_with(cx, |thread, cx| thread.to_markdown(cx));
-        assert_eq!(output.matches("Hello from Zed!").count(), 1);
+        assert_eq!(output.matches("Hello from Vela!").count(), 1);
         thread.read_with(cx, |thread, _cx| {
             let Some(AgentThreadEntry::UserMessage(message)) = thread.entries.first() else {
                 panic!("expected optimistic user message");
@@ -9999,7 +9999,7 @@ mod tests {
     /// the outer task observes `rx.await` returning `Err(Cancelled)` and
     /// must still clear `running_turn` so the panel transitions out of
     /// `Generating`. Without this, the agent thread is wedged in the
-    /// loading state until Zed restarts.
+    /// loading state until Vela restarts.
     #[gpui::test]
     async fn test_running_turn_cleared_when_send_task_dropped(cx: &mut TestAppContext) {
         init_test(cx);

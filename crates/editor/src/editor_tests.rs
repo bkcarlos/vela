@@ -20448,7 +20448,7 @@ async fn test_completion_can_run_commands(cx: &mut TestAppContext) {
     assert_eq!(
         command_calls.load(atomic::Ordering::Acquire),
         1,
-        "For completion with a registered command, Zed should send a command execution request",
+        "For completion with a registered command, Vela should send a command execution request",
     );
 
     editor.update_in(cx, |editor, window, cx| {
@@ -20487,7 +20487,7 @@ async fn test_completion_can_run_commands(cx: &mut TestAppContext) {
     assert_eq!(
         command_calls.load(atomic::Ordering::Acquire),
         1,
-        "For completion with an unregistered command, Zed should not send a command execution request",
+        "For completion with an unregistered command, Vela should not send a command execution request",
     );
 }
 
@@ -22186,7 +22186,7 @@ async fn test_toggle_block_comment(cx: &mut TestAppContext) {
     cx.update_editor(|editor, window, cx| {
         editor.toggle_comments(&ToggleComments::default(), window, cx)
     });
-    // TODO this is how it actually worked in Zed Stable, which is not very ergonomic.
+    // TODO this is how it actually worked in Vela Stable, which is not very ergonomic.
     // Uncommenting and commenting from this position brings in even more wrong artifacts.
     cx.assert_editor_state(
         &r#"
@@ -24404,7 +24404,7 @@ async fn check_completion_additional_edits(
 
 // rust-analyzer's ref-match completions (`&some_str`) deliver the `&` as a
 // zero-width additionalTextEdit at the primary edit's start.
-// Ref: https://github.com/zed-industries/zed/issues/56973
+// Ref: https://github.com/vela-industries/vela/issues/56973
 #[gpui::test]
 async fn test_completions_with_zero_width_additional_edit_at_primary_edit_start(
     cx: &mut TestAppContext,
@@ -24438,7 +24438,7 @@ async fn test_completions_with_zero_width_additional_edit_at_primary_edit_start(
 
 // Additional edits which overlap the primary completion edit must be skipped
 // while non-overlapping edits from the same completion are still applied.
-// Ref: https://github.com/zed-industries/zed/pull/1871
+// Ref: https://github.com/vela-industries/vela/pull/1871
 #[gpui::test]
 async fn test_completions_skip_additional_edits_overlapping_primary_edit(cx: &mut TestAppContext) {
     check_completion_additional_edits(
@@ -24477,7 +24477,7 @@ async fn test_completions_skip_additional_edits_overlapping_primary_edit(cx: &mu
 // start at the very beginning of the file, the additional edit must not be
 // treated as overlapping. This payload shape matches what
 // typescript-language-server actually sends for auto-imports at file start.
-// Ref: https://github.com/zed-industries/zed/issues/26136
+// Ref: https://github.com/vela-industries/vela/issues/26136
 #[gpui::test]
 async fn test_completions_with_file_start_auto_import_additional_edit(cx: &mut TestAppContext) {
     check_completion_additional_edits(
@@ -26107,7 +26107,7 @@ struct Row10;"#};
         &mut cx,
     );
 
-    // Deletion hunks are ephemeral, so it's impossible to place the caret into them — Zed triggers reverts for lines, adjacent to carets and selections.
+    // Deletion hunks are ephemeral, so it's impossible to place the caret into them — Vela triggers reverts for lines, adjacent to carets and selections.
     assert_hunk_revert(
         indoc! {r#"struct Row;
                    ˇstruct Row2;
@@ -36246,7 +36246,7 @@ async fn test_paste_url_from_other_app_creates_markdown_link_over_selected_text(
 ) {
     init_test(cx, |_| {});
 
-    let url = "https://zed.dev";
+    let url = "https://vela.dev";
 
     let markdown_language = Arc::new(Language::new(
         LanguageConfig {
@@ -36258,7 +36258,7 @@ async fn test_paste_url_from_other_app_creates_markdown_link_over_selected_text(
 
     let mut cx = EditorTestContext::new(cx).await;
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(markdown_language), cx));
-    cx.set_state("Hello, «editorˇ».\nZed is «ˇgreat» (see this link: ˇ)");
+    cx.set_state("Hello, «editorˇ».\nVela is «ˇgreat» (see this link: ˇ)");
 
     cx.update_editor(|editor, window, cx| {
         cx.write_to_clipboard(ClipboardItem::new_string(url.to_string()));
@@ -36266,7 +36266,7 @@ async fn test_paste_url_from_other_app_creates_markdown_link_over_selected_text(
     });
 
     cx.assert_editor_state(&format!(
-        "Hello, [editor]({url})ˇ.\nZed is [great]({url})ˇ (see this link: {url}ˇ)"
+        "Hello, [editor]({url})ˇ.\nVela is [great]({url})ˇ (see this link: {url}ˇ)"
     ));
 }
 
@@ -36399,12 +36399,12 @@ async fn test_markdown_indents(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-async fn test_paste_url_from_zed_copy_creates_markdown_link_over_selected_text(
+async fn test_paste_url_from_vela_copy_creates_markdown_link_over_selected_text(
     cx: &mut gpui::TestAppContext,
 ) {
     init_test(cx, |_| {});
 
-    let url = "https://zed.dev";
+    let url = "https://vela.dev";
 
     let markdown_language = Arc::new(Language::new(
         LanguageConfig {
@@ -36417,7 +36417,7 @@ async fn test_paste_url_from_zed_copy_creates_markdown_link_over_selected_text(
     let mut cx = EditorTestContext::new(cx).await;
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(markdown_language), cx));
     cx.set_state(&format!(
-        "Hello, editor.\nZed is great (see this link: )\n«{url}ˇ»"
+        "Hello, editor.\nVela is great (see this link: )\n«{url}ˇ»"
     ));
 
     cx.update_editor(|editor, window, cx| {
@@ -36425,7 +36425,7 @@ async fn test_paste_url_from_zed_copy_creates_markdown_link_over_selected_text(
     });
 
     cx.set_state(&format!(
-        "Hello, «editorˇ».\nZed is «ˇgreat» (see this link: ˇ)\n{url}"
+        "Hello, «editorˇ».\nVela is «ˇgreat» (see this link: ˇ)\n{url}"
     ));
 
     cx.update_editor(|editor, window, cx| {
@@ -36433,7 +36433,7 @@ async fn test_paste_url_from_zed_copy_creates_markdown_link_over_selected_text(
     });
 
     cx.assert_editor_state(&format!(
-        "Hello, [editor]({url})ˇ.\nZed is [great]({url})ˇ (see this link: {url}ˇ)\n{url}"
+        "Hello, [editor]({url})ˇ.\nVela is [great]({url})ˇ (see this link: {url}ˇ)\n{url}"
     ));
 }
 
@@ -36443,7 +36443,7 @@ async fn test_paste_url_from_other_app_replaces_existing_url_without_creating_ma
 ) {
     init_test(cx, |_| {});
 
-    let url = "https://zed.dev";
+    let url = "https://vela.dev";
 
     let markdown_language = Arc::new(Language::new(
         LanguageConfig {
@@ -36455,14 +36455,14 @@ async fn test_paste_url_from_other_app_replaces_existing_url_without_creating_ma
 
     let mut cx = EditorTestContext::new(cx).await;
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(markdown_language), cx));
-    cx.set_state("Please visit zed's homepage: «https://www.apple.comˇ»");
+    cx.set_state("Please visit vela's homepage: «https://www.apple.comˇ»");
 
     cx.update_editor(|editor, window, cx| {
         cx.write_to_clipboard(ClipboardItem::new_string(url.to_string()));
         editor.paste(&Paste, window, cx);
     });
 
-    cx.assert_editor_state(&format!("Please visit zed's homepage: {url}ˇ"));
+    cx.assert_editor_state(&format!("Please visit vela's homepage: {url}ˇ"));
 }
 
 #[gpui::test]
@@ -36483,14 +36483,14 @@ async fn test_paste_plain_text_from_other_app_replaces_selection_without_creatin
 
     let mut cx = EditorTestContext::new(cx).await;
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(markdown_language), cx));
-    cx.set_state("Hello, «editorˇ».\nZed is «ˇgreat»");
+    cx.set_state("Hello, «editorˇ».\nVela is «ˇgreat»");
 
     cx.update_editor(|editor, window, cx| {
         cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
         editor.paste(&Paste, window, cx);
     });
 
-    cx.assert_editor_state(&format!("Hello, {text}ˇ.\nZed is {text}ˇ"));
+    cx.assert_editor_state(&format!("Hello, {text}ˇ.\nVela is {text}ˇ"));
 }
 
 #[gpui::test]
@@ -36529,7 +36529,7 @@ async fn test_paste_url_from_other_app_without_creating_markdown_link_in_non_mar
 ) {
     init_test(cx, |_| {});
 
-    let url = "https://zed.dev";
+    let url = "https://vela.dev";
 
     let markdown_language = Arc::new(Language::new(
         LanguageConfig {
@@ -36541,7 +36541,7 @@ async fn test_paste_url_from_other_app_without_creating_markdown_link_in_non_mar
 
     let mut cx = EditorTestContext::new(cx).await;
     cx.update_buffer(|buffer, cx| buffer.set_language(Some(markdown_language), cx));
-    cx.set_state("// Hello, «editorˇ».\n// Zed is «ˇgreat» (see this link: ˇ)");
+    cx.set_state("// Hello, «editorˇ».\n// Vela is «ˇgreat» (see this link: ˇ)");
 
     cx.update_editor(|editor, window, cx| {
         cx.write_to_clipboard(ClipboardItem::new_string(url.to_string()));
@@ -36549,7 +36549,7 @@ async fn test_paste_url_from_other_app_without_creating_markdown_link_in_non_mar
     });
 
     cx.assert_editor_state(&format!(
-        "// Hello, {url}ˇ.\n// Zed is {url}ˇ (see this link: {url}ˇ)"
+        "// Hello, {url}ˇ.\n// Vela is {url}ˇ (see this link: {url}ˇ)"
     ));
 }
 
@@ -36559,7 +36559,7 @@ async fn test_paste_url_from_other_app_creates_markdown_link_selectively_in_mult
 ) {
     init_test(cx, |_| {});
 
-    let url = "https://zed.dev";
+    let url = "https://vela.dev";
 
     let markdown_language = Arc::new(Language::new(
         LanguageConfig {
@@ -39146,7 +39146,7 @@ async fn test_local_worktree_trust(cx: &mut TestAppContext) {
     fs.insert_tree(
         path!("/project"),
         json!({
-            ".zed": {
+            ".vela": {
                 "settings.json": r#"{"languages":{"Rust":{"language_servers":["override-rust-analyzer"]}}}"#
             },
             "main.rs": "fn main() {}"
@@ -39245,7 +39245,7 @@ async fn test_local_worktree_trust(cx: &mut TestAppContext) {
             [language::language_settings::ConfiguredLanguageServer::new(
                 "..."
             )],
-            "local .zed/settings.json must not apply before trust approval"
+            "local .vela/settings.json must not apply before trust approval"
         )
     });
 
@@ -39280,7 +39280,7 @@ async fn test_local_worktree_trust(cx: &mut TestAppContext) {
             [language::language_settings::ConfiguredLanguageServer::new(
                 "override-rust-analyzer"
             )],
-            "local .zed/settings.json should apply after trust approval"
+            "local .vela/settings.json should apply after trust approval"
         )
     });
     let _fake_language_server = fake_language_server.await.unwrap();

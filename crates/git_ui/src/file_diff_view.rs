@@ -132,7 +132,7 @@ impl FileDiffView {
         let (buffer_changes_tx, mut buffer_changes_rx) = watch::channel(());
 
         // The buffers' languages may load after the diff was built, e.g. when
-        // opening the view on startup via `zed --diff`. Propagate them to the
+        // opening the view on startup via `vela --diff`. Propagate them to the
         // base text buffer, which the split view's left-hand side displays.
         cx.subscribe(&new_buffer, {
             let base_text_buffer = diff.read(cx).base_text_buffer().downgrade();
@@ -616,7 +616,7 @@ mod tests {
         cx.run_until_parked();
 
         // Language detection completes only after the diff view was created,
-        // as happens on startup with `zed -n --diff old new`.
+        // as happens on startup with `vela -n --diff old new`.
         let language = Arc::new(Language::new(
             LanguageConfig {
                 name: "Rust".into(),

@@ -1,10 +1,10 @@
 [package]
-name = "zed_extension_api"
+name = "vela_extension_api"
 version = "0.8.0"
-description = "APIs for creating Zed extensions in Rust"
-repository = "https://github.com/zed-industries/zed"
-documentation = "https://docs.rs/zed_extension_api"
-keywords = ["zed", "extension"]
+description = "APIs for creating Vela extensions in Rust"
+repository = "https://github.com/zed-industries/vela"
+documentation = "https://docs.rs/vela_extension_api"
+keywords = ["vela", "extension"]
 edition.workspace = true
 # Change back to `true` when we're ready to publish v0.8.0.
 publish = false

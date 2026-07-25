@@ -1880,10 +1880,10 @@ async fn test_mcp_tool_result_displayed_when_server_disconnected(cx: &mut TestAp
         LanguageModelToolUse {
             id: "tool_1".into(),
             name: "issue_read".into(),
-            raw_input: json!({"issue_url": "https://github.com/zed-industries/zed/issues/47404"})
+            raw_input: json!({"issue_url": "https://github.com/vela-industries/vela/issues/47404"})
                 .to_string(),
             input: language_model::LanguageModelToolUseInput::Json(
-                json!({"issue_url": "https://github.com/zed-industries/zed/issues/47404"}),
+                json!({"issue_url": "https://github.com/vela-industries/vela/issues/47404"}),
             ),
             is_input_complete: true,
             thought_signature: None,
@@ -5991,7 +5991,7 @@ async fn test_lsp_tools_are_always_available(cx: &mut TestAppContext) {
     });
 
     // CodeIDE exposes semantic tools without requiring a server-delivered
-    // feature flag or a Zed account.
+    // feature flag or a Vela account.
     thread
         .update(cx, |thread, cx| {
             thread.send(ClientUserMessageId::new(), ["hello"], cx)
@@ -7033,7 +7033,7 @@ async fn test_edit_file_tool_allow_still_prompts_for_local_settings(cx: &mut Tes
     fs.insert_tree(
         "/root",
         json!({
-            ".zed": {
+            ".vela": {
                 "settings.json": "{}"
             },
             "README.md": "# Hello"
@@ -7072,13 +7072,13 @@ async fn test_edit_file_tool_allow_still_prompts_for_local_settings(cx: &mut Tes
         language_registry,
     ));
 
-    // Editing a file inside .zed/ should still prompt even with permission mode default: allow,
+    // Editing a file inside .vela/ should still prompt even with permission mode default: allow,
     // because local settings paths are sensitive and require confirmation regardless.
     let (event_stream, mut rx) = crate::ToolCallEventStream::test();
     let _task = cx.update(|cx| {
         tool.run(
             ToolInput::resolved(crate::EditFileToolInput {
-                path: "root/.zed/settings.json".into(),
+                path: "root/.vela/settings.json".into(),
                 edits: vec![],
             }),
             event_stream,

@@ -692,7 +692,7 @@ mod tests {
             &r#"
             {
                 "features": {
-                    "inline_completion_provider": "zed"
+                    "inline_completion_provider": "vela"
                 },
             }
             "#
@@ -701,7 +701,7 @@ mod tests {
                 &r#"
                 {
                     "edit_predictions": {
-                        "provider": "zed"
+                        "provider": "vela"
                     }
                 }
                 "#
@@ -1276,7 +1276,7 @@ mod tests {
         "default_width": 640,
         "default_height": 320,
         "default_model": {
-            "provider": "zed.dev",
+            "provider": "vela.dev",
             "model": "claude-sonnet-4"
         }
     }
@@ -1298,7 +1298,7 @@ mod tests {
         "default_width": 640,
         "default_height": 320,
         "default_model": {
-            "provider": "zed.dev",
+            "provider": "vela.dev",
             "model": "claude-sonnet-4"
         }
     }
@@ -2891,7 +2891,7 @@ mod tests {
             &r#"
             {
                 "features": {
-                    "edit_prediction_provider": "zed"
+                    "edit_prediction_provider": "vela"
                 },
                 "edit_predictions": {
                     "mode": "eager"
@@ -2903,7 +2903,7 @@ mod tests {
                 &r#"
                 {
                     "edit_predictions": {
-                        "provider": "zed",
+                        "provider": "vela",
                         "mode": "eager"
                     }
                 }
@@ -2946,7 +2946,7 @@ mod tests {
             &r#"
             {
                 "edit_predictions": {
-                    "provider": "zed"
+                    "provider": "vela"
                 }
             }
             "#
@@ -3053,7 +3053,7 @@ mod tests {
                 },
                 "macos": {
                     "features": {
-                        "edit_prediction_provider": "zed"
+                        "edit_prediction_provider": "vela"
                     }
                 },
                 "profiles": {
@@ -3074,7 +3074,7 @@ mod tests {
                     },
                     "macos": {
                         "edit_predictions": {
-                            "provider": "zed"
+                            "provider": "vela"
                         }
                     },
                     "profiles": {
@@ -3186,7 +3186,7 @@ mod tests {
             &r#"
             {
                 "edit_predictions": {
-                    "provider": "zed"
+                    "provider": "vela"
                 }
             }
             "#
@@ -3212,7 +3212,7 @@ mod tests {
                 &r#"
                 {
                     "edit_predictions": {
-                        "provider": "zed"
+                        "provider": "vela"
                     }
                 }
                 "#
@@ -3887,7 +3887,7 @@ mod tests {
             Some(&"{\n    \"agent\": {\n        \n    }\n}\n"),
         );
 
-        // Project-local settings (.zed/settings.json) with always_allow_tool_actions
+        // Project-local settings (.vela/settings.json) with always_allow_tool_actions
         // These files have no platform/channel overrides or root-level profiles.
         assert_migrate_with_migrations(
             &[MigrationType::Json(

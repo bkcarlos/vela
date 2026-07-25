@@ -2918,7 +2918,7 @@ fn image_fallback_element(
         .min_w_0()
         .child(Label::new(label).color(Color::Warning).underline())
         .tooltip(Tooltip::text(
-            "Image failed to load. Open `zed: log` for more details.",
+            "Image failed to load. Open `vela: log` for more details.",
         ))
         .when(open_image_url_on_click, |this| {
             this.cursor_pointer()
@@ -4332,7 +4332,7 @@ mod tests {
     #[gpui::test]
     fn test_frontmatter_falls_back_to_code_block_for_nested_yaml(cx: &mut TestAppContext) {
         let rendered = render_markdown_with_options(
-            "---\ntags:\n  - zed\n---\nBody",
+            "---\ntags:\n  - vela\n---\nBody",
             None,
             MarkdownOptions {
                 render_metadata_blocks: true,
@@ -4340,7 +4340,7 @@ mod tests {
             },
             cx,
         );
-        assert_eq!(rendered.text_for_range(0..26), "tags:\n  - zed\nBody");
+        assert_eq!(rendered.text_for_range(0..26), "tags:\n  - vela\nBody");
     }
 
     fn render_markdown_with_code_span_link(

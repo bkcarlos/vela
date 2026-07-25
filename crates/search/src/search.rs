@@ -7,9 +7,9 @@ use project::search::SearchQuery;
 pub use project_search::ProjectSearchView;
 use ui::{IconButtonShape, Tooltip, prelude::*};
 use util::paths::PathMatcher;
+pub use vela_actions::search::ToggleIncludeIgnored;
 use workspace::notifications::NotificationId;
 use workspace::{Toast, Workspace};
-pub use zed_actions::search::ToggleIncludeIgnored;
 
 pub use search_status_button::SEARCH_ICON;
 

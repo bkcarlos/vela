@@ -120,12 +120,12 @@ fn front_matter_comment_regex() -> &'static Regex {
 
 fn write_llms_txt(destination: &Path, site_url: &str, pages: &[DocsPage]) -> Result<()> {
     let mut contents = String::new();
-    contents.push_str("# Zed Docs\n\n");
+    contents.push_str("# Vela Docs\n\n");
     contents.push_str(
-        "> Official Zed documentation index with links to Markdown versions of each docs page.\n\n",
+        "> Official Vela documentation index with links to Markdown versions of each docs page.\n\n",
     );
     contents.push_str(
-        "Use these links for concise Markdown copies of Zed documentation pages. Each linked page mirrors the corresponding `/docs/*.html` page without site navigation or styling.\n\n",
+        "Use these links for concise Markdown copies of Vela documentation pages. Each linked page mirrors the corresponding `/docs/*.html` page without site navigation or styling.\n\n",
     );
     let mut current_section = None;
     for page in pages {
@@ -306,7 +306,7 @@ fn split_fragment(path: &str) -> (&str, &str) {
 }
 
 pub(crate) fn rewrite_docs_links(contents: &str, site_url: &str) -> String {
-    const STABLE_DOCS_PREFIX: &str = "https://zed.dev/docs/";
+    const STABLE_DOCS_PREFIX: &str = "https://vela.dev/docs/";
     let channel_docs_prefix = absolute_docs_url(site_url, Path::new(""));
     if channel_docs_prefix == STABLE_DOCS_PREFIX {
         return contents.to_string();
@@ -386,7 +386,7 @@ fn absolute_docs_url(site_url: &str, path: &Path) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
         url
     } else {
-        format!("https://zed.dev{}", url)
+        format!("https://vela.dev{}", url)
     }
 }
 
@@ -430,10 +430,10 @@ mod tests {
     fn test_rewrite_docs_links_uses_channel_site_url() {
         assert_eq!(
             rewrite_docs_links(
-                "See [Code Actions](https://zed.dev/docs/configuring-languages#code-actions) and [Preview](https://zed.dev/docs/preview/ai/overview.html).",
+                "See [Code Actions](https://vela.dev/docs/configuring-languages#code-actions) and [Preview](https://vela.dev/docs/preview/ai/overview.html).",
                 "/docs/preview/"
             ),
-            "See [Code Actions](https://zed.dev/docs/preview/configuring-languages#code-actions) and [Preview](https://zed.dev/docs/preview/ai/overview.html)."
+            "See [Code Actions](https://vela.dev/docs/preview/configuring-languages#code-actions) and [Preview](https://vela.dev/docs/preview/ai/overview.html)."
         );
     }
 
@@ -496,11 +496,11 @@ mod tests {
             DocsPage {
                 section: "Docs".to_string(),
                 title: "Getting Started".to_string(),
-                description: Some("Start using Zed.".to_string()),
+                description: Some("Start using Vela.".to_string()),
                 source_path: PathBuf::from("getting-started.md"),
                 content: format!(
                     "{}\n# Getting Started\n",
-                    FRONT_MATTER_COMMENT.replace("{}", r#"{"description":"Start using Zed."}"#)
+                    FRONT_MATTER_COMMENT.replace("{}", r#"{"description":"Start using Vela."}"#)
                 ),
             },
             DocsPage {
@@ -521,24 +521,24 @@ mod tests {
         let llms_txt = std::fs::read_to_string(destination.join("llms.txt"))?;
         assert!(llms_txt.contains("## Docs"));
         assert!(llms_txt.contains(
-            "- [Getting Started](https://zed.dev/docs/getting-started.md): Start using Zed."
+            "- [Getting Started](https://vela.dev/docs/getting-started.md): Start using Vela."
         ));
         assert!(llms_txt.contains("## AI"));
         assert!(
             llms_txt.contains(
-                "- [MCP](https://zed.dev/docs/ai/mcp.md): Connect model context servers."
+                "- [MCP](https://vela.dev/docs/ai/mcp.md): Connect model context servers."
             )
         );
 
         let sitemap_xml = std::fs::read_to_string(destination.join("sitemap.xml"))?;
-        assert!(sitemap_xml.contains("<loc>https://zed.dev/docs/getting-started.html</loc>"));
-        assert!(sitemap_xml.contains("<loc>https://zed.dev/docs/ai/mcp.html</loc>"));
+        assert!(sitemap_xml.contains("<loc>https://vela.dev/docs/getting-started.html</loc>"));
+        assert!(sitemap_xml.contains("<loc>https://vela.dev/docs/ai/mcp.html</loc>"));
 
         let mcp_markdown = std::fs::read_to_string(destination.join("ai/mcp.md"))?;
         assert!(mcp_markdown.starts_with(
             "> For the complete documentation index and Markdown links, see [llms.txt](/docs/llms.txt).\n\n# MCP"
         ));
-        assert!(!mcp_markdown.contains("ZED_META"));
+        assert!(!mcp_markdown.contains("VELA_META"));
 
         let index_markdown = std::fs::read_to_string(destination.join("index.md"))?;
         assert!(index_markdown.contains("# Getting Started"));

@@ -12,8 +12,8 @@ use session::DebugSession;
 use tasks_ui::{Spawn, TaskOverrides};
 use ui::{FluentBuilder, InteractiveElement};
 use util::maybe;
+use vela_actions::debug_panel::{Toggle, ToggleFocus};
 use workspace::{ShutdownDebugAdapters, Workspace};
-use zed_actions::debug_panel::{Toggle, ToggleFocus};
 
 pub mod attach_modal;
 pub mod debugger_panel;

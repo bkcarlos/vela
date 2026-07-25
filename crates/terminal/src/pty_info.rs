@@ -99,7 +99,7 @@ impl TerminalProcessIds {
             )
             .map(|pid| pid.as_u32() as i32)
             // `killpg(0, ...)` signals the caller's own process group, i.e.
-            // Zed itself, so never let a zero id (or a negative one from an
+            // Vela itself, so never let a zero id (or a negative one from an
             // implausibly large pid wrapping the cast) through.
             .filter(|process_group_id| *process_group_id > 0)
     }
@@ -137,7 +137,7 @@ impl TerminalProcessIds {
     }
 }
 
-/// Fetches Zed-relevant Pseudo-Terminal (PTY) process information
+/// Fetches Vela-relevant Pseudo-Terminal (PTY) process information
 pub(crate) struct PtyProcessInfo {
     system: RwLock<System>,
     refresh_kind: ProcessRefreshKind,
@@ -257,7 +257,7 @@ impl PtyProcessInfo {
         self.load()
     }
 
-    /// Updates the cached process info, emitting a [`Event::TitleChanged`] event if the Zed-relevant info has changed
+    /// Updates the cached process info, emitting a [`Event::TitleChanged`] event if the Vela-relevant info has changed
     pub(crate) fn emit_title_changed_if_changed(self: &Arc<Self>, cx: &mut Context<'_, Terminal>) {
         if self.task.lock().is_some() {
             return;
@@ -296,7 +296,7 @@ impl PtyProcessInfo {
 mod tests {
     use super::*;
 
-    /// Regression test for <https://github.com/zed-industries/zed/issues/58651>:
+    /// Regression test for <https://github.com/vela-industries/vela/issues/58651>:
     /// on Linux, sysinfo keeps an open `/proc/<pid>/stat` handle for every
     /// `Process` entry retained in a `System`, and never evicts entries that are
     /// absent from the refreshed pid set. The per-terminal `System` must

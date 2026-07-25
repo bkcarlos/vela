@@ -1,7 +1,7 @@
 use std::fs;
 
-use zed_extension_api::{
-    self as zed, Architecture, DownloadedFileType, GithubReleaseOptions, Os, Result,
+use vela_extension_api::{
+    self as vela, Architecture, DownloadedFileType, GithubReleaseOptions, Os, Result,
     settings::LspSettings,
 };
 
@@ -22,8 +22,8 @@ impl BufLsp {
 
     pub(crate) fn language_server_binary(
         &mut self,
-        worktree: &zed::Worktree,
-    ) -> Result<zed::Command> {
+        worktree: &vela::Worktree,
+    ) -> Result<vela::Command> {
         let binary_settings = LspSettings::for_worktree(Self::SERVER_NAME, worktree)
             .ok()
             .and_then(|lsp_settings| lsp_settings.binary);
@@ -34,27 +34,27 @@ impl BufLsp {
             .unwrap_or_else(|| ["lsp", "serve"].map(ToOwned::to_owned).into());
 
         if let Some(path) = binary_settings.and_then(|binary_settings| binary_settings.path) {
-            return Ok(zed::Command {
+            return Ok(vela::Command {
                 command: path,
                 args,
                 env: Default::default(),
             });
         } else if let Some(path) = self.cached_binary_path.clone() {
-            return Ok(zed::Command {
+            return Ok(vela::Command {
                 command: path,
                 args,
                 env: Default::default(),
             });
         } else if let Some(path) = worktree.which(Self::SERVER_NAME) {
             self.cached_binary_path = Some(path.clone());
-            return Ok(zed::Command {
+            return Ok(vela::Command {
                 command: path,
                 args,
                 env: Default::default(),
             });
         }
 
-        let latest_release = zed::latest_github_release(
+        let latest_release = vela::latest_github_release(
             "bufbuild/buf",
             GithubReleaseOptions {
                 require_assets: true,
@@ -62,7 +62,7 @@ impl BufLsp {
             },
         )?;
 
-        let (os, arch) = zed::current_platform();
+        let (os, arch) = vela::current_platform();
 
         let release_suffix = match (os, arch) {
             (Os::Mac, Architecture::Aarch64) => "Darwin-arm64",
@@ -94,18 +94,18 @@ impl BufLsp {
                 )
             })?;
 
-        zed::download_file(
+        vela::download_file(
             &download_target.download_url,
             &binary_path,
             DownloadedFileType::Uncompressed,
         )?;
-        zed::make_file_executable(&binary_path)?;
+        vela::make_file_executable(&binary_path)?;
 
         util::remove_outdated_versions(Self::SERVER_NAME, &version_dir)?;
 
         self.cached_binary_path = Some(binary_path.clone());
 
-        Ok(zed::Command {
+        Ok(vela::Command {
             command: binary_path,
             args,
             env: Default::default(),

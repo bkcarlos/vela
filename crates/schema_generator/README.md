@@ -1,6 +1,6 @@
-# Zed Schema Generator
+# Vela Schema Generator
 
-Prints various Zed schemas to stdout.
+Prints various Vela schemas to stdout.
 
 ## Usage
 

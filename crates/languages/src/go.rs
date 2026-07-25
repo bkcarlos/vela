@@ -731,7 +731,7 @@ impl ContextProvider for GoContextProvider {
         let package_cwd = if GO_PACKAGE_TASK_VARIABLE.template_value() == "." {
             None
         } else {
-            Some("$ZED_DIRNAME".to_string())
+            Some("$VELA_DIRNAME".to_string())
         };
         let module_cwd = Some(GO_MODULE_ROOT_TASK_VARIABLE.template_value());
 
@@ -1228,7 +1228,7 @@ mod tests {
             .await
             .expect("Go context provider returns associated tasks");
 
-        // `resolve_task` returns `None` for any `ZED_` variable a template
+        // `resolve_task` returns `None` for any `VELA_` variable a template
         // references but the context omits, so supply all of them.
         let context = TaskContext {
             cwd: None,

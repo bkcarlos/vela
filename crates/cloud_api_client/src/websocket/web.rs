@@ -55,7 +55,7 @@ impl CloudApiClient {
         Ok(cx.spawn(async move |_cx| {
             let mut connect_url = client
                 .http_client
-                .build_zed_cloud_url("/client/users/connect")?;
+                .build_vela_cloud_url("/client/users/connect")?;
             connect_url
                 .set_scheme(match connect_url.scheme() {
                     "https" => "wss",

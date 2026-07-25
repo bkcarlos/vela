@@ -299,9 +299,9 @@ impl RunningMode {
                     breakpoints
                         .into_iter()
                         .zip(raw_breakpoints)
-                        .filter_map(|(dap_bp, zed_bp)| {
+                        .filter_map(|(dap_bp, vela_bp)| {
                             Some((
-                                zed_bp,
+                                vela_bp,
                                 BreakpointSessionState {
                                     id: dap_bp.id?,
                                     verified: dap_bp.verified,
@@ -384,9 +384,9 @@ impl RunningMode {
                     let breakpoints = cx.background_spawn(send_request).await?;
 
                     let breakpoints = breakpoints.into_iter().zip(raw_breakpoints).filter_map(
-                        |(dap_bp, zed_bp)| {
+                        |(dap_bp, vela_bp)| {
                             Some((
-                                zed_bp,
+                                vela_bp,
                                 BreakpointSessionState {
                                     id: dap_bp.id?,
                                     verified: dap_bp.verified,
@@ -3141,7 +3141,7 @@ async fn spawn_companion(
 }
 
 async fn get_or_install_companion(node: NodeRuntime, cx: &mut AsyncApp) -> Result<PathBuf> {
-    const PACKAGE_NAME: &str = "@zed-industries/js-debug-companion-cli";
+    const PACKAGE_NAME: &str = "@vela-industries/js-debug-companion-cli";
 
     async fn install_latest_version(dir: PathBuf, node: NodeRuntime) -> Result<PathBuf> {
         let temp_dir = tempfile::tempdir().context("creating temporary directory")?;

@@ -45,19 +45,19 @@ pub trait UserService: Send + Sync + 'static {
 /// A [`UserService`] implementation backed by Cloud.
 pub struct CloudUserService {
     http_client: reqwest::Client,
-    zed_cloud_url: String,
+    vela_cloud_url: String,
     internal_api_key: String,
 }
 
 impl CloudUserService {
     pub fn new(
         http_client: reqwest::Client,
-        zed_cloud_url: String,
+        vela_cloud_url: String,
         internal_api_key: String,
     ) -> Self {
         Self {
             http_client,
-            zed_cloud_url,
+            vela_cloud_url,
             internal_api_key,
         }
     }
@@ -104,7 +104,7 @@ impl UserService for CloudUserService {
                 self.http_client
                     .post(format!(
                         "{}/internal/users/look_up_by_legacy_id",
-                        &self.zed_cloud_url
+                        &self.vela_cloud_url
                     ))
                     .json(&LookUpUsersByLegacyIdBody {
                         legacy_user_ids: ids.into_iter().map(|id| id.0).collect(),
@@ -121,7 +121,7 @@ impl UserService for CloudUserService {
                 self.http_client
                     .post(format!(
                         "{}/internal/users/look_up_by_github_login",
-                        &self.zed_cloud_url
+                        &self.vela_cloud_url
                     ))
                     .json(&LookUpUserByGithubLoginBody {
                         github_login: github_login.to_string(),
@@ -138,7 +138,7 @@ impl UserService for CloudUserService {
                 self.http_client
                     .post(format!(
                         "{}/internal/users/fuzzy_search",
-                        &self.zed_cloud_url
+                        &self.vela_cloud_url
                     ))
                     .json(&FuzzySearchUsersBody {
                         query: query.to_string(),
@@ -161,7 +161,7 @@ impl UserService for CloudUserService {
                 self.http_client
                     .post(format!(
                         "{}/internal/channel_members/fuzzy_search",
-                        &self.zed_cloud_url
+                        &self.vela_cloud_url
                     ))
                     .json(&FuzzySearchChannelMembersBody {
                         channel_id: channel.root_id().0,

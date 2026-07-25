@@ -5024,7 +5024,7 @@ mod tests {
         );
     }
 
-    // Regression test for ZED-9V4: `BlockMap::sync` walks the (old) transform
+    // Regression test for VELA-9V4: `BlockMap::sync` walks the (old) transform
     // tree with a `WrapRow` cursor and used to `cursor.item().unwrap()` for
     // every edit, assuming each edit's `old.start` lands strictly inside the
     // tree. The companion (split-diff) branch of `sync` can compose an edit

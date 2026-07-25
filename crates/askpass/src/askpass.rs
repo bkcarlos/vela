@@ -30,9 +30,9 @@ use util::{paths::PathExt, shell::ShellKind};
 /// Path to the program used for askpass
 ///
 /// On Unix and remote servers, this defaults to the current executable.
-/// On Windows, this must be set to the CLI variant of zed via set_askpass_program(),
+/// On Windows, this must be set to the CLI variant of vela via set_askpass_program(),
 /// because SSH_ASKPASS must point to a directly executable binary. The CLI binary
-/// handles the ZED_ASKPASS_SOCKET env var to communicate with Zed over a Unix socket
+/// handles the VELA_ASKPASS_SOCKET env var to communicate with Vela over a Unix socket
 /// without needing a wrapper script.
 static ASKPASS_PROGRAM: OnceLock<std::path::PathBuf> = OnceLock::new();
 
@@ -203,7 +203,7 @@ impl AskPassSession {
     }
 
     /// Path to a script suitable for git's `gpg.program`, routing GnuPG
-    /// passphrase prompts through Zed's askpass UI. `None` if unavailable.
+    /// passphrase prompts through Vela's askpass UI. `None` if unavailable.
     pub fn gpg_wrapper_path(&self) -> Option<&std::path::Path> {
         #[cfg(not(target_os = "windows"))]
         return self.askpass_task.gpg_wrapper_path();
@@ -211,12 +211,12 @@ impl AskPassSession {
         return None;
     }
 
-    /// Returns the socket path to set as ZED_ASKPASS_SOCKET.
+    /// Returns the socket path to set as VELA_ASKPASS_SOCKET.
     ///
     /// On Windows, SSH_ASKPASS points directly to cli.exe. SSH passes only
     /// the prompt string as argv[1] with no mechanism for extra arguments,
     /// so the socket path is communicated via this environment variable instead.
-    /// cli.exe must check ZED_ASKPASS_SOCKET before clap parses args.
+    /// cli.exe must check VELA_ASKPASS_SOCKET before clap parses args.
     #[cfg(target_os = "windows")]
     pub fn socket_path(&self) -> impl AsRef<OsStr> {
         self.askpass_task.socket_path()
@@ -230,7 +230,7 @@ pub struct PasswordProxy {
     askpass_script_path: std::path::PathBuf,
     #[cfg(not(target_os = "windows"))]
     gpg_wrapper_script_path: Option<std::path::PathBuf>,
-    /// On Windows only: path to the Unix socket, passed as ZED_ASKPASS_SOCKET
+    /// On Windows only: path to the Unix socket, passed as VELA_ASKPASS_SOCKET
     /// so cli.exe can find it without --askpass argument parsing.
     #[cfg(target_os = "windows")]
     askpass_socket_path: std::path::PathBuf,
@@ -246,10 +246,10 @@ impl PasswordProxy {
         >,
         executor: BackgroundExecutor,
     ) -> Result<Self> {
-        let temp_dir = tempfile::Builder::new().prefix("zed-askpass").tempdir()?;
+        let temp_dir = tempfile::Builder::new().prefix("vela-askpass").tempdir()?;
         let askpass_socket = temp_dir.path().join("askpass.sock");
         let current_exec =
-            std::env::current_exe().context("Failed to determine current zed executable path.")?;
+            std::env::current_exe().context("Failed to determine current vela executable path.")?;
 
         let askpass_program = ASKPASS_PROGRAM.get_or_init(|| current_exec);
 
@@ -263,7 +263,7 @@ impl PasswordProxy {
         let askpass_socket_path = askpass_socket.clone();
 
         // Create a gpg wrapper script that routes GnuPG passphrase prompts through
-        // the same socket (and thus through Zed's askpass UI). This only works on
+        // the same socket (and thus through Vela's askpass UI). This only works on
         // Unix where we control the pinentry via loopback mode. We compute the path
         // before the socket task takes ownership of `temp_dir`, and write the file
         // afterwards.
@@ -383,7 +383,7 @@ impl PasswordProxy {
     }
 }
 
-/// Runs Zed in netcat mode for use in askpass.
+/// Runs Vela in netcat mode for use in askpass.
 pub fn main(socket: &str) {
     use std::io::{self, Read};
     use std::process::exit;
@@ -397,7 +397,7 @@ pub fn main(socket: &str) {
     connect_and_write_prompt(socket, buffer)
 }
 
-/// Runs Zed in askpass mode using prompts passed as arguments.
+/// Runs Vela in askpass mode using prompts passed as arguments.
 pub fn main_from_args(socket: &str, args: impl IntoIterator<Item = String>) {
     let prompt = args.into_iter().collect::<Vec<_>>().join("\0");
     connect_and_write_prompt(socket, prompt.into_bytes())
@@ -507,7 +507,7 @@ fn generate_gpg_wrapper_script(
     // The wrapper only intervenes when git asks gpg to *sign* (e.g. `gpg -bsau
     // <key>`); other invocations like `--verify` run unchanged. For signing we
     // first try plain gpg so gpg-agent/keychain can supply a cached or empty
-    // passphrase silently, and only fall back to asking Zed (loopback mode, fd
+    // passphrase silently, and only fall back to asking Vela (loopback mode, fd
     // 3) when that fails, e.g. the "Inappropriate ioctl for device" case with no
     // TTY for pinentry.
     //
@@ -544,14 +544,14 @@ cat > "$payload" || exit 1
 
 # First try letting gpg-agent/keychain supply the passphrase without any
 # interactive pinentry. If that succeeds (cached passphrase)
-# forward its output and we're done, so Zed never shows a modal.
+# forward its output and we're done, so Vela never shows a modal.
 if {gpg_program} --pinentry-mode error "$@" < "$payload" > "$signature" 2> "$status"; then
     cat "$status" >&2
     cat "$signature"
     exit 0
 fi
 
-# The silent attempt failed: ask Zed for the passphrase, then hand it to gpg on
+# The silent attempt failed: ask Vela for the passphrase, then hand it to gpg on
 # fd 3 using loopback mode so no pinentry/terminal is required.
 passphrase=$(printf '%s\0' {prompt} | {askpass_program} --askpass={askpass_socket} 2>/dev/null)
 printf '%s\n' "$passphrase" |

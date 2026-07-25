@@ -29,13 +29,13 @@ use serde::Deserialize;
 use std::any::{Any, TypeId};
 use std::sync::Arc;
 use ui::{DiffStat, Divider, Tooltip, prelude::*};
+use vela_actions::git as git_actions;
 use workspace::{
     ItemNavHistory, SerializableItem, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView,
     Workspace,
     item::{Item, ItemEvent, ItemHandle, SaveOptions, TabContentParams},
     searchable::SearchableItemHandle,
 };
-use zed_actions::git as git_actions;
 
 actions!(
     git,
@@ -1008,7 +1008,7 @@ mod tests {
         });
     }
 
-    use zed_actions::git as git_actions;
+    use vela_actions::git as git_actions;
 
     use crate::project_diff::{self, ProjectDiff};
 

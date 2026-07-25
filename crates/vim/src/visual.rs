@@ -1409,7 +1409,7 @@ mod test {
             "
         });
 
-        // https://github.com/zed-industries/zed/issues/6274
+        // https://github.com/vela-industries/vela/issues/6274
         cx.set_shared_state(indoc! {
             "Theˇ quick brown
 

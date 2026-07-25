@@ -136,30 +136,30 @@ pub struct Config {
     pub kinesis_stream: Option<String>,
     pub kinesis_access_key: Option<String>,
     pub kinesis_secret_key: Option<String>,
-    pub zed_environment: Arc<str>,
-    pub zed_cloud_internal_api_key: String,
-    pub zed_client_checksum_seed: Option<String>,
+    pub vela_environment: Arc<str>,
+    pub vela_cloud_internal_api_key: String,
+    pub vela_client_checksum_seed: Option<String>,
 }
 
 impl Config {
     pub fn is_development(&self) -> bool {
-        self.zed_environment == "development".into()
+        self.vela_environment == "development".into()
     }
 
-    /// Returns the base `zed.dev` URL.
-    pub fn zed_dot_dev_url(&self) -> &str {
-        match self.zed_environment.as_ref() {
+    /// Returns the base `vela.dev` URL.
+    pub fn vela_dot_dev_url(&self) -> &str {
+        match self.vela_environment.as_ref() {
             "development" => "http://localhost:3000",
-            "staging" => "https://staging.zed.dev",
-            _ => "https://zed.dev",
+            "staging" => "https://staging.vela.dev",
+            _ => "https://vela.dev",
         }
     }
 
-    /// Returns the base Zed Cloud URL.
-    pub fn zed_cloud_url(&self) -> &str {
-        match self.zed_environment.as_ref() {
+    /// Returns the base Vela Cloud URL.
+    pub fn vela_cloud_url(&self) -> &str {
+        match self.vela_environment.as_ref() {
             "development" => "http://localhost:8787",
-            _ => "https://cloud.zed.dev",
+            _ => "https://cloud.vela.dev",
         }
     }
 
@@ -174,14 +174,14 @@ impl Config {
             livekit_secret: None,
             rust_log: None,
             log_json: None,
-            zed_environment: "test".into(),
-            zed_cloud_internal_api_key: "test-internal-api-key".into(),
+            vela_environment: "test".into(),
+            vela_cloud_internal_api_key: "test-internal-api-key".into(),
             blob_store_url: None,
             blob_store_region: None,
             blob_store_access_key: None,
             blob_store_secret_key: None,
             blob_store_bucket: None,
-            zed_client_checksum_seed: None,
+            vela_client_checksum_seed: None,
             kinesis_region: None,
             kinesis_access_key: None,
             kinesis_secret_key: None,
@@ -262,8 +262,8 @@ impl AppState {
             },
             user_service: Arc::new(CloudUserService::new(
                 http_client,
-                config.zed_cloud_url().to_string(),
-                config.zed_cloud_internal_api_key.clone(),
+                config.vela_cloud_url().to_string(),
+                config.vela_cloud_internal_api_key.clone(),
             )),
             config,
         };

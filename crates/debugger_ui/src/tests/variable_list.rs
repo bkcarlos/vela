@@ -696,7 +696,7 @@ async fn test_expensive_scope_is_not_eagerly_fetched(
 
     assert!(
         !fetched_expensive_scope.load(Ordering::SeqCst),
-        "Zed must not eagerly fetch variables for a scope marked `expensive: true`"
+        "Vela must not eagerly fetch variables for a scope marked `expensive: true`"
     );
 
     // Select and expand the Global scope: only now should its variables be resolved.

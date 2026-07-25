@@ -63,7 +63,7 @@ impl CloudApiClient {
     pub fn connect(self: &std::sync::Arc<Self>, cx: &App) -> Result<Task<Result<Connection>>> {
         let mut connect_url = self
             .http_client
-            .build_zed_cloud_url("/client/users/connect")?;
+            .build_vela_cloud_url("/client/users/connect")?;
         connect_url
             .set_scheme(match connect_url.scheme() {
                 "https" => "wss",

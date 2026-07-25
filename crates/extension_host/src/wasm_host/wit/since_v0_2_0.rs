@@ -22,16 +22,16 @@ wasmtime::component::bindgen!({
         "worktree": ExtensionWorktree,
         "project": ExtensionProject,
         "key-value-store": ExtensionKeyValueStore,
-        "zed:extension/github": since_v0_6_0::zed::extension::github,
-        "zed:extension/http-client": latest::zed::extension::http_client,
-        "zed:extension/lsp": since_v0_6_0::zed::extension::lsp,
-        "zed:extension/nodejs": latest::zed::extension::nodejs,
-        "zed:extension/platform": since_v0_6_0::zed::extension::platform,
-        "zed:extension/slash-command": latest::zed::extension::slash_command,
+        "vela:extension/github": since_v0_6_0::vela::extension::github,
+        "vela:extension/http-client": latest::vela::extension::http_client,
+        "vela:extension/lsp": since_v0_6_0::vela::extension::lsp,
+        "vela:extension/nodejs": latest::vela::extension::nodejs,
+        "vela:extension/platform": since_v0_6_0::vela::extension::platform,
+        "vela:extension/slash-command": latest::vela::extension::slash_command,
     },
 });
 
-pub use self::zed::extension::*;
+pub use self::vela::extension::*;
 
 mod settings {
     #![allow(dead_code)]

@@ -6,7 +6,7 @@
 //! is sufficient to express and enforce the policies the agent needs.
 //!
 //! The list of checks to run is *data*, declared by the Nix test and handed to
-//! this binary as a JSON file (path in `ZED_SANDBOX_CHECKS`). Each check
+//! this binary as a JSON file (path in `VELA_SANDBOX_CHECKS`). Each check
 //! describes a sandbox policy, an operation to attempt under that policy, and
 //! the expected outcome; this binary executes each and asserts the result.
 
@@ -161,20 +161,20 @@ mod imp {
         // DNS-rebinding protection would otherwise reject. The proxy only honors
         // this var when built with `http_proxy/nixos-integration-tests` (pulled
         // in by `sandbox/nixos-test`, which this binary requires), so it has no
-        // effect in a real Zed build.
+        // effect in a real Vela build.
         // SAFETY: single-threaded at this point.
         unsafe {
-            std::env::set_var("ZED_SANDBOX_PROXY_ALLOW_LOCAL_IPS", "1");
+            std::env::set_var("VELA_SANDBOX_PROXY_ALLOW_LOCAL_IPS", "1");
         }
 
         let checks_path =
-            std::env::var("ZED_SANDBOX_CHECKS").context("ZED_SANDBOX_CHECKS must be set")?;
+            std::env::var("VELA_SANDBOX_CHECKS").context("VELA_SANDBOX_CHECKS must be set")?;
         let raw = std::fs::read_to_string(&checks_path)
             .with_context(|| format!("failed to read checks file {checks_path}"))?;
         let specs: Vec<Check> =
             serde_json::from_str(&raw).context("failed to parse checks JSON")?;
         let echo_port =
-            std::env::var("ZED_TEST_ECHO_PORT").unwrap_or_else(|_| DEFAULT_ECHO_PORT.to_string());
+            std::env::var("VELA_TEST_ECHO_PORT").unwrap_or_else(|_| DEFAULT_ECHO_PORT.to_string());
 
         println!("[sandbox_test]: running {} check(s)", specs.len());
 

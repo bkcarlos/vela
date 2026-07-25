@@ -160,7 +160,7 @@ impl NodeRuntime {
                 Ok(instance) => {
                     log::log!(
                         log_level,
-                        "using Zed managed Node.js at {} since {}",
+                        "using Vela managed Node.js at {} since {}",
                         instance.installation_path.display(),
                         why_using_managed
                     );
@@ -174,8 +174,8 @@ impl NodeRuntime {
                     // and/or have shared tracking of when internet is available.
                     Box::new(UnavailableNodeRuntime {
                         error_message: format!(
-                            "failure while downloading and/or installing Zed managed Node.js, \
-                            restart Zed to retry: {}",
+                            "failure while downloading and/or installing Vela managed Node.js, \
+                            restart Vela to retry: {}",
                             err
                         )
                         .into(),
@@ -655,7 +655,7 @@ impl ManagedNodeRuntime {
                         true
                     } else {
                         log::warn!(
-                            "Zed managed Node.js binary at {} failed check with output: {:?}",
+                            "Vela managed Node.js binary at {} failed check with output: {:?}",
                             node_binary.display(),
                             output
                         );
@@ -664,7 +664,7 @@ impl ManagedNodeRuntime {
                 }
                 Err(err) => {
                     log::warn!(
-                        "Zed managed Node.js binary at {} failed check, so re-downloading it. \
+                        "Vela managed Node.js binary at {} failed check, so re-downloading it. \
                         Error: {}",
                         node_binary.display(),
                         err
@@ -1185,7 +1185,7 @@ mod tests {
     fn test_build_npm_command_args_inserts_prefix_before_subcommand() {
         let args = build_npm_command_args(
             None,
-            Some(Path::new("/tmp/zed-prefix")),
+            Some(Path::new("/tmp/vela-prefix")),
             Path::new("/tmp/cache"),
             None,
             None,
@@ -1198,7 +1198,7 @@ mod tests {
             args,
             vec![
                 "--prefix".to_string(),
-                "/tmp/zed-prefix".to_string(),
+                "/tmp/vela-prefix".to_string(),
                 "exec".to_string(),
                 "--cache=/tmp/cache".to_string(),
                 "--yes".to_string(),
@@ -1212,7 +1212,7 @@ mod tests {
     fn test_build_npm_command_args_keeps_entrypoint_before_prefix() {
         let args = build_npm_command_args(
             Some(Path::new("/tmp/npm-cli.js")),
-            Some(Path::new("/tmp/zed-prefix")),
+            Some(Path::new("/tmp/vela-prefix")),
             Path::new("/tmp/cache"),
             None,
             None,
@@ -1226,7 +1226,7 @@ mod tests {
             vec![
                 "/tmp/npm-cli.js".to_string(),
                 "--prefix".to_string(),
-                "/tmp/zed-prefix".to_string(),
+                "/tmp/vela-prefix".to_string(),
                 "exec".to_string(),
                 "--cache=/tmp/cache".to_string(),
                 "--yes".to_string(),

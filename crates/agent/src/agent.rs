@@ -2559,15 +2559,15 @@ fn model_id_to_selection(model_id: &AgentModelId, cx: &App) -> LanguageModelSele
     agent_settings::language_model_to_selection(&resolved, current_user_selection.as_ref())
 }
 
-pub static ZED_AGENT_ID: LazyLock<AgentId> = LazyLock::new(|| AgentId::new("Zed Agent"));
+pub static VELA_AGENT_ID: LazyLock<AgentId> = LazyLock::new(|| AgentId::new("Vela Agent"));
 
 impl acp_thread::AgentConnection for NativeAgentConnection {
     fn agent_id(&self) -> AgentId {
-        ZED_AGENT_ID.clone()
+        VELA_AGENT_ID.clone()
     }
 
     fn telemetry_id(&self) -> SharedString {
-        "zed".into()
+        "vela".into()
     }
 
     fn new_session(
@@ -3155,7 +3155,7 @@ impl ThreadEnvironment for NativeThreadEnvironment {
         // Linux, and via WSL on Windows) already mounts a fresh, writable
         // `tmpfs` over `/tmp`, so the environment looks like a normal
         // filesystem with no special `$TMPDIR` (which would only make the
-        // sandbox more obviously Zed-specific). On Windows a per-thread
+        // sandbox more obviously Vela-specific). On Windows a per-thread
         // `$TMPDIR` would also be a Windows path that's meaningless inside
         // WSL, and adding it to the writable scope would bind a stray
         // `/mnt/<drive>/...` path.
@@ -4149,17 +4149,17 @@ mod internal_tests {
         // Hand-typed `/global:<name>` is not aliased to the global
         // source; it looks for a worktree literally named `global`.
         assert!(!global.matches_scope("global"));
-        assert!(!global.matches_scope("zed"));
+        assert!(!global.matches_scope("vela"));
 
         let project = SkillSource::ProjectLocal {
             worktree_id: SkillScopeId(1),
-            worktree_root_name: "zed".into(),
+            worktree_root_name: "vela".into(),
         };
         // Project-local skills are scoped by their worktree root name
         // so multiple open worktrees with same-named skills can each
         // be addressed unambiguously.
-        assert_eq!(project.scope_prefix(), "zed");
-        assert!(project.matches_scope("zed"));
+        assert_eq!(project.scope_prefix(), "vela");
+        assert!(project.matches_scope("vela"));
         // The empty scope is reserved for globals.
         assert!(!project.matches_scope(""));
         // An unrelated worktree name (or MCP server name) must not

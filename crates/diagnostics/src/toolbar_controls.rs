@@ -5,9 +5,9 @@ use language::DiagnosticEntry;
 use settings::Settings;
 use text::{Anchor, BufferId};
 use ui::{Tooltip, prelude::*};
+use vela_actions::assistant::InlineAssist;
+use vela_actions::buffer_search;
 use workspace::{ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, item::ItemHandle};
-use zed_actions::assistant::InlineAssist;
-use zed_actions::buffer_search;
 
 pub struct ToolbarControls {
     editor: Option<Box<dyn DiagnosticsToolbarEditor>>,
