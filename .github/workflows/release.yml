@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   run_tests_mac:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-mac-large
     steps:
     - name: steps::checkout_repo
@@ -43,7 +43,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn
     - name: steps::show_sccache_stats
@@ -54,7 +54,7 @@ jobs:
         rm -rf ./../.cargo
     timeout-minutes: 60
   run_tests_linux:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-16x32-ubuntu-2204
     env:
       CC: clang
@@ -92,7 +92,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn
     - name: steps::show_sccache_stats
@@ -111,7 +111,7 @@ jobs:
         - 5432:5432
         options: --health-cmd pg_isready --health-interval 500ms --health-timeout 5s --health-retries 10
   run_tests_windows:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: self-32vcpu-windows-2022
     steps:
     - name: steps::checkout_repo
@@ -138,7 +138,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn
       shell: pwsh
@@ -152,7 +152,7 @@ jobs:
       shell: pwsh
     timeout-minutes: 60
   clippy_mac:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-mac-large
     steps:
     - name: steps::checkout_repo
@@ -174,14 +174,14 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy
     - name: steps::show_sccache_stats
       run: sccache --show-stats || true
     timeout-minutes: 60
   clippy_linux:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-16x32-ubuntu-2204
     env:
       CC: clang
@@ -210,14 +210,14 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy
     - name: steps::show_sccache_stats
       run: sccache --show-stats || true
     timeout-minutes: 60
   clippy_windows:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: self-32vcpu-windows-2022
     steps:
     - name: steps::checkout_repo
@@ -236,7 +236,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy.ps1
       shell: pwsh
@@ -245,7 +245,7 @@ jobs:
       shell: pwsh
     timeout-minutes: 60
   check_scripts:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-8x16-ubuntu-2204
     steps:
     - name: steps::checkout_repo
@@ -276,15 +276,15 @@ jobs:
         fi
     timeout-minutes: 60
   create_draft_release:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-2x4-ubuntu-2404
     steps:
     - id: generate-token
       name: steps::authenticate_as_zippy
       uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
       with:
-        app-id: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        private-key: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        app-id: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        private-key: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
         permission-contents: write
     - name: steps::checkout_repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -304,7 +304,7 @@ jobs:
         GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
     timeout-minutes: 60
   compliance_check:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-2x4-ubuntu-2404
     steps:
     - name: steps::checkout_repo
@@ -323,8 +323,8 @@ jobs:
       run: |
         cargo xtask compliance version "$GITHUB_REF_NAME" --report-path "compliance-report-${GITHUB_REF_NAME}.md"
       env:
-        GITHUB_APP_ID: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        GITHUB_APP_KEY: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        GITHUB_APP_ID: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        GITHUB_APP_KEY: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
       continue-on-error: true
     - name: run_bundling::upload_artifact
       if: always()
@@ -341,7 +341,7 @@ jobs:
             MESSAGE=$(printf "%s\n\nReport: %s" "$STATUS" "$ARTIFACT_URL")
         else
             STATUS="❌ Preliminary compliance check failed (but this can still be fixed while the builds are running!) for $COMPLIANCE_TAG"
-            MESSAGE=$(printf "%s\n\nReport: %s\nPRs needing review: %s" "$STATUS" "$ARTIFACT_URL" "https://github.com/zed-industries/zed/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22")
+            MESSAGE=$(printf "%s\n\nReport: %s\nPRs needing review: %s" "$STATUS" "$ARTIFACT_URL" "https://github.com/vela-industries/vela/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22")
         fi
 
         curl -X POST -H 'Content-type: application/json' \
@@ -363,8 +363,8 @@ jobs:
     runs-on: namespace-profile-8x32-ubuntu-2004-arm-m4
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       CC: clang-18
       CXX: clang++-18
     steps:
@@ -390,14 +390,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-linux-aarch64.tar.gz
-        path: target/release/zed-linux-aarch64.tar.gz
+        name: vela-linux-aarch64.tar.gz
+        path: target/release/vela-linux-aarch64.tar.gz
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-linux-aarch64.gz
-        path: target/zed-remote-server-linux-aarch64.gz
+        name: vela-remote-server-linux-aarch64.gz
+        path: target/vela-remote-server-linux-aarch64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_linux_x86_64:
@@ -408,8 +408,8 @@ jobs:
     runs-on: namespace-profile-32x64-ubuntu-2004
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       CC: clang-18
       CXX: clang++-18
     steps:
@@ -435,14 +435,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-linux-x86_64.tar.gz
-        path: target/release/zed-linux-x86_64.tar.gz
+        name: vela-linux-x86_64.tar.gz
+        path: target/release/vela-linux-x86_64.tar.gz
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-linux-x86_64.gz
-        path: target/zed-remote-server-linux-x86_64.gz
+        name: vela-remote-server-linux-x86_64.gz
+        path: target/vela-remote-server-linux-x86_64.gz
         if-no-files-found: error
     timeout-minutes: 60
   build_static_bwrap_linux_aarch64:
@@ -463,7 +463,7 @@ jobs:
     - name: run_bundling::build_static_bwrap
       uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad
       with:
-        name: zed
+        name: vela
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
         cachixArgs: -v
     - name: run_bundling::build_static_bwrap
@@ -498,7 +498,7 @@ jobs:
     - name: run_bundling::build_static_bwrap
       uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad
       with:
-        name: zed
+        name: vela
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
         cachixArgs: -v
     - name: run_bundling::build_static_bwrap
@@ -523,8 +523,8 @@ jobs:
     runs-on: namespace-profile-mac-large
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
@@ -556,14 +556,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-aarch64.dmg
-        path: target/aarch64-apple-darwin/release/Zed-aarch64.dmg
+        name: Vela-aarch64.dmg
+        path: target/aarch64-apple-darwin/release/Vela-aarch64.dmg
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-macos-aarch64.gz
-        path: target/zed-remote-server-macos-aarch64.gz
+        name: vela-remote-server-macos-aarch64.gz
+        path: target/vela-remote-server-macos-aarch64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_mac_x86_64:
@@ -574,8 +574,8 @@ jobs:
     runs-on: namespace-profile-mac-large
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
@@ -607,14 +607,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-x86_64.dmg
-        path: target/x86_64-apple-darwin/release/Zed-x86_64.dmg
+        name: Vela-x86_64.dmg
+        path: target/x86_64-apple-darwin/release/Vela-x86_64.dmg
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-macos-x86_64.gz
-        path: target/zed-remote-server-macos-x86_64.gz
+        name: vela-remote-server-macos-x86_64.gz
+        path: target/vela-remote-server-macos-x86_64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_windows_aarch64:
@@ -625,8 +625,8 @@ jobs:
     runs-on: self-32vcpu-windows-2022
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
@@ -651,18 +651,18 @@ jobs:
     - name: run_bundling::bundle_windows::bundle_windows
       run: script/bundle-windows.ps1 -Architecture aarch64
       shell: pwsh
-      working-directory: ${{ env.ZED_WORKSPACE }}
+      working-directory: ${{ env.VELA_WORKSPACE }}
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-aarch64.exe
-        path: target/Zed-aarch64.exe
+        name: Vela-aarch64.exe
+        path: target/Vela-aarch64.exe
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-windows-aarch64.zip
-        path: target/zed-remote-server-windows-aarch64.zip
+        name: vela-remote-server-windows-aarch64.zip
+        path: target/vela-remote-server-windows-aarch64.zip
         if-no-files-found: error
     timeout-minutes: 60
   bundle_windows_x86_64:
@@ -673,8 +673,8 @@ jobs:
     runs-on: self-32vcpu-windows-2022
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
@@ -699,18 +699,18 @@ jobs:
     - name: run_bundling::bundle_windows::bundle_windows
       run: script/bundle-windows.ps1 -Architecture x86_64
       shell: pwsh
-      working-directory: ${{ env.ZED_WORKSPACE }}
+      working-directory: ${{ env.VELA_WORKSPACE }}
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-x86_64.exe
-        path: target/Zed-x86_64.exe
+        name: Vela-x86_64.exe
+        path: target/Vela-x86_64.exe
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-windows-x86_64.zip
-        path: target/zed-remote-server-windows-x86_64.zip
+        name: vela-remote-server-windows-x86_64.zip
+        path: target/vela-remote-server-windows-x86_64.zip
         if-no-files-found: error
     timeout-minutes: 60
   upload_release_assets:
@@ -738,22 +738,22 @@ jobs:
       run: |-
         mkdir -p release-artifacts/
 
-        mv ./artifacts/Zed-aarch64.dmg/Zed-aarch64.dmg release-artifacts/Zed-aarch64.dmg
-        mv ./artifacts/Zed-x86_64.dmg/Zed-x86_64.dmg release-artifacts/Zed-x86_64.dmg
-        mv ./artifacts/zed-linux-aarch64.tar.gz/zed-linux-aarch64.tar.gz release-artifacts/zed-linux-aarch64.tar.gz
-        mv ./artifacts/zed-linux-x86_64.tar.gz/zed-linux-x86_64.tar.gz release-artifacts/zed-linux-x86_64.tar.gz
+        mv ./artifacts/Vela-aarch64.dmg/Vela-aarch64.dmg release-artifacts/Vela-aarch64.dmg
+        mv ./artifacts/Vela-x86_64.dmg/Vela-x86_64.dmg release-artifacts/Vela-x86_64.dmg
+        mv ./artifacts/vela-linux-aarch64.tar.gz/vela-linux-aarch64.tar.gz release-artifacts/vela-linux-aarch64.tar.gz
+        mv ./artifacts/vela-linux-x86_64.tar.gz/vela-linux-x86_64.tar.gz release-artifacts/vela-linux-x86_64.tar.gz
         mv ./artifacts/bwrap-linux-aarch64.gz/bwrap-linux-aarch64.gz release-artifacts/bwrap-linux-aarch64.gz
         mv ./artifacts/bwrap-linux-x86_64.gz/bwrap-linux-x86_64.gz release-artifacts/bwrap-linux-x86_64.gz
-        mv ./artifacts/Zed-x86_64.exe/Zed-x86_64.exe release-artifacts/Zed-x86_64.exe
-        mv ./artifacts/Zed-aarch64.exe/Zed-aarch64.exe release-artifacts/Zed-aarch64.exe
-        mv ./artifacts/zed-remote-server-macos-aarch64.gz/zed-remote-server-macos-aarch64.gz release-artifacts/zed-remote-server-macos-aarch64.gz
-        mv ./artifacts/zed-remote-server-macos-x86_64.gz/zed-remote-server-macos-x86_64.gz release-artifacts/zed-remote-server-macos-x86_64.gz
-        mv ./artifacts/zed-remote-server-linux-aarch64.gz/zed-remote-server-linux-aarch64.gz release-artifacts/zed-remote-server-linux-aarch64.gz
-        mv ./artifacts/zed-remote-server-linux-x86_64.gz/zed-remote-server-linux-x86_64.gz release-artifacts/zed-remote-server-linux-x86_64.gz
-        mv ./artifacts/zed-remote-server-windows-aarch64.zip/zed-remote-server-windows-aarch64.zip release-artifacts/zed-remote-server-windows-aarch64.zip
-        mv ./artifacts/zed-remote-server-windows-x86_64.zip/zed-remote-server-windows-x86_64.zip release-artifacts/zed-remote-server-windows-x86_64.zip
-    - name: gh release upload "$GITHUB_REF_NAME" --repo=zed-industries/zed release-artifacts/*
-      run: gh release upload "$GITHUB_REF_NAME" --repo=zed-industries/zed release-artifacts/*
+        mv ./artifacts/Vela-x86_64.exe/Vela-x86_64.exe release-artifacts/Vela-x86_64.exe
+        mv ./artifacts/Vela-aarch64.exe/Vela-aarch64.exe release-artifacts/Vela-aarch64.exe
+        mv ./artifacts/vela-remote-server-macos-aarch64.gz/vela-remote-server-macos-aarch64.gz release-artifacts/vela-remote-server-macos-aarch64.gz
+        mv ./artifacts/vela-remote-server-macos-x86_64.gz/vela-remote-server-macos-x86_64.gz release-artifacts/vela-remote-server-macos-x86_64.gz
+        mv ./artifacts/vela-remote-server-linux-aarch64.gz/vela-remote-server-linux-aarch64.gz release-artifacts/vela-remote-server-linux-aarch64.gz
+        mv ./artifacts/vela-remote-server-linux-x86_64.gz/vela-remote-server-linux-x86_64.gz release-artifacts/vela-remote-server-linux-x86_64.gz
+        mv ./artifacts/vela-remote-server-windows-aarch64.zip/vela-remote-server-windows-aarch64.zip release-artifacts/vela-remote-server-windows-aarch64.zip
+        mv ./artifacts/vela-remote-server-windows-x86_64.zip/vela-remote-server-windows-x86_64.zip release-artifacts/vela-remote-server-windows-x86_64.zip
+    - name: gh release upload "$GITHUB_REF_NAME" --repo=vela-industries/vela release-artifacts/*
+      run: gh release upload "$GITHUB_REF_NAME" --repo=vela-industries/vela release-artifacts/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   validate_release_assets:
@@ -765,10 +765,10 @@ jobs:
     steps:
     - name: release::validate_release_assets
       run: |
-        EXPECTED_ASSETS='["Zed-aarch64.dmg", "Zed-x86_64.dmg", "zed-linux-aarch64.tar.gz", "zed-linux-x86_64.tar.gz", "bwrap-linux-aarch64.gz", "bwrap-linux-x86_64.gz", "Zed-x86_64.exe", "Zed-aarch64.exe", "zed-remote-server-macos-aarch64.gz", "zed-remote-server-macos-x86_64.gz", "zed-remote-server-linux-aarch64.gz", "zed-remote-server-linux-x86_64.gz", "zed-remote-server-windows-aarch64.zip", "zed-remote-server-windows-x86_64.zip"]'
+        EXPECTED_ASSETS='["Vela-aarch64.dmg", "Vela-x86_64.dmg", "vela-linux-aarch64.tar.gz", "vela-linux-x86_64.tar.gz", "bwrap-linux-aarch64.gz", "bwrap-linux-x86_64.gz", "Vela-x86_64.exe", "Vela-aarch64.exe", "vela-remote-server-macos-aarch64.gz", "vela-remote-server-macos-x86_64.gz", "vela-remote-server-linux-aarch64.gz", "vela-remote-server-linux-x86_64.gz", "vela-remote-server-windows-aarch64.zip", "vela-remote-server-windows-x86_64.zip"]'
         TAG="$GITHUB_REF_NAME"
 
-        ACTUAL_ASSETS=$(gh release view "$TAG" --repo=zed-industries/zed --json assets -q '[.assets[].name]')
+        ACTUAL_ASSETS=$(gh release view "$TAG" --repo=vela-industries/vela --json assets -q '[.assets[].name]')
 
         MISSING_ASSETS=$(echo "$EXPECTED_ASSETS" | jq -r --argjson actual "$ACTUAL_ASSETS" '. - $actual | .[]')
 
@@ -803,8 +803,8 @@ jobs:
       run: |
         cargo xtask compliance version "$GITHUB_REF_NAME" --report-path "compliance-report-${GITHUB_REF_NAME}.md"
       env:
-        GITHUB_APP_ID: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        GITHUB_APP_KEY: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        GITHUB_APP_ID: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        GITHUB_APP_KEY: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
     - name: run_bundling::upload_artifact
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -821,7 +821,7 @@ jobs:
             MESSAGE=$(printf "%s\n\nReport: %s" "$STATUS" "$ARTIFACT_URL")
         else
             STATUS="❌ Compliance check failed for $COMPLIANCE_TAG"
-            MESSAGE=$(printf "%s\n\nReport: %s\nPRs needing review: %s" "$STATUS" "$ARTIFACT_URL" "https://github.com/zed-industries/zed/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22")
+            MESSAGE=$(printf "%s\n\nReport: %s\nPRs needing review: %s" "$STATUS" "$ARTIFACT_URL" "https://github.com/vela-industries/vela/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22")
         fi
 
         curl -X POST -H 'Content-type: application/json' \
@@ -843,8 +843,8 @@ jobs:
       name: steps::authenticate_as_zippy
       uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
       with:
-        app-id: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        private-key: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        app-id: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        private-key: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
     - name: steps::checkout_repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
@@ -881,7 +881,7 @@ jobs:
         fi
 
         if [[ "$should_release" == "true" ]]; then
-            gh release edit "$tag" --repo=zed-industries/zed --draft=false
+            gh release edit "$tag" --repo=vela-industries/vela --draft=false
             release_published=true
         fi
 
@@ -921,7 +921,7 @@ jobs:
         MESSAGE=$(if [ "$DRAFT_RESULT" == "failure" ]; then
             echo "❌ Draft release creation failed for $TAG: $RUN_URL"
         else
-            RELEASE_URL=$(gh release view "$TAG" --repo=zed-industries/zed --json url -q '.url')
+            RELEASE_URL=$(gh release view "$TAG" --repo=vela-industries/vela --json url -q '.url')
             if [ "$UPLOAD_RESULT" == "failure" ]; then
                 echo "❌ Release asset upload failed for $TAG: $RELEASE_URL"
             elif [ "$UPLOAD_RESULT" == "cancelled" ] || [ "$UPLOAD_RESULT" == "skipped" ]; then

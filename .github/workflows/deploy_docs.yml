@@ -39,7 +39,7 @@ permissions:
   contents: read
 jobs:
   deploy_docs:
-    if: github.repository_owner == 'zed-industries'
+    if: github.repository_owner == 'vela-industries'
     name: Build and Deploy Docs
     runs-on: namespace-profile-16x32-ubuntu-2204
     env:
@@ -140,7 +140,7 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        command: r2 object put -f script/install.sh zed-open-source-website-assets/install.sh
+        command: r2 object put -f script/install.sh vela-open-source-website-assets/install.sh
     - name: deploy_docs::docs_deploy_steps::deploy_docs_worker
       uses: cloudflare/wrangler-action@da0e0dfe58b7a431659754fdf3f186c529afbe65
       with:

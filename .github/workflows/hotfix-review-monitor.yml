@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   check-hotfix-reviews:
-    if: github.repository_owner == 'zed-industries'
+    if: github.repository_owner == 'vela-industries'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

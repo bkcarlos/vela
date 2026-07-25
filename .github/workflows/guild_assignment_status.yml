@@ -1,4 +1,4 @@
-# Guild board (https://github.com/orgs/zed-industries/projects/74) reactions to issue events:
+# Guild board (https://github.com/orgs/vela-industries/projects/74) reactions to issue events:
 #   assigned    guild member          -> Status "In Progress" (or Slack if off-board)
 #   unassigned  guild member          -> move back to a To-Do column by Type + Slack
 #   commented   guild assignee comments after a check-in -> Slack (each comment)
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   handle-event:
     if: >-
-      github.repository == 'zed-industries/zed' &&
+      github.repository == 'vela-industries/vela' &&
       (github.event_name != 'issue_comment' || github.event.issue.pull_request == null)
     runs-on: namespace-profile-2x4-ubuntu-2404
     timeout-minutes: 5
@@ -31,9 +31,9 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
-          app-id: ${{ secrets.ZED_COMMUNITY_BOT_APP_ID }}
-          private-key: ${{ secrets.ZED_COMMUNITY_BOT_PRIVATE_KEY }}
-          owner: zed-industries
+          app-id: ${{ secrets.VELA_COMMUNITY_BOT_APP_ID }}
+          private-key: ${{ secrets.VELA_COMMUNITY_BOT_PRIVATE_KEY }}
+          owner: vela-industries
 
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1

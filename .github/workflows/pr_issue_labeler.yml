@@ -20,16 +20,16 @@ permissions:
 
 jobs:
   check-authorship-and-label:
-    if: github.repository == 'zed-industries/zed'
+    if: github.repository == 'vela-industries/vela'
     runs-on: namespace-profile-2x4-ubuntu-2404
     timeout-minutes: 5
     steps:
       - id: get-app-token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
-          app-id: ${{ secrets.ZED_COMMUNITY_BOT_APP_ID }}
-          private-key: ${{ secrets.ZED_COMMUNITY_BOT_PRIVATE_KEY }}
-          owner: zed-industries
+          app-id: ${{ secrets.VELA_COMMUNITY_BOT_APP_ID }}
+          private-key: ${{ secrets.VELA_COMMUNITY_BOT_PRIVATE_KEY }}
+          owner: vela-industries
 
       - id: apply-authorship-label
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -126,7 +126,7 @@ jobs:
             const isTeamMember = async (teamSlug, author) => {
               try {
                 const response = await github.rest.teams.getMembershipForUserInOrg({
-                  org: 'zed-industries',
+                  org: 'vela-industries',
                   team_slug: teamSlug,
                   username: author
                 });
@@ -144,8 +144,8 @@ jobs:
             const isGuildMember = async (author) => {
               try {
                 const response = await github.rest.repos.getCollaboratorPermissionLevel({
-                  owner: 'zed-industries',
-                  repo: 'zed',
+                  owner: 'vela-industries',
+                  repo: 'vela',
                   username: author
                 });
                 // role_name is the effective (highest) role; for cohort outside

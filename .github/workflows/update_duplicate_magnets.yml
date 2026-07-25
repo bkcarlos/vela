@@ -11,7 +11,7 @@ permissions:
 jobs:
   update-duplicate-magnets:
     runs-on: ubuntu-latest
-    if: github.repository == 'zed-industries/zed'
+    if: github.repository == 'vela-industries/vela'
     permissions:
       contents: read
       issues: write

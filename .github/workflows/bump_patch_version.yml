@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   run_bump_patch_version:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-16x32-ubuntu-2204
     permissions:
       contents: write
@@ -21,8 +21,8 @@ jobs:
       name: steps::authenticate_as_zippy
       uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
       with:
-        app-id: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        private-key: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        app-id: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        private-key: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
     - name: steps::checkout_repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
@@ -32,7 +32,7 @@ jobs:
     - id: channel
       name: bump_patch_version::run_bump_patch_version::read_channel
       run: |
-        channel="$(cat crates/zed/RELEASE_CHANNEL)"
+        channel="$(cat crates/vela/RELEASE_CHANNEL)"
 
         tag_suffix=""
         case $channel in
@@ -47,7 +47,7 @@ jobs:
             ;;
         esac
 
-        version=$(script/get-crate-version zed)
+        version=$(script/get-crate-version vela)
 
         {
             echo "channel=$channel"
@@ -61,7 +61,7 @@ jobs:
     - id: bump-version
       name: bump_patch_version::run_bump_patch_version::bump_version
       run: |
-        version="$(cargo set-version -p zed --bump patch 2>&1 | sed 's/.* //')"
+        version="$(cargo set-version -p vela --bump patch 2>&1 | sed 's/.* //')"
         echo "version=$version" >> "$GITHUB_OUTPUT"
     - id: commit
       name: steps::bot_commit

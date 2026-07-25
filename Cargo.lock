@@ -314,9 +314,9 @@ dependencies = [
  "url",
  "util",
  "uuid",
+ "vela_env_vars",
  "watch",
  "web_search",
- "zed_env_vars",
  "zlog",
  "zstd",
 ]
@@ -410,8 +410,8 @@ dependencies = [
  "ui",
  "util",
  "uuid",
+ "vela_credentials_provider",
  "watch",
- "zed_credentials_provider",
 ]
 
 [[package]]
@@ -558,10 +558,10 @@ dependencies = [
  "url",
  "util",
  "uuid",
+ "vela_actions",
  "vim",
  "watch",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -612,7 +612,7 @@ dependencies = [
  "smallvec",
  "telemetry",
  "ui",
- "zed_actions",
+ "vela_actions",
 ]
 
 [[package]]
@@ -1464,8 +1464,8 @@ dependencies = [
  "telemetry",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -2175,7 +2175,7 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
- "zed_actions",
+ "vela_actions",
 ]
 
 [[package]]
@@ -3234,9 +3234,9 @@ dependencies = [
  "tokio-socks",
  "url",
  "util",
+ "vela_credentials_provider",
  "windows 0.61.3",
  "worktree",
- "zed_credentials_provider",
 ]
 
 [[package]]
@@ -3399,7 +3399,7 @@ dependencies = [
  "serde",
  "serde_json",
  "text",
- "zed_credentials_provider",
+ "vela_credentials_provider",
  "zeta_prompt",
 ]
 
@@ -3496,9 +3496,9 @@ dependencies = [
  "unindent",
  "util",
  "uuid",
+ "vela_actions",
  "workspace",
  "worktree",
- "zed_actions",
  "zlog",
 ]
 
@@ -3534,8 +3534,8 @@ dependencies = [
  "title_bar",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -3606,8 +3606,8 @@ dependencies = [
  "time",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -4935,7 +4935,7 @@ dependencies = [
  "tempfile",
  "util",
  "uuid",
- "zed_env_vars",
+ "vela_env_vars",
 ]
 
 [[package]]
@@ -5032,8 +5032,8 @@ dependencies = [
  "ui_input",
  "unindent",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "zlog",
 ]
 
@@ -5234,8 +5234,8 @@ dependencies = [
  "ui",
  "unindent",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "zlog",
 ]
 
@@ -5304,7 +5304,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5568,10 +5568,10 @@ dependencies = [
  "ui",
  "util",
  "uuid",
+ "vela_actions",
+ "vela_credentials_provider",
  "workspace",
  "worktree",
- "zed_actions",
- "zed_credentials_provider",
  "zeta_prompt",
  "zlog",
  "zstd",
@@ -5731,8 +5731,8 @@ dependencies = [
  "time",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "zeta_prompt",
 ]
 
@@ -5818,9 +5818,9 @@ dependencies = [
  "urlencoding",
  "util",
  "uuid",
+ "vela_actions",
  "vim_mode_setting",
  "workspace",
- "zed_actions",
  "zlog",
  "ztracing",
 ]
@@ -6113,7 +6113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6453,9 +6453,9 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "vim_mode_setting",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -6589,8 +6589,8 @@ dependencies = [
  "system_specs",
  "urlencoding",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -6634,8 +6634,8 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "zlog",
 ]
 
@@ -7331,7 +7331,7 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7456,10 +7456,10 @@ dependencies = [
  "ui_input",
  "unindent",
  "util",
+ "vela_actions",
  "watch",
  "windows 0.61.3",
  "workspace",
- "zed_actions",
  "zeroize",
  "zlog",
  "ztracing",
@@ -9145,8 +9145,8 @@ dependencies = [
  "ui",
  "util",
  "util_macros",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -9586,8 +9586,8 @@ dependencies = [
  "ui",
  "ui_input",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -9990,8 +9990,8 @@ dependencies = [
  "tree-sitter",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "zlog",
 ]
 
@@ -10800,8 +10800,8 @@ dependencies = [
  "ui",
  "urlencoding",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -11226,8 +11226,8 @@ dependencies = [
  "smol",
  "theme_settings",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -11270,7 +11270,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11617,8 +11617,8 @@ dependencies = [
  "time",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -11707,7 +11707,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -12333,9 +12333,9 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "vim_mode_setting",
  "workspace",
- "zed_actions",
  "zlog",
 ]
 
@@ -12628,8 +12628,8 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -12662,9 +12662,9 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
  "worktree",
- "zed_actions",
 ]
 
 [[package]]
@@ -13604,8 +13604,8 @@ dependencies = [
  "ui",
  "ui_input",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -13727,9 +13727,9 @@ dependencies = [
  "theme",
  "theme_settings",
  "ui",
+ "vela_actions",
  "windows 0.61.3",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -14172,11 +14172,11 @@ dependencies = [
  "unindent",
  "url",
  "util",
+ "vela_credentials_provider",
  "watch",
  "wax",
  "which 6.0.3",
  "worktree",
- "zed_credentials_provider",
  "zeroize",
  "zlog",
  "ztracing",
@@ -14243,9 +14243,9 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
  "worktree",
- "zed_actions",
 ]
 
 [[package]]
@@ -15065,10 +15065,10 @@ dependencies = [
  "telemetry",
  "ui",
  "util",
+ "vela_actions",
  "windows-registry 0.6.1",
  "workspace",
  "worktree",
- "zed_actions",
 ]
 
 [[package]]
@@ -15411,8 +15411,8 @@ dependencies = [
  "ui",
  "util",
  "uuid",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -15876,7 +15876,7 @@ dependencies = [
  "errno 0.3.14",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -16411,8 +16411,8 @@ dependencies = [
  "unindent",
  "util",
  "util_macros",
+ "vela_actions",
  "workspace",
- "zed_actions",
  "ztracing",
 ]
 
@@ -16838,8 +16838,8 @@ dependencies = [
  "theme",
  "theme_settings",
  "ui",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -16902,9 +16902,9 @@ dependencies = [
  "ui_input",
  "url",
  "util",
+ "vela_actions",
+ "vela_credentials_provider",
  "workspace",
- "zed_actions",
- "zed_credentials_provider",
 ]
 
 [[package]]
@@ -17049,8 +17049,8 @@ dependencies = [
  "ui",
  "unicode-segmentation",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -17342,7 +17342,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -17939,8 +17939,8 @@ dependencies = [
  "language",
  "multi_buffer",
  "ui",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -18401,7 +18401,7 @@ dependencies = [
  "sha2",
  "shellexpand",
  "util",
- "zed_actions",
+ "vela_actions",
 ]
 
 [[package]]
@@ -18428,8 +18428,8 @@ dependencies = [
  "tree-sitter-typescript",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -18472,7 +18472,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -18587,8 +18587,8 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -18684,8 +18684,8 @@ dependencies = [
  "theme_settings",
  "ui",
  "util",
+ "vela_actions",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -18935,9 +18935,9 @@ dependencies = [
  "theme",
  "ui",
  "util",
+ "vela_actions",
  "windows 0.61.3",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -20183,6 +20183,249 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
+name = "vela"
+version = "1.15.1"
+dependencies = [
+ "acp_thread",
+ "acp_tools",
+ "action_log",
+ "activity_indicator",
+ "agent",
+ "agent-client-protocol",
+ "agent_servers",
+ "agent_settings",
+ "agent_skills",
+ "agent_ui",
+ "anyhow",
+ "ashpd",
+ "askpass",
+ "assets",
+ "audio",
+ "auto_update",
+ "auto_update_ui",
+ "breadcrumbs",
+ "call",
+ "channel",
+ "chrono",
+ "clap",
+ "cli",
+ "client",
+ "clock",
+ "codestral",
+ "collab_ui",
+ "collections",
+ "command_palette",
+ "component",
+ "component_preview",
+ "copilot",
+ "copilot_chat",
+ "copilot_ui",
+ "crashes",
+ "csv_preview",
+ "dap_adapters",
+ "db",
+ "debug_adapter_extension",
+ "debugger_tools",
+ "debugger_ui",
+ "dev_container",
+ "diagnostics",
+ "edit_prediction",
+ "edit_prediction_ui",
+ "editor",
+ "encoding_selector",
+ "env_logger 0.11.8",
+ "etw_tracing",
+ "extension",
+ "extension_host",
+ "extensions_ui",
+ "feature_flags",
+ "feedback",
+ "file_finder",
+ "fs",
+ "futures 0.3.32",
+ "git",
+ "git_hosting_providers",
+ "git_ui",
+ "go_to_line",
+ "gpui",
+ "gpui_platform",
+ "gpui_tokio",
+ "hdrhistogram",
+ "http_client",
+ "image",
+ "image_viewer",
+ "input_latency_ui",
+ "inspector_ui",
+ "install_cli",
+ "itertools 0.14.0",
+ "journal",
+ "json_schema_store",
+ "keymap_editor",
+ "language",
+ "language_extension",
+ "language_model",
+ "language_models",
+ "language_onboarding",
+ "language_selector",
+ "language_tools",
+ "languages",
+ "line_ending_selector",
+ "log",
+ "lsp_locations",
+ "markdown",
+ "markdown_preview",
+ "menu",
+ "migrator",
+ "mimalloc",
+ "miniprofiler_ui",
+ "node_runtime",
+ "notifications",
+ "onboarding",
+ "outline",
+ "outline_panel",
+ "parking_lot",
+ "paths",
+ "picker",
+ "pkg-config",
+ "pretty_assertions",
+ "profiling",
+ "project",
+ "project_panel",
+ "project_symbols",
+ "prompt_store",
+ "proto",
+ "rayon",
+ "recent_projects",
+ "release_channel",
+ "remote",
+ "repl",
+ "reqwest_client",
+ "rope",
+ "sandbox",
+ "search",
+ "semver",
+ "serde",
+ "serde_json",
+ "session",
+ "settings",
+ "settings_profile_selector",
+ "settings_ui",
+ "shellexpand",
+ "sidebar",
+ "smol",
+ "snippet_provider",
+ "snippets_ui",
+ "svg_preview",
+ "sysinfo 0.37.2",
+ "system_specs",
+ "tab_switcher",
+ "task",
+ "tasks_ui",
+ "telemetry",
+ "telemetry_events",
+ "tempfile",
+ "terminal_view",
+ "theme",
+ "theme_extension",
+ "theme_selector",
+ "theme_settings",
+ "time",
+ "time_format",
+ "title_bar",
+ "toolchain_selector",
+ "tracing",
+ "ui",
+ "ui_prompt",
+ "url",
+ "urlencoding",
+ "util",
+ "uuid",
+ "vela_actions",
+ "vela_env_vars",
+ "vim",
+ "vim_mode_setting",
+ "watch",
+ "web_search",
+ "web_search_providers",
+ "which_key",
+ "windows 0.61.3",
+ "windows_resources",
+ "workspace",
+ "zed-reqwest",
+ "zlog",
+ "zlog_settings",
+ "ztracing",
+]
+
+[[package]]
+name = "vela_actions"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "schemars 1.0.4",
+ "serde",
+ "util",
+]
+
+[[package]]
+name = "vela_credentials_provider"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "credentials_provider",
+ "futures 0.3.32",
+ "gpui",
+ "paths",
+ "release_channel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "vela_env_vars"
+version = "0.1.0"
+dependencies = [
+ "env_var",
+]
+
+[[package]]
+name = "vela_extension_api"
+version = "0.8.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wit-bindgen 0.41.0",
+]
+
+[[package]]
+name = "vela_glsl"
+version = "0.2.4"
+dependencies = [
+ "zed_extension_api 0.1.0",
+]
+
+[[package]]
+name = "vela_html"
+version = "0.3.1"
+dependencies = [
+ "zed_extension_api 0.7.0",
+]
+
+[[package]]
+name = "vela_proto"
+version = "0.3.2"
+dependencies = [
+ "zed_extension_api 0.7.0",
+]
+
+[[package]]
+name = "vela_test_extension"
+version = "0.1.0"
+dependencies = [
+ "vela_extension_api",
+]
+
+[[package]]
 name = "version-compare"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20243,9 +20486,9 @@ dependencies = [
  "ui",
  "util",
  "util_macros",
+ "vela_actions",
  "vim_mode_setting",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -21496,7 +21739,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -22715,8 +22958,8 @@ dependencies = [
  "url",
  "util",
  "uuid",
+ "vela_actions",
  "windows 0.61.3",
- "zed_actions",
  "zlog",
 ]
 
@@ -23158,181 +23401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zed"
-version = "1.14.1"
-dependencies = [
- "acp_thread",
- "acp_tools",
- "action_log",
- "activity_indicator",
- "agent",
- "agent-client-protocol",
- "agent_servers",
- "agent_settings",
- "agent_skills",
- "agent_ui",
- "anyhow",
- "ashpd",
- "askpass",
- "assets",
- "audio",
- "auto_update",
- "auto_update_ui",
- "breadcrumbs",
- "call",
- "channel",
- "chrono",
- "clap",
- "cli",
- "client",
- "clock",
- "codestral",
- "collab_ui",
- "collections",
- "command_palette",
- "component",
- "component_preview",
- "copilot",
- "copilot_chat",
- "copilot_ui",
- "crashes",
- "csv_preview",
- "dap_adapters",
- "db",
- "debug_adapter_extension",
- "debugger_tools",
- "debugger_ui",
- "dev_container",
- "diagnostics",
- "edit_prediction",
- "edit_prediction_ui",
- "editor",
- "encoding_selector",
- "env_logger 0.11.8",
- "etw_tracing",
- "extension",
- "extension_host",
- "extensions_ui",
- "feature_flags",
- "feedback",
- "file_finder",
- "fs",
- "futures 0.3.32",
- "git",
- "git_hosting_providers",
- "git_ui",
- "go_to_line",
- "gpui",
- "gpui_platform",
- "gpui_tokio",
- "hdrhistogram",
- "http_client",
- "image",
- "image_viewer",
- "input_latency_ui",
- "inspector_ui",
- "install_cli",
- "itertools 0.14.0",
- "journal",
- "json_schema_store",
- "keymap_editor",
- "language",
- "language_extension",
- "language_model",
- "language_models",
- "language_onboarding",
- "language_selector",
- "language_tools",
- "languages",
- "line_ending_selector",
- "log",
- "lsp_locations",
- "markdown",
- "markdown_preview",
- "menu",
- "migrator",
- "mimalloc",
- "miniprofiler_ui",
- "node_runtime",
- "notifications",
- "onboarding",
- "outline",
- "outline_panel",
- "parking_lot",
- "paths",
- "picker",
- "pkg-config",
- "pretty_assertions",
- "profiling",
- "project",
- "project_panel",
- "project_symbols",
- "prompt_store",
- "proto",
- "rayon",
- "recent_projects",
- "release_channel",
- "remote",
- "repl",
- "reqwest_client",
- "rope",
- "sandbox",
- "search",
- "semver",
- "serde",
- "serde_json",
- "session",
- "settings",
- "settings_profile_selector",
- "settings_ui",
- "shellexpand",
- "sidebar",
- "smol",
- "snippet_provider",
- "snippets_ui",
- "svg_preview",
- "sysinfo 0.37.2",
- "system_specs",
- "tab_switcher",
- "task",
- "tasks_ui",
- "telemetry",
- "telemetry_events",
- "tempfile",
- "terminal_view",
- "theme",
- "theme_extension",
- "theme_selector",
- "theme_settings",
- "time",
- "time_format",
- "title_bar",
- "toolchain_selector",
- "tracing",
- "ui",
- "ui_prompt",
- "url",
- "urlencoding",
- "util",
- "uuid",
- "vim",
- "vim_mode_setting",
- "watch",
- "web_search",
- "web_search_providers",
- "which_key",
- "windows 0.61.3",
- "windows_resources",
- "workspace",
- "zed-reqwest",
- "zed_actions",
- "zed_env_vars",
- "zlog",
- "zlog_settings",
- "ztracing",
-]
-
-[[package]]
 name = "zed-font-kit"
 version = "0.14.1-zed"
 source = "git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269#94b0f28166665e8fd2f53ff6d268a14955c82269"
@@ -23440,37 +23508,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zed_actions"
-version = "0.1.0"
-dependencies = [
- "gpui",
- "schemars 1.0.4",
- "serde",
- "util",
-]
-
-[[package]]
-name = "zed_credentials_provider"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "credentials_provider",
- "futures 0.3.32",
- "gpui",
- "paths",
- "release_channel",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "zed_env_vars"
-version = "0.1.0"
-dependencies = [
- "env_var",
-]
-
-[[package]]
 name = "zed_extension_api"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23490,43 +23527,6 @@ dependencies = [
  "serde",
  "serde_json",
  "wit-bindgen 0.41.0",
-]
-
-[[package]]
-name = "zed_extension_api"
-version = "0.8.0"
-dependencies = [
- "serde",
- "serde_json",
- "wit-bindgen 0.41.0",
-]
-
-[[package]]
-name = "zed_glsl"
-version = "0.2.4"
-dependencies = [
- "zed_extension_api 0.1.0",
-]
-
-[[package]]
-name = "zed_html"
-version = "0.3.1"
-dependencies = [
- "zed_extension_api 0.7.0",
-]
-
-[[package]]
-name = "zed_proto"
-version = "0.3.2"
-dependencies = [
- "zed_extension_api 0.7.0",
-]
-
-[[package]]
-name = "zed_test_extension"
-version = "0.1.0"
-dependencies = [
- "zed_extension_api 0.8.0",
 ]
 
 [[package]]

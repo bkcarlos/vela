@@ -19,8 +19,8 @@ jobs:
     runs-on: namespace-profile-8x32-ubuntu-2004-arm-m4
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       CC: clang-18
       CXX: clang++-18
     steps:
@@ -46,14 +46,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-linux-aarch64.tar.gz
-        path: target/release/zed-linux-aarch64.tar.gz
+        name: vela-linux-aarch64.tar.gz
+        path: target/release/vela-linux-aarch64.tar.gz
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-linux-aarch64.gz
-        path: target/zed-remote-server-linux-aarch64.gz
+        name: vela-remote-server-linux-aarch64.gz
+        path: target/vela-remote-server-linux-aarch64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_linux_x86_64:
@@ -63,8 +63,8 @@ jobs:
     runs-on: namespace-profile-32x64-ubuntu-2004
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       CC: clang-18
       CXX: clang++-18
     steps:
@@ -90,14 +90,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-linux-x86_64.tar.gz
-        path: target/release/zed-linux-x86_64.tar.gz
+        name: vela-linux-x86_64.tar.gz
+        path: target/release/vela-linux-x86_64.tar.gz
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-linux-x86_64.gz
-        path: target/zed-remote-server-linux-x86_64.gz
+        name: vela-remote-server-linux-x86_64.gz
+        path: target/vela-remote-server-linux-x86_64.gz
         if-no-files-found: error
     timeout-minutes: 60
   build_static_bwrap_linux_aarch64:
@@ -117,7 +117,7 @@ jobs:
     - name: run_bundling::build_static_bwrap
       uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad
       with:
-        name: zed
+        name: vela
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
         cachixArgs: -v
     - name: run_bundling::build_static_bwrap
@@ -151,7 +151,7 @@ jobs:
     - name: run_bundling::build_static_bwrap
       uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad
       with:
-        name: zed
+        name: vela
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
         cachixArgs: -v
     - name: run_bundling::build_static_bwrap
@@ -175,8 +175,8 @@ jobs:
     runs-on: namespace-profile-mac-large
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
@@ -208,14 +208,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-aarch64.dmg
-        path: target/aarch64-apple-darwin/release/Zed-aarch64.dmg
+        name: Vela-aarch64.dmg
+        path: target/aarch64-apple-darwin/release/Vela-aarch64.dmg
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-macos-aarch64.gz
-        path: target/zed-remote-server-macos-aarch64.gz
+        name: vela-remote-server-macos-aarch64.gz
+        path: target/vela-remote-server-macos-aarch64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_mac_x86_64:
@@ -225,8 +225,8 @@ jobs:
     runs-on: namespace-profile-mac-large
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
@@ -258,14 +258,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-x86_64.dmg
-        path: target/x86_64-apple-darwin/release/Zed-x86_64.dmg
+        name: Vela-x86_64.dmg
+        path: target/x86_64-apple-darwin/release/Vela-x86_64.dmg
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-macos-x86_64.gz
-        path: target/zed-remote-server-macos-x86_64.gz
+        name: vela-remote-server-macos-x86_64.gz
+        path: target/vela-remote-server-macos-x86_64.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_windows_aarch64:
@@ -275,8 +275,8 @@ jobs:
     runs-on: self-32vcpu-windows-2022
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
@@ -301,18 +301,18 @@ jobs:
     - name: run_bundling::bundle_windows::bundle_windows
       run: script/bundle-windows.ps1 -Architecture aarch64
       shell: pwsh
-      working-directory: ${{ env.ZED_WORKSPACE }}
+      working-directory: ${{ env.VELA_WORKSPACE }}
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-aarch64.exe
-        path: target/Zed-aarch64.exe
+        name: Vela-aarch64.exe
+        path: target/Vela-aarch64.exe
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-windows-aarch64.zip
-        path: target/zed-remote-server-windows-aarch64.zip
+        name: vela-remote-server-windows-aarch64.zip
+        path: target/vela-remote-server-windows-aarch64.zip
         if-no-files-found: error
     timeout-minutes: 60
   bundle_windows_x86_64:
@@ -322,8 +322,8 @@ jobs:
     runs-on: self-32vcpu-windows-2022
     env:
       CARGO_INCREMENTAL: 0
-      ZED_CLIENT_CHECKSUM_SEED: ${{ secrets.ZED_CLIENT_CHECKSUM_SEED }}
-      ZED_MINIDUMP_ENDPOINT: ${{ secrets.ZED_SENTRY_MINIDUMP_ENDPOINT }}
+      VELA_CLIENT_CHECKSUM_SEED: ${{ secrets.VELA_CLIENT_CHECKSUM_SEED }}
+      VELA_MINIDUMP_ENDPOINT: ${{ secrets.VELA_SENTRY_MINIDUMP_ENDPOINT }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
@@ -348,18 +348,18 @@ jobs:
     - name: run_bundling::bundle_windows::bundle_windows
       run: script/bundle-windows.ps1 -Architecture x86_64
       shell: pwsh
-      working-directory: ${{ env.ZED_WORKSPACE }}
+      working-directory: ${{ env.VELA_WORKSPACE }}
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: Zed-x86_64.exe
-        path: target/Zed-x86_64.exe
+        name: Vela-x86_64.exe
+        path: target/Vela-x86_64.exe
         if-no-files-found: error
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: zed-remote-server-windows-x86_64.zip
-        path: target/zed-remote-server-windows-x86_64.zip
+        name: vela-remote-server-windows-x86_64.zip
+        path: target/vela-remote-server-windows-x86_64.zip
         if-no-files-found: error
     timeout-minutes: 60
 concurrency:

@@ -1,5 +1,5 @@
 # Scheduled Slack digest of Guild board
-# (https://github.com/orgs/zed-industries/projects/74) issues recently closed by
+# (https://github.com/orgs/vela-industries/projects/74) issues recently closed by
 # a merged PR authored by a guild member.
 
 name: Guild Weekly Shipped
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   digest:
-    if: github.repository == 'zed-industries/zed'
+    if: github.repository == 'vela-industries/vela'
     runs-on: namespace-profile-2x4-ubuntu-2404
     timeout-minutes: 15
 
@@ -27,9 +27,9 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
-          app-id: ${{ secrets.ZED_COMMUNITY_BOT_APP_ID }}
-          private-key: ${{ secrets.ZED_COMMUNITY_BOT_PRIVATE_KEY }}
-          owner: zed-industries
+          app-id: ${{ secrets.VELA_COMMUNITY_BOT_APP_ID }}
+          private-key: ${{ secrets.VELA_COMMUNITY_BOT_PRIVATE_KEY }}
+          owner: vela-industries
 
       - name: Checkout repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1

@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   style:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     name: Check formatting and Clippy lints
     runs-on: namespace-profile-16x32-ubuntu-2204
     env:
@@ -102,10 +102,10 @@ jobs:
       run: |
         docker build -f Dockerfile-collab \
           --build-arg "GITHUB_SHA=$GITHUB_SHA" \
-          --tag "registry.digitalocean.com/zed/collab:$GITHUB_SHA" \
+          --tag "registry.digitalocean.com/vela/collab:$GITHUB_SHA" \
           .
     - name: deploy_collab::publish::publish_docker_image
-      run: docker push "registry.digitalocean.com/zed/collab:${GITHUB_SHA}"
+      run: docker push "registry.digitalocean.com/vela/collab:${GITHUB_SHA}"
     - name: deploy_collab::publish::prune_docker_system
       run: docker system prune --filter 'until=72h' -f
   deploy:
@@ -130,40 +130,40 @@ jobs:
       run: |
         set -eu
         if [[ $GITHUB_REF_NAME = "collab-production" ]]; then
-          export ZED_KUBE_NAMESPACE=production
-          export ZED_COLLAB_LOAD_BALANCER_SIZE_UNIT=10
-          export ZED_API_LOAD_BALANCER_SIZE_UNIT=2
+          export VELA_KUBE_NAMESPACE=production
+          export VELA_COLLAB_LOAD_BALANCER_SIZE_UNIT=10
+          export VELA_API_LOAD_BALANCER_SIZE_UNIT=2
         elif [[ $GITHUB_REF_NAME = "collab-staging" ]]; then
-          export ZED_KUBE_NAMESPACE=staging
-          export ZED_COLLAB_LOAD_BALANCER_SIZE_UNIT=1
-          export ZED_API_LOAD_BALANCER_SIZE_UNIT=1
+          export VELA_KUBE_NAMESPACE=staging
+          export VELA_COLLAB_LOAD_BALANCER_SIZE_UNIT=1
+          export VELA_API_LOAD_BALANCER_SIZE_UNIT=1
         else
           echo "cowardly refusing to deploy from an unknown branch"
           exit 1
         fi
 
-        echo "Deploying collab:$GITHUB_SHA to $ZED_KUBE_NAMESPACE"
+        echo "Deploying collab:$GITHUB_SHA to $VELA_KUBE_NAMESPACE"
 
         source script/lib/deploy-helpers.sh
-        export_vars_for_environment "$ZED_KUBE_NAMESPACE"
+        export_vars_for_environment "$VELA_KUBE_NAMESPACE"
 
-        ZED_DO_CERTIFICATE_ID="$(doctl compute certificate list --format ID --no-header)"
-        export ZED_DO_CERTIFICATE_ID
-        export ZED_IMAGE_ID="registry.digitalocean.com/zed/collab:${GITHUB_SHA}"
+        VELA_DO_CERTIFICATE_ID="$(doctl compute certificate list --format ID --no-header)"
+        export VELA_DO_CERTIFICATE_ID
+        export VELA_IMAGE_ID="registry.digitalocean.com/vela/collab:${GITHUB_SHA}"
 
-        export ZED_SERVICE_NAME=collab
-        export ZED_LOAD_BALANCER_SIZE_UNIT=$ZED_COLLAB_LOAD_BALANCER_SIZE_UNIT
+        export VELA_SERVICE_NAME=collab
+        export VELA_LOAD_BALANCER_SIZE_UNIT=$VELA_COLLAB_LOAD_BALANCER_SIZE_UNIT
         export DATABASE_MAX_CONNECTIONS=850
         envsubst < crates/collab/k8s/collab.template.yml | kubectl apply -f -
-        kubectl -n "$ZED_KUBE_NAMESPACE" rollout status "deployment/$ZED_SERVICE_NAME" --watch
-        echo "deployed ${ZED_SERVICE_NAME} to ${ZED_KUBE_NAMESPACE}"
+        kubectl -n "$VELA_KUBE_NAMESPACE" rollout status "deployment/$VELA_SERVICE_NAME" --watch
+        echo "deployed ${VELA_SERVICE_NAME} to ${VELA_KUBE_NAMESPACE}"
 
-        export ZED_SERVICE_NAME=api
-        export ZED_LOAD_BALANCER_SIZE_UNIT=$ZED_API_LOAD_BALANCER_SIZE_UNIT
+        export VELA_SERVICE_NAME=api
+        export VELA_LOAD_BALANCER_SIZE_UNIT=$VELA_API_LOAD_BALANCER_SIZE_UNIT
         export DATABASE_MAX_CONNECTIONS=60
         envsubst < crates/collab/k8s/collab.template.yml | kubectl apply -f -
-        kubectl -n "$ZED_KUBE_NAMESPACE" rollout status "deployment/$ZED_SERVICE_NAME" --watch
-        echo "deployed ${ZED_SERVICE_NAME} to ${ZED_KUBE_NAMESPACE}"
+        kubectl -n "$VELA_KUBE_NAMESPACE" rollout status "deployment/$VELA_SERVICE_NAME" --watch
+        echo "deployed ${VELA_SERVICE_NAME} to ${VELA_KUBE_NAMESPACE}"
 defaults:
   run:
     shell: bash -euxo pipefail {0}

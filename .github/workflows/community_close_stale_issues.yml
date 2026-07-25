@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   stale:
-    if: github.repository_owner == 'zed-industries'
+    if: github.repository_owner == 'vela-industries'
     runs-on: namespace-profile-2x4-ubuntu-2404
     permissions:
       issues: write
@@ -27,14 +27,14 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           stale-issue-message: >
-            Zed development moves fast and a significant number of bugs become outdated.
-            If you can reproduce this bug on the latest stable Zed, please let us know by leaving a comment with the Zed version,
+            Vela development moves fast and a significant number of bugs become outdated.
+            If you can reproduce this bug on the latest stable Vela, please let us know by leaving a comment with the Vela version,
             it helps us focus on the right issues.
             If the bug doesn't appear for you anymore, feel free to close the issue yourself; otherwise, the bot will close it in a couple of weeks.
             But even after it's closed by the bot, you can leave a comment **with the version where the bug is reproducible** and we'll reopen the issue.
             (This bot will only ask about this issue once)
             Thanks!
-          close-issue-message: "This issue was closed due to inactivity. If you're still experiencing this problem, please leave a comment with your Zed version so that we can reopen the issue."
+          close-issue-message: "This issue was closed due to inactivity. If you're still experiencing this problem, please leave a comment with your Vela version so that we can reopen the issue."
           days-before-stale: 90
           days-before-close: 21
           only-issue-types: "Bug,Crash"

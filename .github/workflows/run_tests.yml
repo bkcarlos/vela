@@ -18,7 +18,7 @@ permissions:
   contents: read
 jobs:
   orchestrate:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-2x4-ubuntu-2404
     steps:
     - name: steps::harden_runner
@@ -140,7 +140,7 @@ jobs:
       run_tests: ${{ steps.filter.outputs.run_tests }}
       changed_extensions: ${{ steps.filter.outputs.changed_extensions }}
   check_style:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')
     runs-on: namespace-profile-4x8-ubuntu-2204
     steps:
     - name: steps::harden_runner
@@ -184,7 +184,7 @@ jobs:
         "$GITHUB_WORKSPACE/ts_query_ls" format --check . || {
             echo "Found unformatted queries, please format them with ts_query_ls."
             echo "For easy use, install the Tree-sitter query extension:"
-            echo "zed://extension/tree-sitter-query"
+            echo "vela://extension/tree-sitter-query"
             false
         }
     timeout-minutes: 60
@@ -210,7 +210,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy.ps1
       shell: pwsh
@@ -254,7 +254,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy
     - name: steps::show_sccache_stats
@@ -285,7 +285,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy
     - name: steps::show_sccache_stats
@@ -318,7 +318,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::clippy
       run: ./script/clippy --target x86_64-apple-darwin
     - name: steps::show_sccache_stats
@@ -354,7 +354,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn${{ needs.orchestrate.outputs.changed_packages && format(' -E "{0}"', needs.orchestrate.outputs.changed_packages) || '' }}
       shell: pwsh
@@ -412,7 +412,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn${{ needs.orchestrate.outputs.changed_packages && format(' -E "{0}"', needs.orchestrate.outputs.changed_packages) || '' }}
     - name: steps::show_sccache_stats
@@ -464,7 +464,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: steps::cargo_nextest
       run: cargo nextest run --workspace --no-fail-fast --no-tests=warn${{ needs.orchestrate.outputs.changed_packages && format(' -E "{0}"', needs.orchestrate.outputs.changed_packages) || '' }}
     - name: steps::show_sccache_stats
@@ -542,7 +542,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - id: run_doctests
       name: run_tests::doctests::run_doctests
       run: |
@@ -590,7 +590,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: cargo build -p collab
       run: cargo build -p collab
     - name: cargo build --workspace --bins --examples
@@ -622,7 +622,7 @@ jobs:
         cache: rust
         path: ~/.rustup
     - name: run_tests::build_visual_tests_binary::cargo_build_visual_tests
-      run: cargo build -p zed --bin zed_visual_test_runner --features visual-tests
+      run: cargo build -p vela --bin vela_visual_test_runner --features visual-tests
     - name: steps::cleanup_cargo_config
       if: always()
       run: |
@@ -658,7 +658,7 @@ jobs:
         R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        SCCACHE_BUCKET: sccache-zed
+        SCCACHE_BUCKET: sccache-vela
     - name: run_tests::check_wasm::cargo_check_wasm
       run: cargo -Zbuild-std=std,panic_abort check --target wasm32-unknown-unknown -p gpui_platform -p cloud_api_client
       env:
@@ -832,9 +832,9 @@ jobs:
     runs-on: namespace-profile-16x32-ubuntu-2204
     env:
       GIT_AUTHOR_NAME: Protobuf Action
-      GIT_AUTHOR_EMAIL: ci@zed.dev
+      GIT_AUTHOR_EMAIL: ci@vela.dev
       GIT_COMMITTER_NAME: Protobuf Action
-      GIT_COMMITTER_EMAIL: ci@zed.dev
+      GIT_COMMITTER_EMAIL: ci@vela.dev
     steps:
     - name: steps::harden_runner
       uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
@@ -905,7 +905,7 @@ jobs:
     - check_licenses
     - check_scripts
     - extension_tests
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions') && always()
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions') && always()
     runs-on: namespace-profile-2x4-ubuntu-2404
     steps:
     - name: run_tests::tests_pass

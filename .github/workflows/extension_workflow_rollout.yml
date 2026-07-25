@@ -18,10 +18,10 @@ permissions:
   contents: read
 jobs:
   fetch_extension_repos:
-    if: (github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions') && (github.ref == 'refs/tags/extension-workflows' || github.ref == 'refs/heads/main')
+    if: (github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions') && (github.ref == 'refs/tags/extension-workflows' || github.ref == 'refs/heads/main')
     runs-on: namespace-profile-2x4-ubuntu-2404
     steps:
-    - name: checkout_zed_repo
+    - name: checkout_vela_repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
         clean: false
@@ -63,7 +63,7 @@ jobs:
       with:
         script: |
           const repos = await github.paginate(github.rest.repos.listForOrg, {
-              org: 'zed-extensions',
+              org: 'vela-extensions',
               type: 'public',
               per_page: 100,
           });
@@ -119,9 +119,9 @@ jobs:
       name: steps::generate_token
       uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
       with:
-        app-id: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        private-key: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
-        owner: zed-extensions
+        app-id: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        private-key: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
+        owner: vela-extensions
         repositories: ${{ matrix.repo }}
         permission-pull-requests: write
         permission-contents: write
@@ -131,7 +131,7 @@ jobs:
       with:
         clean: false
         path: extension
-        repository: zed-extensions/${{ matrix.repo }}
+        repository: vela-extensions/${{ matrix.repo }}
         token: ${{ steps.generate-token.outputs.token }}
     - name: extension_workflow_rollout::rollout_workflows_to_extension::download_workflow_files
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -179,14 +179,14 @@ jobs:
       with:
         title: Update CI workflows to `${{ steps.short-sha.outputs.sha_short }}`
         body: |
-          This PR updates the CI workflow files from the main Zed repository
-          based on the commit zed-industries/zed@${{ github.sha }}
+          This PR updates the CI workflow files from the main Vela repository
+          based on the commit vela-industries/vela@${{ github.sha }}
 
           ${{ inputs.change-description }}
         commit-message: Update CI workflows to `${{ steps.short-sha.outputs.sha_short }}`
         branch: update-workflows
-        committer: zed-zippy[bot] <234243425+zed-zippy[bot]@users.noreply.github.com>
-        author: zed-zippy[bot] <234243425+zed-zippy[bot]@users.noreply.github.com>
+        committer: vela-zippy[bot] <234243425+vela-zippy[bot]@users.noreply.github.com>
+        author: vela-zippy[bot] <234243425+vela-zippy[bot]@users.noreply.github.com>
         base: main
         delete-branch: true
         token: ${{ steps.generate-token.outputs.token }}
@@ -213,8 +213,8 @@ jobs:
       name: steps::generate_token
       uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
       with:
-        app-id: ${{ secrets.ZED_ZIPPY_APP_ID }}
-        private-key: ${{ secrets.ZED_ZIPPY_APP_PRIVATE_KEY }}
+        app-id: ${{ secrets.VELA_ZIPPY_APP_ID }}
+        private-key: ${{ secrets.VELA_ZIPPY_APP_PRIVATE_KEY }}
         permission-contents: write
     - name: steps::checkout_repo
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
