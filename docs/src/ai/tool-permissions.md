@@ -4,7 +4,6 @@ Configure which [Agent Panel](./agent-panel.md) tools run automatically and whic
 For a list of available tools, [see the Tools page](./tools.md).
 
 Use `agent.permission_mode` to choose the overall permission mode.
-Existing `agent.tool_permissions.default` settings remain supported when `permission_mode` is not set.
 
 ## Permission Modes
 
@@ -136,17 +135,16 @@ For model-invoked [Skills](./skills.md), use the `skill` tool. A user-invoked `/
 | `tools.<tool_name>.always_allow`   | Patterns that auto-approve unless a deny or confirm rule also matches         |
 | `tools.<tool_name>.always_deny`    | Patterns that block immediately—highest custom-rule priority                  |
 | `tools.<tool_name>.always_confirm` | Patterns that require confirmation unless an `always_deny` rule also matches  |
-| `tool_permissions.default`         | Legacy global fallback used only when `permission_mode` is omitted            |
 
-### Compatibility with `tool_permissions.default`
+### Migration from the legacy global default
 
-`agent.tool_permissions.default` is retained for compatibility with existing settings.
-When `agent.permission_mode` is absent, its `"confirm"`, `"allow"`, or `"deny"` value remains the inherited fallback for tools without a tool-specific default.
-The default `"confirm"` behavior corresponds to Manual mode.
+Existing `agent.tool_permissions.default` values are automatically migrated to `agent.permission_mode` and removed from the settings file:
 
-When `agent.permission_mode` is present, the permission mode supplies the inherited fallback instead.
-Tool-specific defaults and regex rules remain supported and keep their normal precedence.
-You do not need to migrate existing permission settings immediately, but new configurations should use `agent.permission_mode` for the overall behavior.
+- `"allow"` becomes `"auto"`
+- `"confirm"` becomes `"manual"`
+- `"deny"` becomes `"manual"`, because the new model has no global deny-all mode and Manual still prevents unmatched actions from running without approval
+
+An existing explicit `permission_mode` takes precedence. Tool-specific defaults and regex rules remain unchanged.
 
 The removed `agent.default_profile` and `agent.profiles` settings are still accepted when older settings files are loaded, but they no longer select models or change tool availability.
 
@@ -184,7 +182,7 @@ From highest to lowest priority:
 4. **`always_confirm`**: Requires confirmation in Manual and Auto.
 5. **`always_allow`**: Auto-approves matching actions unless Auto's safety check classifies the action as high risk.
 6. **Tool-specific `default`**: Applies when no patterns match (for example, `tools.terminal.default`).
-7. **Permission mode fallback**: Uses Confirm for Manual and Allow for Auto or Full Access. If `permission_mode` is omitted, the legacy `tool_permissions.default` value is used instead.
+7. **Permission mode fallback**: Uses Confirm for Manual and Allow for Auto or Full Access.
 
 Auto's safety check converts otherwise allowed high-risk actions back to confirmation. Full Access converts confirmation results to allow, but it does not override built-in or explicit deny results.
 
