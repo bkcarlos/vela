@@ -1,11 +1,11 @@
 ---
-name: zed-cherry-pick
-description: Cherry-pick one or more merged PRs and/or commits into Zed's `preview` or `stable` release branch. Use this whenever the user mentions cherry-picking to preview/stable, a failed cherry-pick run, or wants to manually port fix(es) into a release branch.
+name: vela-cherry-pick
+description: Cherry-pick one or more merged PRs and/or commits into Vela's `preview` or `stable` release branch. Use this whenever the user mentions cherry-picking to preview/stable, a failed cherry-pick run, or wants to manually port fix(es) into a release branch.
 ---
 
-# Zed Cherry-Pick
+# Vela Cherry-Pick
 
-Zed ships from two long-lived release branches that live on `origin`:
+Vela ships from two long-lived release branches that live on `origin`:
 
 - `preview` channel → branch like `v1.4.x`
 - `stable` channel → branch like `v1.3.x`

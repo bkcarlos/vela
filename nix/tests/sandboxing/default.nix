@@ -78,7 +78,7 @@ let
   # `/tmp` (which the restricted-fs sandbox masks with a tmpfs, hiding anything
   # there), so it stays visible inside the sandbox and the block is what's
   # actually under test.
-  unixSocketPath = "/run/zed-sandbox-test.sock";
+  unixSocketPath = "/run/vela-sandbox-test.sock";
 
   # Quiet boot + a couple of cores; shared by every machine-under-test.
   baseMachine = {
@@ -187,8 +187,8 @@ let
         # whole test on a non-zero exit; we print its output so the per-check
         # results show up in the build log.
         print(machine.succeed(
-            "ZED_SANDBOX_CHECKS=${checksFile} "
-            "ZED_TEST_ECHO_PORT=${toString echoPort} "
+            "VELA_SANDBOX_CHECKS=${checksFile} "
+            "VELA_TEST_ECHO_PORT=${toString echoPort} "
             "bwrap_test_helper 2>&1"
         ))
       '';

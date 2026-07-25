@@ -1,18 +1,18 @@
 [
   {
-    "label": "Debug Zed (CodeLLDB)",
+    "label": "Debug Vela (CodeLLDB)",
     "adapter": "CodeLLDB",
     "build": {
-      "label": "Build Zed",
+      "label": "Build Vela",
       "command": "cargo",
       "args": ["build"]
     }
   },
   {
-    "label": "Debug Zed (GDB)",
+    "label": "Debug Vela (GDB)",
     "adapter": "GDB",
     "build": {
-      "label": "Build Zed",
+      "label": "Build Vela",
       "command": "cargo",
       "args": ["build"]
     }

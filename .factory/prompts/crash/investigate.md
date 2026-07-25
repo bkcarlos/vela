@@ -6,7 +6,7 @@ You are investigating a crash that was observed in the wild. Your goal is to und
 
 ### Step 1: Get the Crash Report
 
-If given a Sentry issue ID (like `ZED-4VS` or a numeric ID), there are several ways to fetch the crash data:
+If given a Sentry issue ID (like `VELA-4VS` or a numeric ID), there are several ways to fetch the crash data:
 
 **Option A: Sentry MCP server (preferred if available)**
 If the Sentry MCP server is configured as a context server, use its tools directly (e.g., `get_sentry_issue`) to fetch the issue details and stack trace. This is the simplest path — no tokens or scripts needed.

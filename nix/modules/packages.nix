@@ -8,13 +8,13 @@
       ...
     }:
     let
-      mkZed = import ../toolchain.nix { inherit inputs; };
-      zed-editor = mkZed pkgs;
+      mkVela = import ../toolchain.nix { inherit inputs; };
+      vela-editor = mkVela pkgs;
     in
     {
       packages = {
-        default = zed-editor;
-        debug = zed-editor.override { profile = "dev"; };
+        default = vela-editor;
+        debug = vela-editor.override { profile = "dev"; };
       };
     }
     // lib.optionalAttrs (lib.hasSuffix "linux" system) {
