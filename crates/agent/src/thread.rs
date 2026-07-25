@@ -18,8 +18,8 @@ use crate::sandboxing::{
 };
 use agent_client_protocol::schema::v1 as acp;
 use agent_settings::{
-    AgentProfileId, AgentProfileSettings, AgentSettings, AutoCompactThreshold, COMPACTION_PROMPT,
-    SUMMARIZE_THREAD_DETAILED_PROMPT, SUMMARIZE_THREAD_PROMPT, builtin_profiles,
+    AgentProfileId, AgentSettings, AutoCompactThreshold, COMPACTION_PROMPT,
+    SUMMARIZE_THREAD_DETAILED_PROMPT, SUMMARIZE_THREAD_PROMPT,
 };
 use anyhow::{Context as _, Result, anyhow};
 use chrono::{DateTime, Local, Utc};
@@ -1246,9 +1246,6 @@ pub struct Thread {
     initial_project_snapshot: Shared<Task<Option<Arc<ProjectSnapshot>>>>,
     pub(crate) context_server_registry: Entity<ContextServerRegistry>,
     profile_id: AgentProfileId,
-    /// Whether `profile_id` was downgraded to `minimal` at thread start because
-    /// the workspace is restricted. Used purely to surface a warning in the UI.
-    profile_downgraded_for_restricted_workspace: bool,
     project_context: Entity<ProjectContext>,
     pub(crate) templates: Arc<Templates>,
     model: ThreadModel,
@@ -1343,8 +1340,7 @@ impl Thread {
         cx: &mut Context<Self>,
     ) -> Self {
         let settings = AgentSettings::get_global(cx);
-        let (profile_id, profile_downgraded_for_restricted_workspace) =
-            Self::profile_for_restricted_workspace(settings.default_profile.clone(), &project, cx);
+        let profile_id = settings.default_profile.clone();
         let enable_thinking = settings
             .default_model
             .as_ref()
@@ -1391,7 +1387,6 @@ impl Thread {
             },
             context_server_registry,
             profile_id,
-            profile_downgraded_for_restricted_workspace,
             project_context,
             templates,
             model,
@@ -1424,8 +1419,6 @@ impl Thread {
         self.thinking_effort = parent.thinking_effort.clone();
         self.summarization_model = parent.summarization_model.clone();
         self.profile_id = parent.profile_id.clone();
-        self.profile_downgraded_for_restricted_workspace =
-            parent.profile_downgraded_for_restricted_workspace;
     }
 
     fn apply_model_selection(
@@ -1725,11 +1718,9 @@ impl Thread {
         let model = match (resolved_saved_model, saved_selection) {
             (Some(model), _) => ThreadModel::Ready(model),
             (None, Some(selection)) => ThreadModel::Unresolved(selection),
-            (None, None) => Self::resolve_profile_model(&profile_id, cx)
-                .or_else(|| {
-                    LanguageModelRegistry::global(cx).update(cx, |registry, _cx| {
-                        registry.default_model().map(|model| model.model)
-                    })
+            (None, None) => LanguageModelRegistry::global(cx)
+                .update(cx, |registry, _cx| {
+                    registry.default_model().map(|model| model.model)
                 })
                 .map_or(ThreadModel::Unset, ThreadModel::Ready),
         };
@@ -1765,7 +1756,6 @@ impl Thread {
             initial_project_snapshot: Task::ready(db_thread.initial_project_snapshot).shared(),
             context_server_registry,
             profile_id,
-            profile_downgraded_for_restricted_workspace: false,
             project_context,
             templates,
             model,
@@ -2187,54 +2177,12 @@ impl Thread {
         &self.profile_id
     }
 
-    /// Whether this thread's profile was downgraded to `minimal` at thread start
-    /// because the workspace is restricted.
-    pub fn profile_was_downgraded(&self) -> bool {
-        self.profile_downgraded_for_restricted_workspace
-    }
-
-    /// Computes the profile a thread should start with, given the user's chosen
-    /// profile. In a restricted workspace, the built-in `write`/`ask` profiles
-    /// are downgraded to `minimal` — but only when both the chosen profile and
-    /// `minimal` are unmodified, shipped defaults, so we never override a user's
-    /// custom or customized profiles.
-    ///
-    /// Returns the (possibly downgraded) profile and whether a downgrade
-    /// happened.
-    fn profile_for_restricted_workspace(
-        profile_id: AgentProfileId,
-        project: &Entity<Project>,
-        cx: &App,
-    ) -> (AgentProfileId, bool) {
-        let is_write_or_ask = profile_id.as_str() == builtin_profiles::WRITE
-            || profile_id.as_str() == builtin_profiles::ASK;
-        let minimal = AgentProfileId(builtin_profiles::MINIMAL.into());
-        if is_write_or_ask
-            && TrustedWorktrees::has_restricted_worktrees(&project.read(cx).worktree_store(), cx)
-            && AgentProfileSettings::is_unmodified_default(&profile_id, cx)
-            && AgentProfileSettings::is_unmodified_default(&minimal, cx)
-        {
-            (minimal, true)
-        } else {
-            (profile_id, false)
-        }
-    }
-
     pub fn set_profile(&mut self, profile_id: AgentProfileId, cx: &mut Context<Self>) {
-        // An explicit selection means any earlier automatic downgrade no longer
-        // applies, even if the user re-selects the same profile.
-        self.profile_downgraded_for_restricted_workspace = false;
-
         if self.profile_id == profile_id {
             return;
         }
 
         self.profile_id = profile_id.clone();
-
-        // Swap to the profile's preferred model when available.
-        if let Some(model) = Self::resolve_profile_model(&self.profile_id, cx) {
-            self.set_model(model, cx);
-        }
 
         for subagent in &self.running_subagents {
             subagent
@@ -2418,19 +2366,6 @@ impl Thread {
             }
         }
         None
-    }
-
-    /// Look up the active profile and resolve its preferred model if one is configured.
-    fn resolve_profile_model(
-        profile_id: &AgentProfileId,
-        cx: &mut Context<Self>,
-    ) -> Option<Arc<dyn LanguageModel>> {
-        let selection = AgentSettings::get_global(cx)
-            .profiles
-            .get(profile_id)?
-            .default_model
-            .clone()?;
-        Self::resolve_model_from_selection(&selection, cx)
     }
 
     fn user_configured_model_selection(cx: &App) -> Option<SelectedModel> {
@@ -4070,12 +4005,8 @@ impl Thread {
         let Some(model) = self.model() else {
             return BTreeMap::new();
         };
-        let Some(profile) = AgentSettings::get_global(cx).profiles.get(&self.profile_id) else {
-            return BTreeMap::new();
-        };
-        // Terminal variants are configured by users under the canonical
-        // `terminal` name. Expose the one matching the current sandbox state
-        // to the model under that name.
+        // Expose the terminal variant matching the current sandbox state to the
+        // model under the canonical `terminal` name.
         let use_sandboxed_terminal = sandboxing_enabled_for_project(self.project.read(cx), cx);
 
         // Tools that aren't allowed in restricted workspaces must never be
@@ -4089,31 +4020,19 @@ impl Thread {
             .iter()
             .filter(|(_, tool)| !is_restricted || tool.allow_in_restricted_mode())
             .filter_map(|(tool_name, tool)| {
-                let terminal_variant = matches!(
-                    tool_name.as_ref(),
-                    TerminalTool::NAME | SandboxedTerminalTool::NAME
-                );
-                let profile_tool_name = if terminal_variant {
-                    TerminalTool::NAME
-                } else {
-                    tool_name.as_ref()
-                };
+                if !tool.supports_provider(&model.provider_id()) {
+                    return None;
+                }
 
-                if tool.supports_provider(&model.provider_id())
-                    && profile.is_tool_enabled(profile_tool_name)
-                {
-                    match (tool_name.as_ref(), use_sandboxed_terminal) {
-                        (TerminalTool::NAME, false) | (SandboxedTerminalTool::NAME, true) => {
-                            Some((SharedString::from(TerminalTool::NAME), tool.clone()))
-                        }
-                        (TerminalTool::NAME | SandboxedTerminalTool::NAME, _) => None,
-                        _ => Some((
-                            provider_compatible_tool_name(tool_name.as_ref()).into(),
-                            tool.clone(),
-                        )),
+                match (tool_name.as_ref(), use_sandboxed_terminal) {
+                    (TerminalTool::NAME, false) | (SandboxedTerminalTool::NAME, true) => {
+                        Some((SharedString::from(TerminalTool::NAME), tool.clone()))
                     }
-                } else {
-                    None
+                    (TerminalTool::NAME | SandboxedTerminalTool::NAME, _) => None,
+                    _ => Some((
+                        provider_compatible_tool_name(tool_name.as_ref()).into(),
+                        tool.clone(),
+                    )),
                 }
             })
             .filter(|(tool_name, _)| crate::tools::tool_feature_flag_enabled(tool_name, cx))
@@ -4124,14 +4043,12 @@ impl Thread {
         let mut duplicate_tool_names = HashSet::default();
         for (server_id, server_tools) in self.context_server_registry.read(cx).servers() {
             for (tool_name, tool) in server_tools {
-                if profile.is_context_server_tool_enabled(&server_id.0, &tool_name) {
-                    let tool_name: SharedString =
-                        provider_compatible_tool_name(tool_name.as_ref()).into();
-                    if !seen_tools.insert(tool_name.clone()) {
-                        duplicate_tool_names.insert(tool_name.clone());
-                    }
-                    context_server_tools.push((server_id.clone(), tool_name, tool.clone()));
+                let tool_name: SharedString =
+                    provider_compatible_tool_name(tool_name.as_ref()).into();
+                if !seen_tools.insert(tool_name.clone()) {
+                    duplicate_tool_names.insert(tool_name.clone());
                 }
+                context_server_tools.push((server_id.clone(), tool_name, tool.clone()));
             }
         }
 

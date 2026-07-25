@@ -421,7 +421,7 @@ impl std::fmt::Display for AgentProfileId {
 
 impl Default for AgentProfileId {
     fn default() -> Self {
-        Self("write".into())
+        Self("default".into())
     }
 }
 
@@ -790,10 +790,13 @@ impl Settings for AgentSettings {
             thread_summary_model: agent.thread_summary_model,
             inline_alternatives: agent.inline_alternatives.unwrap_or_default(),
             favorite_models: agent.favorite_models,
-            default_profile: AgentProfileId(agent.default_profile.unwrap()),
+            default_profile: agent
+                .default_profile
+                .map(AgentProfileId)
+                .unwrap_or_default(),
             profiles: agent
                 .profiles
-                .unwrap()
+                .unwrap_or_default()
                 .into_iter()
                 .map(|(key, val)| (AgentProfileId(key), val.into()))
                 .collect(),

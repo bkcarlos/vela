@@ -260,11 +260,9 @@ pub struct AgentSettingsContent {
     pub thread_summary_model: Option<LanguageModelSelection>,
     /// Additional models with which to generate alternatives when performing inline assists.
     pub inline_alternatives: Option<Vec<LanguageModelSelection>>,
-    /// The default profile to use in the Agent.
-    ///
-    /// Default: write
+    /// Legacy profile selection retained for loading older settings.
     pub default_profile: Option<Arc<str>>,
-    /// The available agent profiles.
+    /// Legacy profile definitions retained for loading older settings.
     pub profiles: Option<IndexMap<Arc<str>, AgentProfileContent>>,
     /// Where to show a popup notification when the agent is waiting for user input.
     ///

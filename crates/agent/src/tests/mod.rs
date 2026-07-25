@@ -1393,7 +1393,7 @@ async fn test_concurrent_tool_calls(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn test_profiles(cx: &mut TestAppContext) {
+async fn test_permission_modes_expose_the_same_tools(cx: &mut TestAppContext) {
     let ThreadTest {
         model, thread, fs, ..
     } = setup(cx, TestModel::Fake).await;
@@ -1405,71 +1405,52 @@ async fn test_profiles(cx: &mut TestAppContext) {
         thread.add_tool(InfiniteTool);
     });
 
-    // Override profiles and wait for settings to be loaded.
-    fs.insert_file(
-        paths::settings_file(),
-        json!({
-            "agent": {
-                "profiles": {
-                    "test-1": {
-                        "name": "Test Profile 1",
-                        "tools": {
-                            EchoTool::NAME: true,
-                            DelayTool::NAME: true,
-                        }
-                    },
-                    "test-2": {
-                        "name": "Test Profile 2",
-                        "tools": {
-                            InfiniteTool::NAME: true,
+    for permission_mode in ["manual", "auto", "full_access"] {
+        fs.insert_file(
+            paths::settings_file(),
+            json!({
+                "agent": {
+                    "permission_mode": permission_mode,
+                    "default_profile": "legacy",
+                    "profiles": {
+                        "legacy": {
+                            "name": "Legacy",
+                            "tools": {
+                                EchoTool::NAME: true,
+                            }
                         }
                     }
                 }
-            }
-        })
-        .to_string()
-        .into_bytes(),
-    )
-    .await;
-    cx.run_until_parked();
+            })
+            .to_string()
+            .into_bytes(),
+        )
+        .await;
+        cx.run_until_parked();
 
-    // Test that test-1 profile (default) has echo and delay tools
-    thread
-        .update(cx, |thread, cx| {
-            thread.set_profile(AgentProfileId("test-1".into()), cx);
-            thread.send(ClientUserMessageId::new(), ["test"], cx)
-        })
-        .unwrap();
-    cx.run_until_parked();
+        thread
+            .update(cx, |thread, cx| {
+                thread.send(ClientUserMessageId::new(), ["test"], cx)
+            })
+            .unwrap();
+        cx.run_until_parked();
 
-    let mut pending_completions = fake_model.pending_completions();
-    assert_eq!(pending_completions.len(), 1);
-    let completion = pending_completions.pop().unwrap();
-    let tool_names: Vec<String> = completion
-        .tools
-        .iter()
-        .map(|tool| tool.name.clone())
-        .collect();
-    assert_eq!(tool_names, vec![DelayTool::NAME, EchoTool::NAME]);
-    fake_model.end_last_completion_stream();
-
-    // Switch to test-2 profile, and verify that it has only the infinite tool.
-    thread
-        .update(cx, |thread, cx| {
-            thread.set_profile(AgentProfileId("test-2".into()), cx);
-            thread.send(ClientUserMessageId::new(), ["test2"], cx)
-        })
-        .unwrap();
-    cx.run_until_parked();
-    let mut pending_completions = fake_model.pending_completions();
-    assert_eq!(pending_completions.len(), 1);
-    let completion = pending_completions.pop().unwrap();
-    let tool_names: Vec<String> = completion
-        .tools
-        .iter()
-        .map(|tool| tool.name.clone())
-        .collect();
-    assert_eq!(tool_names, vec![InfiniteTool::NAME]);
+        let mut pending_completions = fake_model.pending_completions();
+        assert_eq!(pending_completions.len(), 1);
+        let completion = pending_completions.pop().unwrap();
+        let tool_names: Vec<String> = completion
+            .tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect();
+        assert_eq!(
+            tool_names,
+            vec![DelayTool::NAME, EchoTool::NAME, InfiniteTool::NAME],
+            "permission mode {permission_mode} should expose every available tool",
+        );
+        fake_model.end_last_completion_stream();
+        cx.run_until_parked();
+    }
 }
 
 #[gpui::test]
@@ -4652,35 +4633,7 @@ async fn setup(cx: &mut TestAppContext, model: TestModel) -> ThreadTest {
     fs.create_dir(paths::settings_file().parent().unwrap())
         .await
         .unwrap();
-    fs.insert_file(
-        paths::settings_file(),
-        json!({
-            "agent": {
-                "default_profile": "test-profile",
-                "profiles": {
-                    "test-profile": {
-                        "name": "Test Profile",
-                        "tools": {
-                            EchoTool::NAME: true,
-                            DelayTool::NAME: true,
-                            WordListTool::NAME: true,
-                            ToolRequiringPermission::NAME: true,
-                            ToolRequiringPermission2::NAME: true,
-                            InfiniteTool::NAME: true,
-                            CancellationAwareTool::NAME: true,
-                            StreamingEchoTool::NAME: true,
-                            StreamingJsonErrorContextTool::NAME: true,
-                            StreamingFailingEchoTool::NAME: true,
-                            TerminalTool::NAME: true,
-                        }
-                    }
-                }
-            }
-        })
-        .to_string()
-        .into_bytes(),
-    )
-    .await;
+    fs.insert_file(paths::settings_file(), b"{}".to_vec()).await;
 
     cx.update(|cx| {
         settings::init(cx);
@@ -8389,9 +8342,7 @@ async fn test_streaming_tool_error_waits_for_prior_tools_to_complete(cx: &mut Te
 
 #[gpui::test]
 async fn test_mid_turn_model_and_settings_refresh(cx: &mut TestAppContext) {
-    let ThreadTest {
-        model, thread, fs, ..
-    } = setup(cx, TestModel::Fake).await;
+    let ThreadTest { model, thread, .. } = setup(cx, TestModel::Fake).await;
     let fake_model_a = model.as_fake();
 
     thread.update(cx, |thread, _cx| {
@@ -8399,40 +8350,11 @@ async fn test_mid_turn_model_and_settings_refresh(cx: &mut TestAppContext) {
         thread.add_tool(DelayTool);
     });
 
-    // Set up two profiles: profile-a has both tools, profile-b has only DelayTool.
-    fs.insert_file(
-        paths::settings_file(),
-        json!({
-            "agent": {
-                "profiles": {
-                    "profile-a": {
-                        "name": "Profile A",
-                        "tools": {
-                            EchoTool::NAME: true,
-                            DelayTool::NAME: true,
-                        }
-                    },
-                    "profile-b": {
-                        "name": "Profile B",
-                        "tools": {
-                            DelayTool::NAME: true,
-                        }
-                    }
-                }
-            }
-        })
-        .to_string()
-        .into_bytes(),
-    )
-    .await;
-    cx.run_until_parked();
-
     thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("profile-a".into()), cx);
         thread.set_thinking_enabled(false, cx);
     });
 
-    // Send a message — first iteration starts with model A, profile-a, thinking off.
+    // Send a message — first iteration starts with model A and thinking off.
     thread
         .update(cx, |thread, cx| {
             thread.send(ClientUserMessageId::new(), ["test mid-turn refresh"], cx)
@@ -8460,8 +8382,7 @@ async fn test_mid_turn_model_and_settings_refresh(cx: &mut TestAppContext) {
     ));
     fake_model_a.end_last_completion_stream();
 
-    // Before the next iteration runs, switch to profile-b (only DelayTool),
-    // swap in a new model, and enable thinking.
+    // Before the next iteration runs, swap in a new model and enable thinking.
     let fake_model_b = Arc::new(FakeLanguageModel::with_id_and_thinking(
         "test-provider",
         "model-b",
@@ -8469,13 +8390,12 @@ async fn test_mid_turn_model_and_settings_refresh(cx: &mut TestAppContext) {
         true,
     ));
     thread.update(cx, |thread, cx| {
-        thread.set_profile(AgentProfileId("profile-b".into()), cx);
         thread.set_model(fake_model_b.clone() as Arc<dyn LanguageModel>, cx);
         thread.set_thinking_enabled(true, cx);
     });
 
     // Run until parked — processes the echo tool call, loops back, picks up
-    // the new model/profile/thinking, and makes a second request to model B.
+    // the new model and thinking setting, and makes a second request to model B.
     cx.run_until_parked();
 
     // The second request should have gone to model B.
@@ -8486,9 +8406,8 @@ async fn test_mid_turn_model_and_settings_refresh(cx: &mut TestAppContext) {
         "second request should go to model B"
     );
 
-    // Profile-b only has DelayTool, so echo should be gone.
     let second_tools = tool_names_for_completion(&model_b_completions[0]);
-    assert_eq!(second_tools, vec![DelayTool::NAME]);
+    assert_eq!(second_tools, vec![DelayTool::NAME, EchoTool::NAME]);
 
     // Thinking should now be enabled.
     assert!(model_b_completions[0].thinking_allowed);
