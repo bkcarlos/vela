@@ -1,0 +1,60 @@
+# Lightweight CI for personal forks.
+#
+# The upstream run_tests.yml is gated on repository_owner == 'vela-industries'
+# and uses private namespace runners, so it can never run on a personal fork.
+# This workflow runs on GitHub-hosted runners instead and covers the crates we
+# actually change.
+name: fork_ci
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: '1'
+
+on:
+  push:
+    branches:
+      - vela/main
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain_file: rust-toolchain.toml
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: fork-ci
+          cache-on-failure: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libssl-dev libzstd-dev \
+            libvulkan1 libgit2-dev cmake mold clang
+
+      - name: Check agent crate
+        run: cargo check -p agent --lib --tests
+
+      - name: Run tool permission tests
+        run: cargo test -p agent --lib tool_permissions
+
+      - name: Clippy on changed crates
+        run: cargo clippy -p agent --lib --tests -- -D warnings
