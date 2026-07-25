@@ -31,7 +31,7 @@ picks them up automatically when run from that directory.
 
 ## How to run
 
-Ideally you run this as part of the `clippy` script in the `zed/scripts` directory since this will also run our other linters.
+Ideally you run this as part of the `clippy` script in the `vela/scripts` directory since this will also run our other linters.
 
 ### Prerequisites
 

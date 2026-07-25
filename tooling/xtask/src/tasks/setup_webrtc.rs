@@ -114,7 +114,7 @@ fn read_webrtc_sys_rev(workspace_root: &Path) -> Result<String> {
 
 fn fetch_webrtc_tag(rev: &str) -> Result<String> {
     let url = format!(
-        "https://raw.githubusercontent.com/zed-industries/livekit-rust-sdks/{rev}/webrtc-sys/build/src/lib.rs"
+        "https://raw.githubusercontent.com/vela-industries/livekit-rust-sdks/{rev}/webrtc-sys/build/src/lib.rs"
     );
     let body = curl_text(&url).with_context(|| format!("fetching {url}"))?;
 
@@ -143,7 +143,7 @@ fn host_webrtc_triple() -> Result<String> {
 
 fn download_and_extract(tag: &str, triple: &str, into: &Path) -> Result<()> {
     let url = format!(
-        "https://github.com/zed-industries/livekit-rust-sdks/releases/download/{tag}/webrtc-{triple}.zip"
+        "https://github.com/vela-industries/livekit-rust-sdks/releases/download/{tag}/webrtc-{triple}.zip"
     );
     let zip_path = into.join(format!("webrtc-{triple}.zip"));
 

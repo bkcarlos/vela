@@ -35,7 +35,7 @@ fn danger_job() -> NamedJob {
             // while still being able to run on PRs from forks.
             .add_env((
                 "DANGER_GITHUB_API_BASE_URL",
-                "https://danger-proxy.zed.dev/github",
+                "https://danger-proxy.vela.dev/github",
             ))
     }
 

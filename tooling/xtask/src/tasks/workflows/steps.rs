@@ -12,7 +12,7 @@ pub(crate) fn use_clang(job: Job) -> Job {
         .add_env(Env::new("CXX", "clang++"))
 }
 
-const SCCACHE_R2_BUCKET: &str = "sccache-zed";
+const SCCACHE_R2_BUCKET: &str = "sccache-vela";
 
 pub(crate) const BASH_SHELL: &str = "bash -euxo pipefail {0}";
 // https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsshell
@@ -355,8 +355,7 @@ pub struct NamedJob<J: JobType = RunJob> {
 //     }
 // }
 
-pub(crate) const DEFAULT_REPOSITORY_OWNER_GUARD: &str =
-    "(github.repository_owner == 'zed-industries' || github.repository_owner == 'zed-extensions')";
+pub(crate) const DEFAULT_REPOSITORY_OWNER_GUARD: &str = "(github.repository_owner == 'vela-industries' || github.repository_owner == 'vela-extensions')";
 
 pub fn repository_owner_guard_expression(trigger_always: bool) -> Expression {
     Expression::new(format!(
@@ -553,8 +552,8 @@ pub mod named {
     }
 }
 
-const ZED_ZIPPY_GIT_USER_NAME: &str = "zed-zippy[bot]";
-const ZED_ZIPPY_GIT_USER_EMAIL: &str = "234243425+zed-zippy[bot]@users.noreply.github.com";
+const VELA_ZIPPY_GIT_USER_NAME: &str = "vela-zippy[bot]";
+const VELA_ZIPPY_GIT_USER_EMAIL: &str = "234243425+vela-zippy[bot]@users.noreply.github.com";
 
 pub(crate) trait ZippyGitIdentity {
     fn with_zippy_git_identity(self) -> Self;
@@ -562,10 +561,10 @@ pub(crate) trait ZippyGitIdentity {
 
 impl ZippyGitIdentity for Step<Run> {
     fn with_zippy_git_identity(self) -> Self {
-        self.add_env(("GIT_AUTHOR_NAME", ZED_ZIPPY_GIT_USER_NAME))
-            .add_env(("GIT_AUTHOR_EMAIL", ZED_ZIPPY_GIT_USER_EMAIL))
-            .add_env(("GIT_COMMITTER_NAME", ZED_ZIPPY_GIT_USER_NAME))
-            .add_env(("GIT_COMMITTER_EMAIL", ZED_ZIPPY_GIT_USER_EMAIL))
+        self.add_env(("GIT_AUTHOR_NAME", VELA_ZIPPY_GIT_USER_NAME))
+            .add_env(("GIT_AUTHOR_EMAIL", VELA_ZIPPY_GIT_USER_EMAIL))
+            .add_env(("GIT_COMMITTER_NAME", VELA_ZIPPY_GIT_USER_NAME))
+            .add_env(("GIT_COMMITTER_EMAIL", VELA_ZIPPY_GIT_USER_EMAIL))
     }
 }
 
@@ -896,7 +895,7 @@ pub(crate) fn generate_token<'a>(
 }
 
 pub fn authenticate_as_zippy() -> GenerateAppToken<'static> {
-    generate_token_with_job_name(vars::ZED_ZIPPY_APP_ID, vars::ZED_ZIPPY_APP_PRIVATE_KEY)
+    generate_token_with_job_name(vars::VELA_ZIPPY_APP_ID, vars::VELA_ZIPPY_APP_PRIVATE_KEY)
 }
 
 fn generate_token_with_job_name<'a>(
@@ -1073,8 +1072,8 @@ pub(crate) fn update_ref(
     }
 }
 
-const ZED_ZIPPY_COMMITTER: &str =
-    "zed-zippy[bot] <234243425+zed-zippy[bot]@users.noreply.github.com>";
+const VELA_ZIPPY_COMMITTER: &str =
+    "vela-zippy[bot] <234243425+vela-zippy[bot]@users.noreply.github.com>";
 
 pub(crate) struct CreatePrStep {
     title: String,
@@ -1142,8 +1141,8 @@ impl From<CreatePrStep> for Step<Use> {
             .add_with(("body", step.body))
             .add_with(("commit-message", step.title))
             .add_with(("branch", step.branch))
-            .add_with(("committer", ZED_ZIPPY_COMMITTER))
-            .add_with(("author", ZED_ZIPPY_COMMITTER))
+            .add_with(("committer", VELA_ZIPPY_COMMITTER))
+            .add_with(("author", VELA_ZIPPY_COMMITTER))
             .add_with(("base", step.base))
             .add_with(("delete-branch", true))
             .add_with(("token", step.token))

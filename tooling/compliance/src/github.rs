@@ -257,7 +257,7 @@ pub struct Repository<'a> {
 }
 
 impl<'a> Repository<'a> {
-    pub const ZED: Repository<'static> = Repository::new_static("zed-industries", "zed");
+    pub const VELA: Repository<'static> = Repository::new_static("vela-industries", "vela");
 
     pub fn new(owner: &'a str, name: &'a str) -> Self {
         Self {
@@ -487,7 +487,7 @@ mod octo_client {
             let installation_id = installations
                 .into_iter()
                 .find(|installation| installation.account.login == org)
-                .context("Could not find Zed repository in installations")?
+                .context("Could not find Vela repository in installations")?
                 .id;
 
             let client = octocrab.installation(installation_id)?;

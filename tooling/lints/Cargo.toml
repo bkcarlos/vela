@@ -3,7 +3,7 @@ name = "lints"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Dylint lints for catching bad Zed specific patterns."
+description = "Dylint lints for catching bad Vela specific patterns."
 
 [lib]
 crate-type = ["cdylib"]
@@ -20,7 +20,7 @@ dylint_testing = { version = "6.0", features = ["deny_warnings"] }
 [package.metadata.rust-analyzer]
 rustc_private = true
 
-# Keep this crate out of the zed workspace. It pins its own nightly toolchain
+# Keep this crate out of the vela workspace. It pins its own nightly toolchain
 # (see `rust-toolchain.toml`) to match `clippy_utils`.
 [workspace]
 

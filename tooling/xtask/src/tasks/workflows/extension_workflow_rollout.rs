@@ -58,7 +58,7 @@ fn fetch_extension_repos(filter_repos_input: &WorkflowInput) -> (NamedJob, JobOu
     fn get_repositories(filter_repos_input: &WorkflowInput) -> (Step<Use>, StepOutput) {
         let step: Step<Use> = steps::github_script(formatdoc! {r#"
                 const repos = await github.paginate(github.rest.repos.listForOrg, {{
-                    org: 'zed-extensions',
+                    org: 'vela-extensions',
                     type: 'public',
                     per_page: 100,
                 }});
@@ -87,10 +87,10 @@ fn fetch_extension_repos(filter_repos_input: &WorkflowInput) -> (NamedJob, JobOu
         (step, filtered_repos)
     }
 
-    fn checkout_zed_repo() -> CheckoutStep {
+    fn checkout_vela_repo() -> CheckoutStep {
         steps::checkout_repo()
             .with_full_history()
-            .with_custom_name("checkout_zed_repo")
+            .with_custom_name("checkout_vela_repo")
     }
 
     fn get_previous_tag_commit() -> (Step<Run>, StepOutput) {
@@ -166,7 +166,7 @@ fn fetch_extension_repos(filter_repos_input: &WorkflowInput) -> (NamedJob, JobOu
             ("removed_ci".to_owned(), removed_ci.to_string()),
             ("removed_shared".to_owned(), removed_shared.to_string()),
         ])
-        .add_step(checkout_zed_repo())
+        .add_step(checkout_vela_repo())
         .add_step(get_prev_tag)
         .add_step(calc_changes)
         .add_step(get_org_repositories)
@@ -194,7 +194,7 @@ fn rollout_workflows_to_extension(
         steps::checkout_repo()
             .with_custom_name("checkout_extension_repo")
             .with_token(token)
-            .with_repository("zed-extensions/${{ matrix.repo }}")
+            .with_repository("vela-extensions/${{ matrix.repo }}")
             .with_path("extension")
     }
 
@@ -257,8 +257,8 @@ fn rollout_workflows_to_extension(
         let title = format!("Update CI workflows to `{short_sha}`");
 
         let body = formatdoc! {r#"
-            This PR updates the CI workflow files from the main Zed repository
-            based on the commit zed-industries/zed@${{{{ github.sha }}}}
+            This PR updates the CI workflow files from the main Vela repository
+            based on the commit vela-industries/vela@${{{{ github.sha }}}}
 
             {context_input}
         "#,
@@ -291,9 +291,9 @@ fn rollout_workflows_to_extension(
     }
 
     let (authenticate, token) =
-        generate_token(vars::ZED_ZIPPY_APP_ID, vars::ZED_ZIPPY_APP_PRIVATE_KEY)
+        generate_token(vars::VELA_ZIPPY_APP_ID, vars::VELA_ZIPPY_APP_PRIVATE_KEY)
             .for_repository(RepositoryTarget::new(
-                "zed-extensions",
+                "vela-extensions",
                 &["${{ matrix.repo }}"],
             ))
             .with_permissions([
@@ -333,12 +333,12 @@ fn rollout_workflows_to_extension(
 }
 
 fn create_rollout_tag(rollout_job: &NamedJob, filter_repos_input: &WorkflowInput) -> NamedJob {
-    fn checkout_zed_repo(token: &StepOutput) -> CheckoutStep {
+    fn checkout_vela_repo(token: &StepOutput) -> CheckoutStep {
         steps::checkout_repo().with_full_history().with_token(token)
     }
 
     let (authenticate, token) =
-        generate_token(vars::ZED_ZIPPY_APP_ID, vars::ZED_ZIPPY_APP_PRIVATE_KEY)
+        generate_token(vars::VELA_ZIPPY_APP_ID, vars::VELA_ZIPPY_APP_PRIVATE_KEY)
             .for_repository(RepositoryTarget::current())
             .with_permissions([(TokenPermissions::Contents, Level::Write)])
             .into();
@@ -352,7 +352,7 @@ fn create_rollout_tag(rollout_job: &NamedJob, filter_repos_input: &WorkflowInput
         .runs_on(runners::LINUX_SMALL)
         .timeout_minutes(1u32)
         .add_step(authenticate)
-        .add_step(checkout_zed_repo(&token))
+        .add_step(checkout_vela_repo(&token))
         .add_step(steps::update_ref(
             GitRef::Tag(ROLLOUT_TAG_NAME.to_owned()),
             RefSha::Context,

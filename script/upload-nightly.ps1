@@ -8,14 +8,14 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\lib\blob-store.ps1"
 . "$PSScriptRoot\lib\workspace.ps1"
 
-ParseZedWorkspace
+ParseVelaWorkspace
 Write-Host "Uploading nightly for target: $target"
 
-$bucketName = "zed-nightly-host"
-$releaseVersion = & "$PSScriptRoot\get-crate-version.ps1" zed
+$bucketName = "vela-nightly-host"
+$releaseVersion = & "$PSScriptRoot\get-crate-version.ps1" vela
 $version = "$releaseVersion+nightly.$env:GITHUB_RUN_NUMBER.$env:GITHUB_SHA"
 
-$remoteServerFiles = Get-ChildItem -Path "target" -Filter "zed-remote-server-windows-*.zip" -Recurse -File -ErrorAction SilentlyContinue
+$remoteServerFiles = Get-ChildItem -Path "target" -Filter "vela-remote-server-windows-*.zip" -Recurse -File -ErrorAction SilentlyContinue
 
 foreach ($file in $remoteServerFiles) {
     UploadToBlobStore -BucketName $bucketName -FileToUpload $file.FullName -BlobStoreKey "nightly/$($file.Name)"
@@ -23,10 +23,10 @@ foreach ($file in $remoteServerFiles) {
     Remove-Item -Path $file.FullName -ErrorAction SilentlyContinue
 }
 
-UploadToBlobStore -BucketName $bucketName -FileToUpload "target/Zed-$Architecture.exe" -BlobStoreKey "nightly/Zed-$Architecture.exe"
-UploadToBlobStore -BucketName $bucketName -FileToUpload "target/Zed-$Architecture.exe" -BlobStoreKey "$version/Zed-$Architecture.exe"
+UploadToBlobStore -BucketName $bucketName -FileToUpload "target/Vela-$Architecture.exe" -BlobStoreKey "nightly/Vela-$Architecture.exe"
+UploadToBlobStore -BucketName $bucketName -FileToUpload "target/Vela-$Architecture.exe" -BlobStoreKey "$version/Vela-$Architecture.exe"
 
-Remove-Item -Path "target/Zed-$Architecture.exe" -ErrorAction SilentlyContinue
+Remove-Item -Path "target/Vela-$Architecture.exe" -ErrorAction SilentlyContinue
 
 $version | Out-File -FilePath "target/latest-sha" -NoNewline
 UploadToBlobStore -BucketName $bucketName -FileToUpload "target/latest-sha" -BlobStoreKey "nightly/latest-sha-windows"

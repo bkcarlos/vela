@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run a single lint from this dylint library against the Zed workspace.
+# Run a single lint from this dylint library against the Vela workspace.
 #
 # Usage:   tooling/lints/single-lint <lint_name> [cargo check args...]
 # Example: tooling/lints/single-lint blocking_io_on_foreground -p project_panel

@@ -10,7 +10,7 @@ use crate::tasks::workflow_checks::{self};
 mod after_release;
 mod autofix_pr;
 mod bump_patch_version;
-mod bump_zed_version;
+mod bump_vela_version;
 mod cherry_pick;
 mod compliance_check;
 mod danger;
@@ -99,10 +99,10 @@ struct WorkflowFile {
 }
 
 impl WorkflowFile {
-    fn zed(f: fn() -> Workflow) -> WorkflowFile {
+    fn vela(f: fn() -> Workflow) -> WorkflowFile {
         WorkflowFile {
             source: WorkflowSource::Contextless(f),
-            r#type: WorkflowType::Zed,
+            r#type: WorkflowType::Vela,
         }
     }
 
@@ -155,9 +155,9 @@ impl WorkflowFile {
 
 #[derive(PartialEq, Eq, strum::EnumIter)]
 pub enum WorkflowType {
-    /// Workflows living in the Zed repository
-    Zed,
-    /// Workflows living in the `zed-extensions/workflows` repository that are
+    /// Workflows living in the Vela repository
+    Vela,
+    /// Workflows living in the `vela-extensions/workflows` repository that are
     /// required workflows for PRs to the extension organization
     ExtensionCi,
     /// Workflows living in each of the extensions to perform checks and version
@@ -176,15 +176,15 @@ impl WorkflowType {
             ),
             preamble = Self::PREAMBLE,
             workflow_name = workflow_name,
-            external_disclaimer = (*self != WorkflowType::Zed)
-                .then_some(" within the Zed repository.")
+            external_disclaimer = (*self != WorkflowType::Vela)
+                .then_some(" within the Vela repository.")
                 .unwrap_or_default(),
         )
     }
 
     pub fn folder_path(&self) -> PathBuf {
         match self {
-            WorkflowType::Zed => PathBuf::from(".github/workflows"),
+            WorkflowType::Vela => PathBuf::from(".github/workflows"),
             WorkflowType::ExtensionCi => PathBuf::from("extensions/workflows"),
             WorkflowType::ExtensionsShared => PathBuf::from("extensions/workflows/shared"),
         }
@@ -212,7 +212,7 @@ impl WorkflowType {
 }
 
 pub fn run_workflows(args: GenerateWorkflowArgs) -> Result<()> {
-    if !Path::new("crates/zed/").is_dir() {
+    if !Path::new("crates/vela/").is_dir() {
         anyhow::bail!("xtask workflows must be ran from the project root");
     }
 
@@ -220,26 +220,26 @@ pub fn run_workflows(args: GenerateWorkflowArgs) -> Result<()> {
     WorkflowType::remove_generated_workflows()?;
 
     let workflows = [
-        WorkflowFile::zed(after_release::after_release),
-        WorkflowFile::zed(autofix_pr::autofix_pr),
-        WorkflowFile::zed(bump_patch_version::bump_patch_version),
-        WorkflowFile::zed(bump_zed_version::bump_zed_version),
-        WorkflowFile::zed(cherry_pick::cherry_pick),
-        WorkflowFile::zed(compliance_check::compliance_check),
-        WorkflowFile::zed(danger::danger),
-        WorkflowFile::zed(deploy_collab::deploy_collab),
-        WorkflowFile::zed(deploy_docs::deploy_docs),
-        WorkflowFile::zed(deploy_docs::deploy_nightly_docs),
-        WorkflowFile::zed(extension_bump::extension_bump),
-        WorkflowFile::zed(extension_auto_bump::extension_auto_bump),
-        WorkflowFile::zed(extension_tests::extension_tests),
-        WorkflowFile::zed(extension_workflow_rollout::extension_workflow_rollout),
-        WorkflowFile::zed(nix_build::nix_build),
-        WorkflowFile::zed(publish_extension_cli::publish_extension_cli),
-        WorkflowFile::zed(release::release),
-        WorkflowFile::zed(release_nightly::release_nightly),
-        WorkflowFile::zed(run_bundling::run_bundling),
-        WorkflowFile::zed(run_tests::run_tests),
+        WorkflowFile::vela(after_release::after_release),
+        WorkflowFile::vela(autofix_pr::autofix_pr),
+        WorkflowFile::vela(bump_patch_version::bump_patch_version),
+        WorkflowFile::vela(bump_vela_version::bump_vela_version),
+        WorkflowFile::vela(cherry_pick::cherry_pick),
+        WorkflowFile::vela(compliance_check::compliance_check),
+        WorkflowFile::vela(danger::danger),
+        WorkflowFile::vela(deploy_collab::deploy_collab),
+        WorkflowFile::vela(deploy_docs::deploy_docs),
+        WorkflowFile::vela(deploy_docs::deploy_nightly_docs),
+        WorkflowFile::vela(extension_bump::extension_bump),
+        WorkflowFile::vela(extension_auto_bump::extension_auto_bump),
+        WorkflowFile::vela(extension_tests::extension_tests),
+        WorkflowFile::vela(extension_workflow_rollout::extension_workflow_rollout),
+        WorkflowFile::vela(nix_build::nix_build),
+        WorkflowFile::vela(publish_extension_cli::publish_extension_cli),
+        WorkflowFile::vela(release::release),
+        WorkflowFile::vela(release_nightly::release_nightly),
+        WorkflowFile::vela(run_bundling::run_bundling),
+        WorkflowFile::vela(run_tests::run_tests),
         /* workflows used for CI/CD in extension repositories */
         WorkflowFile::extension(extensions::run_tests::run_tests),
         WorkflowFile::extension_shared(extensions::bump_version::bump_version),

@@ -51,7 +51,7 @@ pub fn run_wsl_sandbox_tests(args: WslSandboxTestsArgs) -> Result<()> {
         command.arg("--release");
     }
     if args.require_enforced {
-        command.env("ZED_TEST_SANDBOX_REQUIRE_ENFORCED", "1");
+        command.env("VELA_TEST_SANDBOX_REQUIRE_ENFORCED", "1");
     }
 
     eprintln!("Running WSL sandbox behavior tests");

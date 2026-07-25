@@ -5,7 +5,7 @@ set -eu
 usage() {
   echo "Usage: $0 [target]"
   echo ""
-  echo "Triggers the bump_zed_version workflow to perform a minor release version bump "
+  echo "Triggers the bump_vela_version workflow to perform a minor release version bump "
   echo "and update the stable and preview versions."
   echo ""
   echo "Arguments:"
@@ -24,7 +24,7 @@ fi
 day_of_week=$(date +%u)
 if [[ $day_of_week -ne 3 ]]; then
   day_name=$(date +%A)
-  echo "Warning: Today is $day_name. Release version bumps are typically only done on Zednesdays."
+  echo "Warning: Today is $day_name. Release version bumps are typically only done on Velanesdays."
   read -r -p "Continue anyway? (y/N) " confirm
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     echo "Aborted."
@@ -38,13 +38,13 @@ which gh > /dev/null 2>&1 || {
   exit 1
 }
 
-echo "Triggering bump_zed_version workflow:"
+echo "Triggering bump_vela_version workflow:"
 echo "  target:    $target"
 echo ""
 
-gh workflow run bump_zed_version.yml \
+gh workflow run bump_vela_version.yml \
   -f target="$target"
 
 echo ""
 echo "Workflow triggered. Monitor progress at:"
-echo "  https://github.com/zed-industries/zed/actions/workflows/bump_zed_version.yml"
+echo "  https://github.com/vela-industries/vela/actions/workflows/bump_vela_version.yml"

@@ -2,7 +2,7 @@
 """Generate Vela app icons from a single SVG design.
 
 Requires `rsvg-convert` (librsvg). The generated PNG files are committed because
-Zed embeds them at build time.
+Vela embeds them at build time.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RESOURCE_DIR = ROOT / "crates" / "zed" / "resources"
+RESOURCE_DIR = ROOT / "crates" / "vela" / "resources"
 IMAGE_DIR = ROOT / "assets" / "images"
 
 BADGES: dict[str, str | None] = {

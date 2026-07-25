@@ -2,25 +2,25 @@
 
 const HELP = `
 USAGE
-  zed-local  [options]  [zed args]
+  vela-local  [options]  [vela args]
 
 SUMMARY
-  Runs 1-6 instances of Zed using a locally-running collaboration server.
-  Each instance of Zed will be signed in as a different user specified in
+  Runs 1-6 instances of Vela using a locally-running collaboration server.
+  Each instance of Vela will be signed in as a different user specified in
   either \`.admins.json\` or \`.admins.default.json\`.
 
   All arguments after the initial options will be passed through to the first
-  instance of Zed. This can be used to test SSH remoting along with collab, like
+  instance of Vela. This can be used to test SSH remoting along with collab, like
   so:
 
-  $ script/zed-local -2 ssh://your-ssh-uri-here
+  $ script/vela-local -2 ssh://your-ssh-uri-here
 
 OPTIONS
   --help            Print this help message
-  --release         Build Zed in release mode
-  -2, -3, -4, ...   Spawn multiple Zed instances, with their windows tiled.
-  --top             Arrange the Zed windows so they take up the top half of the screen.
-  --stable          Use stable Zed release installed on local machine for all instances (except for the first one).
+  --release         Build Vela in release mode
+  -2, -3, -4, ...   Spawn multiple Vela instances, with their windows tiled.
+  --top             Arrange the Vela windows so they take up the top half of the screen.
+  --stable          Use stable Vela release installed on local machine for all instances (except for the first one).
   --preview         Like --stable, but uses the locally-installed preview release instead.
 `.trim();
 
@@ -158,16 +158,16 @@ const instanceWidth = Math.floor(screenWidth / columns);
 const instanceHeight = Math.floor(screenHeight / rows);
 
 // If a user is specified, make sure it's first in the list
-const user = process.env.ZED_IMPERSONATE;
+const user = process.env.VELA_IMPERSONATE;
 if (user) {
   users = [user].concat(users.filter((u) => u !== user));
 }
 
 let buildArgs = ["build"];
-let zedBinary = "target/debug/vela";
+let velaBinary = "target/debug/vela";
 if (isReleaseMode) {
   buildArgs.push("--release");
-  zedBinary = "target/release/vela";
+  velaBinary = "target/release/vela";
 }
 
 try {
@@ -192,24 +192,24 @@ setTimeout(() => {
       ].join(",");
     }
     const size = [instanceWidth, instanceHeight].join(",");
-    let binaryPath = zedBinary;
+    let binaryPath = velaBinary;
     if (i != 0 && othersOnStable) {
-      binaryPath = "/Applications/Zed.app/Contents/MacOS/zed";
+      binaryPath = "/Applications/Vela.app/Contents/MacOS/vela";
     } else if (i != 0 && othersOnPreview) {
-      binaryPath = "/Applications/Zed Preview.app/Contents/MacOS/zed";
+      binaryPath = "/Applications/Vela Preview.app/Contents/MacOS/vela";
     }
     spawn(binaryPath, i == 0 ? args : [], {
       stdio: "inherit",
       env: Object.assign({}, process.env, {
-        ZED_IMPERSONATE: users[i],
-        ZED_WINDOW_POSITION: position,
-        ZED_STATELESS: isStateful && i == 0 ? "" : "1",
-        ZED_ALWAYS_ACTIVE: "1",
-        ZED_SERVER_URL: "http://localhost:3000",
-        ZED_RPC_URL: "http://localhost:8080/rpc",
-        ZED_ADMIN_API_TOKEN: "internal-api-key-secret",
-        ZED_WINDOW_SIZE: size,
-        ZED_CLIENT_CHECKSUM_SEED: "development-checksum-seed",
+        VELA_IMPERSONATE: users[i],
+        VELA_WINDOW_POSITION: position,
+        VELA_STATELESS: isStateful && i == 0 ? "" : "1",
+        VELA_ALWAYS_ACTIVE: "1",
+        VELA_SERVER_URL: "http://localhost:3000",
+        VELA_RPC_URL: "http://localhost:8080/rpc",
+        VELA_ADMIN_API_TOKEN: "internal-api-key-secret",
+        VELA_WINDOW_SIZE: size,
+        VELA_CLIENT_CHECKSUM_SEED: "development-checksum-seed",
         RUST_LOG: process.env.RUST_LOG || "info",
       }),
     });

@@ -4,7 +4,7 @@ use futures::StreamExt;
 use itertools::Itertools as _;
 
 use crate::{
-    git::{AutomatedChangeKind, CommitDetails, CommitList, ZED_ZIPPY_LOGIN},
+    git::{AutomatedChangeKind, CommitDetails, CommitList, VELA_ZIPPY_LOGIN},
     github::{
         Approvable, CommitAuthor, CommitFileChange, CommitMetadata, GithubApiClient, GithubLogin,
         PullRequestComment, PullRequestData, PullRequestReview, Repository, ReviewState,
@@ -12,15 +12,15 @@ use crate::{
     report::{Report, ReportEntry},
 };
 
-const ZED_ZIPPY_COMMENT_APPROVAL_PATTERN: &str = "@zed-zippy approve";
-const ZED_ZIPPY_GROUP_APPROVAL: &str = "@zed-industries/approved";
+const VELA_ZIPPY_COMMENT_APPROVAL_PATTERN: &str = "@vela-zippy approve";
+const VELA_ZIPPY_GROUP_APPROVAL: &str = "@vela-industries/approved";
 
 #[derive(Debug)]
 pub enum ReviewSuccess {
     ApprovingComment(Vec<PullRequestComment>),
     CoAuthored(Vec<CommitAuthor>),
     PullRequestReviewed(Vec<PullRequestReview>),
-    ZedZippyCommit(AutomatedChangeKind, GithubLogin),
+    VelaZippyCommit(AutomatedChangeKind, GithubLogin),
 }
 
 impl ReviewSuccess {
@@ -36,7 +36,7 @@ impl ReviewSuccess {
                 .iter()
                 .map(|comment| format!("@{}", comment.user.login))
                 .collect_vec(),
-            Self::ZedZippyCommit(_, login) => vec![login.to_string()],
+            Self::VelaZippyCommit(_, login) => vec![login.to_string()],
         };
 
         let reviewers = reviewers.into_iter().unique().collect_vec();
@@ -59,7 +59,7 @@ impl fmt::Display for ReviewSuccess {
             Self::ApprovingComment(_) => {
                 formatter.write_str("Approved by an organization approval comment")
             }
-            Self::ZedZippyCommit(kind, _) => {
+            Self::VelaZippyCommit(kind, _) => {
                 write!(formatter, "Fully untampered automated {kind}")
             }
         }
@@ -82,7 +82,7 @@ impl fmt::Display for ReviewFailure {
             Self::Unreviewed => formatter
                 .write_str("No qualifying organization approval found for the pull request"),
             Self::UnexpectedZippyAction(failure) => {
-                write!(formatter, "Validating Zed Zippy change failed: {failure}")
+                write!(formatter, "Validating Vela Zippy change failed: {failure}")
             }
             Self::Other(error) => write!(formatter, "Failed to inspect review state: {error}"),
         }
@@ -212,7 +212,7 @@ impl Reporter {
         commit: &CommitDetails,
     ) -> Result<ReviewSuccess, ReviewFailure> {
         let Some(pr_number) = commit.pr_number() else {
-            if commit.author().is_zed_zippy() {
+            if commit.author().is_vela_zippy() {
                 return self.check_zippy_automated_change(commit).await;
             } else {
                 return Err(ReviewFailure::NoPullRequestFound);
@@ -221,7 +221,7 @@ impl Reporter {
 
         let pull_request = self
             .github_client
-            .get_pull_request(&Repository::ZED, pr_number)
+            .get_pull_request(&Repository::VELA, pr_number)
             .await?;
 
         if let Some(approval) = self
@@ -258,7 +258,7 @@ impl Reporter {
 
         let commit_data = self
             .github_client
-            .get_commit_metadata(&Repository::ZED, &[commit.sha()])
+            .get_commit_metadata(&Repository::VELA, &[commit.sha()])
             .await?;
 
         let metadata =
@@ -271,7 +271,7 @@ impl Reporter {
         if !metadata
             .primary_author()
             .user()
-            .is_some_and(|login| login.as_str() == ZED_ZIPPY_LOGIN)
+            .is_some_and(|login| login.as_str() == VELA_ZIPPY_LOGIN)
         {
             return Err(ReviewFailure::UnexpectedZippyAction(
                 AutomatedChangeFailure::AuthorMismatch,
@@ -298,14 +298,14 @@ impl Reporter {
 
         let files = self
             .github_client
-            .get_commit_files(&Repository::ZED, commit.sha())
+            .get_commit_files(&Repository::VELA, commit.sha())
             .await?;
 
         change_kind
             .validate_changes(metadata, &files)
             .map_err(ReviewFailure::UnexpectedZippyAction)?;
 
-        Ok(ReviewSuccess::ZedZippyCommit(
+        Ok(ReviewSuccess::VelaZippyCommit(
             change_kind,
             GithubLogin::new(responsible_actor.to_owned()),
         ))
@@ -318,7 +318,7 @@ impl Reporter {
         if commit.co_authors().is_some()
             && let Some(commit_authors) = self
                 .github_client
-                .get_commit_metadata(&Repository::ZED, &[commit.sha()])
+                .get_commit_metadata(&Repository::VELA, &[commit.sha()])
                 .await?
                 .get(commit.sha())
                 .and_then(|authors| authors.co_authors())
@@ -328,7 +328,7 @@ impl Reporter {
                 if let Some(github_login) = co_author.user()
                     && self
                         .github_client
-                        .check_repo_write_permission(&Repository::ZED, github_login)
+                        .check_repo_write_permission(&Repository::VELA, github_login)
                         .await?
                 {
                     org_co_authors.push(co_author.clone());
@@ -350,7 +350,7 @@ impl Reporter {
     ) -> Result<Option<ReviewSuccess>, ReviewFailure> {
         let reviews = self
             .github_client
-            .get_pull_request_reviews(&Repository::ZED, pull_request.number)
+            .get_pull_request_reviews(&Repository::VELA, pull_request.number)
             .await?;
 
         let qualifying_reviews = reviews
@@ -370,7 +370,7 @@ impl Reporter {
     ) -> Result<Option<ReviewSuccess>, ReviewFailure> {
         let comments = self
             .github_client
-            .get_pull_request_comments(&Repository::ZED, pull_request.number)
+            .get_pull_request_comments(&Repository::VELA, pull_request.number)
             .await?;
 
         let qualifying_comments = comments
@@ -407,7 +407,8 @@ impl Reporter {
     }
 
     fn contains_approving_pattern(body: &str) -> bool {
-        body.contains(ZED_ZIPPY_COMMENT_APPROVAL_PATTERN) || body.contains(ZED_ZIPPY_GROUP_APPROVAL)
+        body.contains(VELA_ZIPPY_COMMENT_APPROVAL_PATTERN)
+            || body.contains(VELA_ZIPPY_GROUP_APPROVAL)
     }
 
     pub async fn generate_report(mut self, max_concurrent_checks: usize) -> Report {
@@ -450,7 +451,8 @@ mod tests {
     use std::str::FromStr;
 
     use crate::git::{
-        AutomatedChangeKind, CommitDetails, CommitList, CommitSha, ZED_ZIPPY_EMAIL, ZED_ZIPPY_LOGIN,
+        AutomatedChangeKind, CommitDetails, CommitList, CommitSha, VELA_ZIPPY_EMAIL,
+        VELA_ZIPPY_LOGIN,
     };
     use crate::github::{
         AuthorAssociation, CommitFileChange, CommitMetadataBySha, GithubApiClient, GithubLogin,
@@ -605,9 +607,9 @@ mod tests {
 
     fn zippy_author() -> serde_json::Value {
         serde_json::json!({
-            "name": "Zed Zippy",
-            "email": ZED_ZIPPY_EMAIL,
-            "user": { "login": ZED_ZIPPY_LOGIN }
+            "name": "Vela Zippy",
+            "email": VELA_ZIPPY_EMAIL,
+            "user": { "login": VELA_ZIPPY_LOGIN }
         })
     }
 
@@ -698,7 +700,7 @@ mod tests {
                         "authors": { "nodes": [] },
                         "signature": {
                             "isValid": true,
-                            "signer": { "login": ZED_ZIPPY_LOGIN }
+                            "signer": { "login": VELA_ZIPPY_LOGIN }
                         },
                         "additions": 2,
                         "deletions": 2
@@ -709,14 +711,14 @@ mod tests {
                         filename: "Cargo.lock".to_owned(),
                     },
                     CommitFileChange {
-                        filename: "crates/zed/Cargo.toml".to_owned(),
+                        filename: "crates/vela/Cargo.toml".to_owned(),
                     },
                 ],
                 org_members: vec![],
                 commit: make_commit(
                     "abc12345abc12345",
-                    "Zed Zippy",
-                    ZED_ZIPPY_EMAIL,
+                    "Vela Zippy",
+                    VELA_ZIPPY_EMAIL,
                     "Bump to 0.230.2 for @cole-miller",
                     "",
                 ),
@@ -739,20 +741,20 @@ mod tests {
                         "authors": { "nodes": [] },
                         "signature": {
                             "isValid": true,
-                            "signer": { "login": ZED_ZIPPY_LOGIN }
+                            "signer": { "login": VELA_ZIPPY_LOGIN }
                         },
                         "additions": 1,
                         "deletions": 1
                     }
                 }),
                 commit_files: vec![CommitFileChange {
-                    filename: "crates/zed/RELEASE_CHANNEL".to_owned(),
+                    filename: "crates/vela/RELEASE_CHANNEL".to_owned(),
                 }],
                 org_members: vec![],
                 commit: make_commit(
                     "abc12345abc12345",
-                    "Zed Zippy",
-                    ZED_ZIPPY_EMAIL,
+                    "Vela Zippy",
+                    VELA_ZIPPY_EMAIL,
                     "v0.233.x stable for @cole-miller",
                     "",
                 ),
@@ -831,7 +833,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_comments(vec![comment(
                 "alice",
-                "@zed-zippy approve",
+                "@vela-zippy approve",
                 AuthorAssociation::Member,
             )])
             .run_scenario()
@@ -844,7 +846,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_comments(vec![comment(
                 "bob",
-                "@zed-zippy approve",
+                "@vela-zippy approve",
                 AuthorAssociation::Member,
             )])
             .run_scenario()
@@ -857,7 +859,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_comments(vec![comment(
                 "bob",
-                "@zed-industries/approved",
+                "@vela-industries/approved",
                 AuthorAssociation::Member,
             )])
             .run_scenario()
@@ -903,7 +905,7 @@ mod tests {
             )])
             .with_comments(vec![comment(
                 "charlie",
-                "@zed-zippy approve",
+                "@vela-zippy approve",
                 AuthorAssociation::Member,
             )])
             .run_scenario()
@@ -916,7 +918,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_comments(vec![comment(
                 "bob",
-                "@zed-zippy approve",
+                "@vela-zippy approve",
                 AuthorAssociation::Member,
             )])
             .with_commit_metadata_json(serde_json::json!({
@@ -970,7 +972,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_reviews(vec![
                 review("bob", ReviewState::Other, AuthorAssociation::Member)
-                    .with_body("@zed-zippy approve"),
+                    .with_body("@vela-zippy approve"),
             ])
             .run_scenario()
             .await;
@@ -982,7 +984,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_reviews(vec![
                 review("bob", ReviewState::Other, AuthorAssociation::Member)
-                    .with_body("@zed-industries/approved"),
+                    .with_body("@vela-industries/approved"),
             ])
             .run_scenario()
             .await;
@@ -1006,7 +1008,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_reviews(vec![
                 review("bob", ReviewState::Other, AuthorAssociation::None)
-                    .with_body("@zed-zippy approve"),
+                    .with_body("@vela-zippy approve"),
             ])
             .run_scenario()
             .await;
@@ -1018,7 +1020,7 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_reviews(vec![
                 review("alice", ReviewState::Other, AuthorAssociation::Member)
-                    .with_body("@zed-zippy approve"),
+                    .with_body("@vela-zippy approve"),
             ])
             .run_scenario()
             .await;
@@ -1030,12 +1032,12 @@ mod tests {
         let result = TestScenario::zippy_version_bump().run_scenario().await;
         assert!(matches!(
             result,
-            Ok(ReviewSuccess::ZedZippyCommit(
+            Ok(ReviewSuccess::VelaZippyCommit(
                 AutomatedChangeKind::VersionBump,
                 _
             ))
         ));
-        if let Ok(ReviewSuccess::ZedZippyCommit(_, login)) = &result {
+        if let Ok(ReviewSuccess::VelaZippyCommit(_, login)) = &result {
             assert_eq!(login.as_str(), "cole-miller");
         }
     }
@@ -1045,8 +1047,8 @@ mod tests {
         let result = TestScenario::zippy_version_bump()
             .with_commit(make_commit(
                 "abc12345abc12345",
-                "Zed Zippy",
-                ZED_ZIPPY_EMAIL,
+                "Vela Zippy",
+                VELA_ZIPPY_EMAIL,
                 "Bump to 0.230.2",
                 "",
             ))
@@ -1090,7 +1092,7 @@ mod tests {
                     "authors": { "nodes": [] },
                     "signature": {
                         "isValid": false,
-                        "signer": { "login": ZED_ZIPPY_LOGIN }
+                        "signer": { "login": VELA_ZIPPY_LOGIN }
                     },
                     "additions": 2,
                     "deletions": 2
@@ -1115,7 +1117,7 @@ mod tests {
                     "authors": { "nodes": [] },
                     "signature": {
                         "isValid": true,
-                        "signer": { "login": ZED_ZIPPY_LOGIN }
+                        "signer": { "login": VELA_ZIPPY_LOGIN }
                     },
                     "additions": 5,
                     "deletions": 2
@@ -1165,7 +1167,7 @@ mod tests {
                     "authors": { "nodes": [alice_author()] },
                     "signature": {
                         "isValid": true,
-                        "signer": { "login": ZED_ZIPPY_LOGIN }
+                        "signer": { "login": VELA_ZIPPY_LOGIN }
                     },
                     "additions": 2,
                     "deletions": 2
@@ -1184,7 +1186,7 @@ mod tests {
     #[tokio::test]
     async fn zippy_version_bump_with_wrong_files_fails() {
         let result = TestScenario::zippy_version_bump()
-            .with_commit_files(vec!["crates/zed/RELEASE_CHANNEL"])
+            .with_commit_files(vec!["crates/vela/RELEASE_CHANNEL"])
             .run_scenario()
             .await;
         assert!(matches!(
@@ -1202,12 +1204,12 @@ mod tests {
             .await;
         assert!(matches!(
             result,
-            Ok(ReviewSuccess::ZedZippyCommit(
+            Ok(ReviewSuccess::VelaZippyCommit(
                 AutomatedChangeKind::ReleaseChannelUpdate,
                 _
             ))
         ));
-        if let Ok(ReviewSuccess::ZedZippyCommit(_, login)) = &result {
+        if let Ok(ReviewSuccess::VelaZippyCommit(_, login)) = &result {
             assert_eq!(login.as_str(), "cole-miller");
         }
     }
@@ -1232,8 +1234,8 @@ mod tests {
         let result = TestScenario::single_commit()
             .with_commit(make_commit(
                 "abc12345abc12345",
-                "Zed Zippy",
-                ZED_ZIPPY_EMAIL,
+                "Vela Zippy",
+                VELA_ZIPPY_EMAIL,
                 "Some change (#1234)",
                 "",
             ))

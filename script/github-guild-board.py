@@ -41,8 +41,8 @@ MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 5
 
 GITHUB_API_URL = "https://api.github.com"
-REPO_OWNER = "zed-industries"
-REPO_NAME = "zed"
+REPO_OWNER = "vela-industries"
+REPO_NAME = "vela"
 # Cohort members are outside collaborators on the repo holding this custom
 # repository role, rather than members of an org team. Rotating the cohort is
 # then just adding/removing collaborators, with no org seats involved.
@@ -76,7 +76,7 @@ SHIPPED_WINDOW_DAYS = 7
 NUDGE_HOLD_LABEL = "guild hold"
 
 # Hidden in the rendered issue; lets later runs find the bot's own check-in.
-CHECK_IN_MARKER = "<!-- zedgar:guild-check-in -->"
+CHECK_IN_MARKER = "<!-- velagar:guild-check-in -->"
 
 CHECK_IN_BODY = (
     "{marker}\n"
@@ -88,7 +88,7 @@ CHECK_IN_BODY = (
     "{clear_days} days from now."
 )
 
-ZEDGAR_QUIPS = [
+VELAGAR_QUIPS = [
     "Deep into the backlog peering...",
     "Once upon a board so dreary...",
     "A tell-tale ping beneath the board.",
@@ -398,7 +398,7 @@ def send_slack(text):
     webhook = os.environ.get("SLACK_WEBHOOK_GUILD_INTERNAL")
     if not webhook:
         raise RuntimeError("SLACK_WEBHOOK_GUILD_INTERNAL is not set")
-    message = f"{random.choice(ZEDGAR_QUIPS)} {text}"
+    message = f"{random.choice(VELAGAR_QUIPS)} {text}"
     response = requests.post(
         webhook,
         json={

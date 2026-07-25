@@ -132,7 +132,7 @@ fn docs_deploy_steps(job: Job, project_name: &StepOutput) -> Job {
         .add_with(("accountId", vars::CLOUDFLARE_ACCOUNT_ID))
         .add_with((
             "command",
-            "r2 object put -f script/install.sh zed-open-source-website-assets/install.sh",
+            "r2 object put -f script/install.sh vela-open-source-website-assets/install.sh",
         ))
     }
 
@@ -234,7 +234,7 @@ fn docs_job(channel_expr: impl Into<String>, checkout_ref: Option<String>) -> Na
             docs_build_steps(
                 release_job(&[])
                     .cond(Expression::new(
-                        "github.repository_owner == 'zed-industries'",
+                        "github.repository_owner == 'vela-industries'",
                     ))
                     .name("Build and Deploy Docs")
                     .add_step(resolve_step),
@@ -255,8 +255,8 @@ pub(crate) fn deploy_docs_workflow_call(
         .with_repository_owner_guard()
         .permissions(Permissions::default().contents(Level::Read))
         .uses(
-            "zed-industries",
-            "zed",
+            "vela-industries",
+            "vela",
             ".github/workflows/deploy_docs.yml",
             // Pinned to a commit rather than the mutable `main` ref (supply-chain hardening).
             // Same-repo reusable workflow; bump via Dependabot or alongside deploy_docs.yml changes.

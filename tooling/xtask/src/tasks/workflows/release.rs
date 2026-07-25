@@ -176,8 +176,8 @@ pub(crate) fn create_sentry_release() -> Step<Use> {
         "action-release",
         "526942b68292201ac6bbb99b9a0747d4abee354c", // v3
     )
-    .add_env(("SENTRY_ORG", "zed-dev"))
-    .add_env(("SENTRY_PROJECT", "zed"))
+    .add_env(("SENTRY_ORG", "vela-dev"))
+    .add_env(("SENTRY_PROJECT", "vela"))
     .add_env(("SENTRY_AUTH_TOKEN", vars::SENTRY_AUTH_TOKEN))
     .add_with(("environment", "production"))
 }
@@ -186,7 +186,7 @@ pub(crate) const COMPLIANCE_REPORT_PATH: &str = "compliance-report-${GITHUB_REF_
 pub(crate) const COMPLIANCE_REPORT_ARTIFACT_PATH: &str =
     "compliance-report-${{ github.ref_name }}.md";
 pub(crate) const COMPLIANCE_STEP_ID: &str = "run-compliance-check";
-const NEEDS_REVIEW_PULLS_URL: &str = "https://github.com/zed-industries/zed/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22";
+const NEEDS_REVIEW_PULLS_URL: &str = "https://github.com/vela-industries/vela/pulls?q=is%3Apr+is%3Aclosed+label%3A%22PR+state%3Aneeds+review%22";
 
 pub(crate) enum ComplianceContext {
     Release { non_blocking_outcome: JobOutput },
@@ -216,8 +216,8 @@ pub(crate) fn add_compliance_steps(
             }
         )
         .id(COMPLIANCE_STEP_ID)
-        .add_env(("GITHUB_APP_ID", vars::ZED_ZIPPY_APP_ID))
-        .add_env(("GITHUB_APP_KEY", vars::ZED_ZIPPY_APP_PRIVATE_KEY))
+        .add_env(("GITHUB_APP_ID", vars::VELA_ZIPPY_APP_ID))
+        .add_env(("GITHUB_APP_KEY", vars::VELA_ZIPPY_APP_PRIVATE_KEY))
         .when_some(context.tag_source(), |step, tag_source| {
             step.add_env(("LATEST_TAG", tag_source.to_string()))
         })
@@ -341,7 +341,7 @@ fn validate_release_assets(deps: &[&NamedJob]) -> NamedJob {
         EXPECTED_ASSETS='{expected_assets_json}'
         TAG="$GITHUB_REF_NAME"
 
-        ACTUAL_ASSETS=$(gh release view "$TAG" --repo=zed-industries/zed --json assets -q '[.assets[].name]')
+        ACTUAL_ASSETS=$(gh release view "$TAG" --repo=vela-industries/vela --json assets -q '[.assets[].name]')
 
         MISSING_ASSETS=$(echo "$EXPECTED_ASSETS" | jq -r --argjson actual "$ACTUAL_ASSETS" '. - $actual | .[]')
 
@@ -417,7 +417,7 @@ fn auto_release_preview(deps: &[&NamedJob]) -> (NamedJob, JobOutput) {
             fi
 
             if [[ "$should_release" == "true" ]]; then
-                gh release edit "$tag" --repo=zed-industries/zed --draft=false
+                gh release edit "$tag" --repo=vela-industries/vela --draft=false
                 release_published=true
             fi
 
@@ -479,7 +479,7 @@ fn upload_release_assets(deps: &[&NamedJob], bundle: &ReleaseBundleJobs) -> Name
             .add_step(steps::script("ls -lR ./artifacts"))
             .add_step(prep_release_artifacts())
             .add_step(
-                steps::script("gh release upload \"$GITHUB_REF_NAME\" --repo=zed-industries/zed release-artifacts/*")
+                steps::script("gh release upload \"$GITHUB_REF_NAME\" --repo=vela-industries/vela release-artifacts/*")
                     .add_env(("GITHUB_TOKEN", vars::GITHUB_TOKEN)),
             ),
     )
@@ -591,7 +591,7 @@ pub(crate) fn push_release_update_notification(
         if [ "$DRAFT_RESULT" == "failure" ]; then
             echo "❌ Draft release creation failed for $TAG: $RUN_URL"
         else
-            RELEASE_URL=$(gh release view "$TAG" --repo=zed-industries/zed --json url -q '.url')
+            RELEASE_URL=$(gh release view "$TAG" --repo=vela-industries/vela --json url -q '.url')
             if [ "$UPLOAD_RESULT" == "failure" ]; then
                 echo "❌ Release asset upload failed for $TAG: $RELEASE_URL"
             elif [ "$UPLOAD_RESULT" == "cancelled" ] || [ "$UPLOAD_RESULT" == "skipped" ]; then

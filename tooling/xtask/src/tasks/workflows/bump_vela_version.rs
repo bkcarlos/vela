@@ -6,7 +6,7 @@ use crate::tasks::workflows::{
     vars::{self, StepOutput, WorkflowInput},
 };
 
-pub fn bump_zed_version() -> Workflow {
+pub fn bump_vela_version() -> Workflow {
     let target = WorkflowInput::string("target", Some("all".to_string()))
         .description("Which channels to bump: all, main, preview, or stable");
 
@@ -37,11 +37,11 @@ struct ResolvedOutputs {
 fn resolve_versions() -> (steps::NamedJob, ResolvedOutputs) {
     fn extract_versions() -> Step<Run> {
         named::bash(indoc::indoc! {r#"
-            version=$(script/get-crate-version zed)
+            version=$(script/get-crate-version vela)
             major=$(echo "$version" | cut -d. -f1)
             minor=$(echo "$version" | cut -d. -f2)
 
-            channel=$(cat crates/zed/RELEASE_CHANNEL)
+            channel=$(cat crates/vela/RELEASE_CHANNEL)
             if [[ "$channel" != "dev" && "$channel" != "nightly" ]]; then
                 echo "::error::release channel on main should be dev or nightly, found: $channel"
                 exit 1
@@ -51,7 +51,7 @@ fn resolve_versions() -> (steps::NamedJob, ResolvedOutputs) {
             next_version="${major}.$((minor + 1)).0"
             next_major=$(echo "$next_version" | cut -d. -f1)
             next_minor=$(echo "$next_version" | cut -d. -f2)
-            pr_branch="bump-zed-to-v${next_major}.${next_minor}.0"
+            pr_branch="bump-vela-to-v${next_major}.${next_minor}.0"
 
             # New preview branch from current main
             preview_branch="v${major}.${minor}.x"
@@ -99,7 +99,7 @@ fn resolve_versions() -> (steps::NamedJob, ResolvedOutputs) {
     let job = named::job(
         Job::default()
             .cond(Expression::new(
-                "github.repository_owner == 'zed-industries'",
+                "github.repository_owner == 'vela-industries'",
             ))
             .runs_on(runners::LINUX_XL)
             .add_step(authenticate)
@@ -131,7 +131,7 @@ fn bump_main(
     outputs: &ResolvedOutputs,
 ) -> steps::NamedJob {
     fn bump_version() -> Step<Run> {
-        named::bash("cargo set-version -p zed --bump minor")
+        named::bash("cargo set-version -p vela --bump minor")
     }
 
     let (authenticate, token) = steps::authenticate_as_zippy().into();
@@ -155,7 +155,7 @@ fn bump_main(
             .add_step(steps::install_cargo_edit())
             .add_step(bump_version())
             .add_step(steps::CreatePrStep::new(
-                format!("Bump Zed to v{}", outputs.next_version),
+                format!("Bump Vela to v{}", outputs.next_version),
                 &outputs.pr_branch,
                 &token,
             )),
@@ -168,7 +168,7 @@ fn create_preview_branch(
     outputs: &ResolvedOutputs,
 ) -> steps::NamedJob {
     fn promote_to_preview() -> Step<Run> {
-        named::bash("echo -n preview > crates/zed/RELEASE_CHANNEL")
+        named::bash("echo -n preview > crates/vela/RELEASE_CHANNEL")
     }
 
     fn get_main_sha() -> Step<Run> {
@@ -188,7 +188,7 @@ fn create_preview_branch(
         &outputs.preview_branch,
         &token,
     )
-    .with_files("crates/zed/RELEASE_CHANNEL")
+    .with_files("crates/vela/RELEASE_CHANNEL")
     .into();
     let commit_sha = StepOutput::new_unchecked(&commit_step, "commit");
 
@@ -228,7 +228,7 @@ fn promote_to_stable(
     let (authenticate, token) = steps::authenticate_as_zippy().into();
 
     let read_version_step = named::bash(indoc::indoc! {r#"
-            stable_version=$(script/get-crate-version zed)
+            stable_version=$(script/get-crate-version vela)
             {
                 echo "stable_tag=v${stable_version}"
             } >> "$GITHUB_OUTPUT"
@@ -236,7 +236,7 @@ fn promote_to_stable(
     .id("stable-info");
     let stable_tag = StepOutput::new(&read_version_step, "stable_tag");
 
-    let write_channel = named::bash("echo -n stable > crates/zed/RELEASE_CHANNEL");
+    let write_channel = named::bash("echo -n stable > crates/vela/RELEASE_CHANNEL");
 
     let commit_step: Step<Use> = steps::BotCommitStep::new(
         format!(
@@ -246,7 +246,7 @@ fn promote_to_stable(
         &outputs.stable_branch,
         &token,
     )
-    .with_files("crates/zed/RELEASE_CHANNEL")
+    .with_files("crates/vela/RELEASE_CHANNEL")
     .into();
     let commit_sha = StepOutput::new_unchecked(&commit_step, "commit");
 

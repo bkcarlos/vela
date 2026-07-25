@@ -66,7 +66,7 @@ async fn check_compliance_impl(args: ComplianceArgs) -> Result<()> {
         OctocrabClient::new(
             app_id.parse().context("Failed to parse app ID as int")?,
             key.as_ref(),
-            Repository::ZED.owner(),
+            Repository::VELA.owner(),
         )
         .await?,
     );
@@ -143,7 +143,7 @@ async fn check_compliance_impl(args: ComplianceArgs) -> Result<()> {
 
     for report in report.errors() {
         if let Some(pr_number) = report.commit.pr_number()
-            && let Ok(pull_request) = client.get_pull_request(&Repository::ZED, pr_number).await
+            && let Ok(pull_request) = client.get_pull_request(&Repository::VELA, pr_number).await
             && pull_request.labels.is_none_or(|labels| {
                 labels
                     .iter()
@@ -154,7 +154,7 @@ async fn check_compliance_impl(args: ComplianceArgs) -> Result<()> {
 
             client
                 .add_label_to_issue(
-                    &Repository::ZED,
+                    &Repository::VELA,
                     compliance::github::PR_REVIEW_LABEL,
                     pr_number,
                 )

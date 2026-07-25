@@ -133,9 +133,9 @@ pub(crate) fn run_tests() -> Workflow {
 /// Controls which features `orchestrate_impl` includes in the generated script.
 #[derive(PartialEq, Eq)]
 enum OrchestrateTarget {
-    /// For the main Zed repo: includes the cargo package filter and extension
+    /// For the main Vela repo: includes the cargo package filter and extension
     /// change detection, but no working-directory scoping.
-    ZedRepo,
+    VelaRepo,
     /// For individual extension repos: scopes changed-file detection to the
     /// working directory, with no package filter or extension detection.
     Extension,
@@ -144,7 +144,7 @@ enum OrchestrateTarget {
 // Generates a bash script that checks changed files against regex patterns
 // and sets GitHub output variables accordingly
 pub fn orchestrate(rules: &[&PathCondition]) -> NamedJob {
-    orchestrate_impl(rules, OrchestrateTarget::ZedRepo)
+    orchestrate_impl(rules, OrchestrateTarget::VelaRepo)
 }
 
 pub fn orchestrate_for_extension(rules: &[&PathCondition]) -> NamedJob {
@@ -198,7 +198,7 @@ fn orchestrate_impl(rules: &[&PathCondition], target: OrchestrateTarget) -> Name
 
     let mut outputs = IndexMap::new();
 
-    if target == OrchestrateTarget::ZedRepo {
+    if target == OrchestrateTarget::VelaRepo {
         script.push_str(indoc::indoc! {r#"
         # Check for changes that require full rebuild (no filter)
         # Direct pushes to main/stable/preview always run full suite
@@ -289,7 +289,7 @@ fn orchestrate_impl(rules: &[&PathCondition], target: OrchestrateTarget) -> Name
         ));
     }
 
-    if target == OrchestrateTarget::ZedRepo {
+    if target == OrchestrateTarget::VelaRepo {
         script.push_str(DETECT_CHANGED_EXTENSIONS_SCRIPT);
         script.push_str("echo \"changed_extensions=$EXTENSIONS_JSON\" >> \"$GITHUB_OUTPUT\"\n");
 
@@ -303,7 +303,7 @@ fn orchestrate_impl(rules: &[&PathCondition], target: OrchestrateTarget) -> Name
         .runs_on(runners::LINUX_SMALL)
         .with_repository_owner_guard()
         .outputs(outputs)
-        .when(target == OrchestrateTarget::ZedRepo, |this| {
+        .when(target == OrchestrateTarget::VelaRepo, |this| {
             this.add_step(steps::harden_runner())
         })
         .add_step(steps::checkout_repo().with_deep_history_on_non_main())
@@ -406,7 +406,7 @@ pub(crate) fn fetch_ts_query_ls() -> Step<Use> {
 }
 
 pub(crate) enum RunContext {
-    ZedRepository,
+    VelaRepository,
     Extension,
 }
 
@@ -416,12 +416,12 @@ pub(crate) fn run_ts_query_ls(context: RunContext) -> Step<Run> {
         "$GITHUB_WORKSPACE/ts_query_ls" format --check {directory} || {{
             echo "Found unformatted queries, please format them with ts_query_ls."
             echo "For easy use, install the Tree-sitter query extension:"
-            echo "zed://extension/tree-sitter-query"
+            echo "vela://extension/tree-sitter-query"
             false
         }}"#,
         directory = match context {
             RunContext::Extension => "languages",
-            RunContext::ZedRepository => ".",
+            RunContext::VelaRepository => ".",
         }
     ))
 }
@@ -449,7 +449,7 @@ fn check_style() -> NamedJob {
             .add_step(steps::script("./script/check-keymaps"))
             .add_step(check_for_typos())
             .add_step(fetch_ts_query_ls())
-            .add_step(run_ts_query_ls(RunContext::ZedRepository)),
+            .add_step(run_ts_query_ls(RunContext::VelaRepository)),
     )
 }
 
@@ -651,7 +651,7 @@ fn run_platform_tests_impl(platform: Platform, filter_packages: bool, harden: bo
 
 fn build_visual_tests_binary() -> NamedJob {
     pub fn cargo_build_visual_tests() -> Step<Run> {
-        named::bash("cargo build -p zed --bin zed_visual_test_runner --features visual-tests")
+        named::bash("cargo build -p vela --bin vela_visual_test_runner --features visual-tests")
     }
 
     named::job(
@@ -711,9 +711,9 @@ pub(crate) fn check_postgres_and_protobuf_migrations() -> NamedJob {
         release_job(&[])
             .runs_on(runners::LINUX_DEFAULT)
             .add_env(("GIT_AUTHOR_NAME", "Protobuf Action"))
-            .add_env(("GIT_AUTHOR_EMAIL", "ci@zed.dev"))
+            .add_env(("GIT_AUTHOR_EMAIL", "ci@vela.dev"))
             .add_env(("GIT_COMMITTER_NAME", "Protobuf Action"))
-            .add_env(("GIT_COMMITTER_EMAIL", "ci@zed.dev"))
+            .add_env(("GIT_COMMITTER_EMAIL", "ci@vela.dev"))
             .add_step(steps::harden_runner())
             .add_step(steps::checkout_repo().with_full_history())
             .add_step(ensure_fresh_merge())
