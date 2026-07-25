@@ -6082,7 +6082,8 @@ impl AgentPanel {
             let new_thread_menu = PopoverMenu::new("new_thread_menu")
                 .trigger_with_tooltip(
                     IconButton::new("new_thread_menu_btn", IconName::Plus)
-                        .icon_size(IconSize::Small),
+                        .icon_size(IconSize::Small)
+                        .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent)),
                     {
                         move |_window, cx| {
                             Tooltip::for_action_in(
@@ -6126,7 +6127,7 @@ impl AgentPanel {
                         .px_1()
                         .h_full()
                         .flex_none()
-                        .gap_1()
+                        .gap_0p5()
                         .children(sandbox_status)
                         .when(can_create_entries, |this| this.child(new_thread_menu))
                         .child(full_screen_button)
@@ -6142,40 +6143,59 @@ impl AgentPanel {
             .max_w_full()
             .bg(cx.theme().colors().tab_bar_background)
             .border_b_1()
-            .border_color(cx.theme().colors().border)
+            .border_color(cx.theme().colors().border_variant)
             .child(toolbar_content)
     }
 
     fn render_section_switcher(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let max_content_width = AgentSettings::get_global(cx).max_content_width;
+
         h_flex()
             .flex_none()
-            .gap_1()
-            .p_1()
+            .px_2()
+            .py_1()
             .border_b_1()
-            .border_color(cx.theme().colors().border)
+            .border_color(cx.theme().colors().border_variant)
             .child(
-                Button::new("agent-section-chat", "Chat")
-                    .full_width()
-                    .style(ButtonStyle::Subtle)
-                    .toggle_state(self.active_section == AgentPanelSection::Chat)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.active_section = AgentPanelSection::Chat;
-                        this.focus_handle.focus(window, cx);
-                        cx.notify();
-                    })),
-            )
-            .child(
-                Button::new("agent-section-threads", "Threads")
-                    .full_width()
-                    .style(ButtonStyle::Subtle)
-                    .toggle_state(self.active_section == AgentPanelSection::Threads)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.active_section = AgentPanelSection::Threads;
-                        this.threads_view.update(cx, |view, cx| {
-                            view.focus_filter_editor(window, cx);
-                        });
-                        cx.notify();
-                    })),
+                h_flex()
+                    .w_full()
+                    .when_some(max_content_width, |this, max_width| {
+                        this.max_w(max_width).mx_auto()
+                    })
+                    .p_0p5()
+                    .gap_0p5()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(cx.theme().colors().border_variant)
+                    .bg(cx.theme().colors().editor_background)
+                    .child(
+                        Button::new("agent-section-chat", "Chat")
+                            .full_width()
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::Small)
+                            .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                            .toggle_state(self.active_section == AgentPanelSection::Chat)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.active_section = AgentPanelSection::Chat;
+                                this.focus_handle.focus(window, cx);
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("agent-section-threads", "Threads")
+                            .full_width()
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::Small)
+                            .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                            .toggle_state(self.active_section == AgentPanelSection::Threads)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.active_section = AgentPanelSection::Threads;
+                                this.threads_view.update(cx, |view, cx| {
+                                    view.focus_filter_editor(window, cx);
+                                });
+                                cx.notify();
+                            })),
+                    ),
             )
     }
 

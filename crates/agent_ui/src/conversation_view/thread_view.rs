@@ -3072,10 +3072,6 @@ impl ThreadView {
         let queue_expanded = self.queue_expanded;
 
         let max_content_width = AgentSettings::get_global(cx).max_content_width;
-        // Drop shadows have no opaque surface to blend into on a transparent
-        // window, so they render as a dark halo; only apply them when opaque.
-        let opaque_window =
-            cx.theme().window_background_appearance() == gpui::WindowBackgroundAppearance::Opaque;
 
         h_flex()
             .w_full()
@@ -3090,15 +3086,9 @@ impl ThreadView {
                     .max_w_full()
                     .bg(self.activity_bar_bg(cx))
                     .border_1()
-                    .border_b_0()
-                    .border_color(cx.theme().colors().border)
-                    .rounded_t_md()
-                    .when(opaque_window, |this| {
-                        this.shadow(vec![
-                            gpui::BoxShadow::new(px(1.), px(-1.), gpui::black().opacity(0.12))
-                                .blur_radius(px(2.)),
-                        ])
-                    })
+                    .border_color(cx.theme().colors().border_variant)
+                    .rounded_md()
+                    .overflow_hidden()
                     .when_some(awaiting_permission, |this, element| this.child(element))
                     .when(
                         has_awaiting_permission
@@ -4288,11 +4278,12 @@ impl ThreadView {
 
         let max_content_width = AgentSettings::get_global(cx).max_content_width;
         let has_messages = self.list_state.item_count() > 0;
-        let fills_container = !has_messages || editor_expanded;
+        let fills_container = editor_expanded;
+        let editor_is_focused = focus_handle.is_focused(window);
 
         h_flex()
             .py_2()
-            .bg(editor_bg_color)
+            .bg(cx.theme().colors().panel_background)
             .justify_center()
             .on_action(cx.listener(Self::handle_message_editor_move_up))
             .map(|this| {
@@ -4315,7 +4306,16 @@ impl ThreadView {
                     .flex_shrink_1()
                     .flex_grow_0()
                     .justify_between()
-                    .gap_2()
+                    .gap_1p5()
+                    .p_2()
+                    .rounded_lg()
+                    .border_1()
+                    .border_color(if editor_is_focused {
+                        cx.theme().colors().border_focused
+                    } else {
+                        cx.theme().colors().border_variant
+                    })
+                    .bg(editor_bg_color)
                     .child(
                         v_flex()
                             .relative()
@@ -6188,9 +6188,6 @@ impl ThreadView {
                 let editing = self.editing_message == Some(entry_ix);
                 let editor_focus = editor.focus_handle(cx).is_focused(window);
                 let focus_border = cx.theme().colors().border_focused;
-                // Drop shadows render as a dark halo on transparent windows.
-                let opaque_window = cx.theme().window_background_appearance()
-                    == gpui::WindowBackgroundAppearance::Opaque;
 
                 let has_checkpoint_button = message
                     .checkpoint
@@ -6209,14 +6206,18 @@ impl ThreadView {
                 v_flex()
                     .id(("user_message", entry_ix))
                     .map(|this| {
-                        if is_first_indented {
+                        let this = if is_first_indented {
                             this.pt_0p5()
                         } else {
                             this.pt_2()
+                        };
+                        if is_indented {
+                            this.px_2()
+                        } else {
+                            this.px_5()
                         }
                     })
                     .pb_3()
-                    .px_2()
                     .gap_1p5()
                     .w_full()
                     .when(is_editable && has_checkpoint_button, |this| {
@@ -6243,17 +6244,18 @@ impl ThreadView {
                             .relative()
                             .child(
                                 div()
-                                    .py_3()
-                                    .px_2()
+                                    .py_2()
+                                    .px_3()
                                     .rounded_md()
-                                    .bg(cx.theme().colors().editor_background)
+                                    .bg(
+                                        cx.theme()
+                                            .colors()
+                                            .elevated_surface_background
+                                            .opacity(0.5),
+                                    )
                                     .border_1()
-                                    .when(is_indented, |this| {
-                                        this.py_2().px_2().when(opaque_window, |this| {
-                                            this.shadow_sm()
-                                        })
-                                    })
-                                    .border_color(cx.theme().colors().border)
+                                    .when(is_indented, |this| this.py_2().px_2())
+                                    .border_color(cx.theme().colors().border_variant)
                                     .map(|this| {
                                         if !is_editable {
                                             if is_subagent {
@@ -6267,13 +6269,28 @@ impl ThreadView {
                                         if editing && !editor_focus {
                                             return this.border_dashed()
                                         }
-                                        this.when(opaque_window, |this| this.shadow_md())
-                                            .hover(|s| {
-                                                s.border_color(focus_border.opacity(0.8))
-                                            })
+                                        this.hover(|s| {
+                                            s.border_color(focus_border.opacity(0.8))
+                                        })
                                     })
                                     .text_xs()
-                                    .child(editor.clone().into_any_element())
+                                    .child(
+                                        h_flex()
+                                            .items_start()
+                                            .gap_2()
+                                            .child(
+                                                Label::new("›")
+                                                    .size(LabelSize::Small)
+                                                    .color(Color::Accent)
+                                                    .buffer_font(cx),
+                                            )
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .flex_1()
+                                                    .child(editor.clone().into_any_element()),
+                                            ),
+                                    )
                             )
                             .when(editor_focus, |this| {
                                 let base_container = h_flex()
@@ -6414,7 +6431,7 @@ impl ThreadView {
                 } else {
                     v_flex()
                         .px_5()
-                        .py_1p5()
+                        .py_2()
                         .when(is_last, |this| this.pb_4())
                         .w_full()
                         .text_ui(cx)
@@ -6955,7 +6972,7 @@ impl ThreadView {
             .py_1p5()
             .px_4()
             .justify_end()
-            .opacity(0.4)
+            .opacity(0.55)
             .hover(|s| s.opacity(1.))
             .when(
                 last_turn_tokens_label.is_some() || last_turn_clock.is_some(),
@@ -7380,9 +7397,9 @@ impl ThreadView {
 
         h_flex()
             .id("generating-spinner")
-            .py_2()
-            .px(rems_from_px(22.))
-            .gap_2()
+            .py_1p5()
+            .px_5()
+            .gap_1p5()
             .map(|this| {
                 if confirmation {
                     this.child(
@@ -7406,6 +7423,11 @@ impl ThreadView {
                             .w_2()
                             .justify_center()
                             .child(GeneratingSpinnerElement::new(SpinnerVariant::Dots)),
+                    )
+                    .child(
+                        Label::new("Working…")
+                            .size(LabelSize::Small)
+                            .color(Color::Muted),
                     )
                 }
             })
@@ -7504,8 +7526,12 @@ impl ThreadView {
                     .group(&card_header_id)
                     .relative()
                     .w_full()
-                    .pr_1()
+                    .px_1()
+                    .py_0p5()
+                    .rounded_xs()
+                    .cursor_pointer()
                     .justify_between()
+                    .hover(|style| style.bg(cx.theme().colors().element_hover))
                     .child(
                         h_flex()
                             .h(window.line_height() - px(2.))
@@ -7527,7 +7553,6 @@ impl ThreadView {
                         Disclosure::new(("expand", entry_ix), is_open)
                             .opened_icon(IconName::ChevronUp)
                             .closed_icon(IconName::ChevronDown)
-                            .visible_on_hover(&card_header_id)
                             .on_click(cx.listener(move |this, _event: &ClickEvent, window, cx| {
                                 this.toggle_thinking_block_expansion(key, window, cx);
                             })),
@@ -12350,6 +12375,7 @@ impl Render for ThreadView {
                 }
             }))
             .size_full()
+            .bg(cx.theme().colors().panel_background)
             .children(self.render_subagent_titlebar(cx))
             .when_some(
                 self.thread_search_visible
