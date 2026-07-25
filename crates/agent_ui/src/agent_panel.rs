@@ -1127,7 +1127,7 @@ impl BaseView {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum AgentPanelSection {
     #[default]
-    Chat,
+    Agent,
     Threads,
 }
 
@@ -1498,11 +1498,11 @@ impl AgentPanel {
             _window,
             |this, _, event: &ThreadsArchiveViewEvent, window, cx| match event {
                 ThreadsArchiveViewEvent::Close => {
-                    this.active_section = AgentPanelSection::Chat;
+                    this.active_section = AgentPanelSection::Agent;
                     cx.notify();
                 }
                 ThreadsArchiveViewEvent::Activate { thread } => {
-                    this.active_section = AgentPanelSection::Chat;
+                    this.active_section = AgentPanelSection::Agent;
                     this.load_agent_thread(
                         Agent::from(thread.agent_id.clone()),
                         thread.thread_id,
@@ -1520,7 +1520,7 @@ impl AgentPanel {
                     window.dispatch_action(ImportThreadsFromOtherChannels.boxed_clone(), cx);
                 }
                 ThreadsArchiveViewEvent::NewThread => {
-                    this.active_section = AgentPanelSection::Chat;
+                    this.active_section = AgentPanelSection::Agent;
                     this.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
                     cx.notify();
                 }
@@ -1565,7 +1565,7 @@ impl AgentPanel {
             language_registry,
             connection_store,
             threads_view,
-            active_section: AgentPanelSection::Chat,
+            active_section: AgentPanelSection::Agent,
             focus_handle: cx.focus_handle(),
             draft_thread: None,
             retained_threads: HashMap::default(),
@@ -6152,38 +6152,32 @@ impl AgentPanel {
 
         h_flex()
             .flex_none()
+            .h(Tab::container_height(cx))
             .px_2()
-            .py_1()
             .border_b_1()
             .border_color(cx.theme().colors().border_variant)
+            .bg(cx.theme().colors().tab_bar_background)
             .child(
                 h_flex()
                     .w_full()
                     .when_some(max_content_width, |this, max_width| {
                         this.max_w(max_width).mx_auto()
                     })
-                    .p_0p5()
-                    .gap_0p5()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(cx.theme().colors().border_variant)
-                    .bg(cx.theme().colors().editor_background)
+                    .gap_1()
                     .child(
-                        Button::new("agent-section-chat", "Chat")
-                            .full_width()
+                        Button::new("agent-section-agent", "Agent")
                             .style(ButtonStyle::Subtle)
                             .label_size(LabelSize::Small)
                             .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                            .toggle_state(self.active_section == AgentPanelSection::Chat)
+                            .toggle_state(self.active_section == AgentPanelSection::Agent)
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.active_section = AgentPanelSection::Chat;
+                                this.active_section = AgentPanelSection::Agent;
                                 this.focus_handle.focus(window, cx);
                                 cx.notify();
                             })),
                     )
                     .child(
                         Button::new("agent-section-threads", "Threads")
-                            .full_width()
                             .style(ButtonStyle::Subtle)
                             .label_size(LabelSize::Small)
                             .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
@@ -6401,8 +6395,10 @@ impl Render for AgentPanel {
                     })
                 }
             }))
-            .child(self.render_toolbar(window, cx))
             .child(self.render_section_switcher(cx))
+            .when(self.active_section == AgentPanelSection::Agent, |parent| {
+                parent.child(self.render_toolbar(window, cx))
+            })
             .map(|parent| {
                 if self.active_section == AgentPanelSection::Threads {
                     return parent.child(self.threads_view.clone());

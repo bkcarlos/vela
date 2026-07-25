@@ -4305,90 +4305,137 @@ impl ThreadView {
                     .px_2()
                     .flex_shrink_1()
                     .flex_grow_0()
-                    .justify_between()
-                    .gap_1p5()
-                    .p_2()
-                    .rounded_lg()
-                    .border_1()
-                    .border_color(if editor_is_focused {
-                        cx.theme().colors().border_focused
-                    } else {
-                        cx.theme().colors().border_variant
-                    })
-                    .bg(editor_bg_color)
-                    .child(
-                        v_flex()
-                            .relative()
-                            .w_full()
-                            .min_h_0()
-                            .when(fills_container, |this| this.flex_1())
-                            .pt_1()
-                            .pr_2p5()
-                            .child(self.message_editor.clone())
-                            .when(has_messages, |this| {
-                                this.child(
-                                    h_flex()
-                                        .absolute()
-                                        .top_0()
-                                        .right_0()
-                                        .opacity(0.5)
-                                        .hover(|s| s.opacity(1.0))
+                    .justify_center()
+                    .gap_5()
+                    .when(!has_messages, |this| {
+                        this.child(
+                            v_flex()
+                                .items_center()
+                                .text_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .size_10()
+                                        .rounded_xl()
+                                        .bg(cx.theme().colors().element_background)
+                                        .shadow_sm()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
                                         .child(
-                                            IconButton::new("toggle-height", expand_icon)
-                                                .icon_size(IconSize::Small)
-                                                .icon_color(Color::Muted)
-                                                .tooltip({
-                                                    move |_window, cx| {
-                                                        Tooltip::for_action_in(
-                                                            expand_tooltip,
-                                                            &ExpandMessageEditor,
-                                                            &focus_handle,
-                                                            cx,
-                                                        )
-                                                    }
-                                                })
-                                                .on_click(cx.listener(|this, _, window, cx| {
-                                                    this.expand_message_editor(
-                                                        &ExpandMessageEditor,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                })),
+                                            Icon::new(IconName::Vela)
+                                                .size(IconSize::Medium)
+                                                .color(Color::Accent),
                                         ),
                                 )
-                            }),
-                    )
+                                .child(
+                                    Label::new("What can I help you build?")
+                                        .weight(gpui::FontWeight::MEDIUM),
+                                )
+                                .child(
+                                    Label::new(
+                                        "Ask about your code, plan a change, or start building.",
+                                    )
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                                ),
+                        )
+                    })
                     .child(
-                        h_flex()
+                        v_flex()
                             .w_full()
                             .min_w_0()
-                            .flex_none()
-                            .flex_wrap()
+                            .when(fills_container, |this| this.h_full())
+                            .flex_shrink_1()
+                            .flex_grow_0()
                             .justify_between()
+                            .gap_1p5()
+                            .p_2()
+                            .rounded_xl()
+                            .border_1()
+                            .border_color(if editor_is_focused {
+                                cx.theme().colors().border_focused
+                            } else {
+                                cx.theme().colors().border_variant
+                            })
+                            .bg(editor_bg_color)
+                            .when(!has_messages, |this| this.shadow_sm())
                             .child(
-                                h_flex()
-                                    .min_w_0()
-                                    .flex_wrap()
-                                    .gap_0p5()
-                                    .child(self.render_add_context_button(cx))
-                                    .child(self.render_follow_toggle(cx))
-                                    .children(self.render_fast_mode_control(cx))
-                                    .children(self.render_thinking_control(cx)),
+                                v_flex()
+                                    .relative()
+                                    .w_full()
+                                    .min_h_0()
+                                    .when(fills_container, |this| this.flex_1())
+                                    .pt_1()
+                                    .pr_2p5()
+                                    .child(self.message_editor.clone())
+                                    .when(has_messages, |this| {
+                                        this.child(
+                                            h_flex()
+                                                .absolute()
+                                                .top_0()
+                                                .right_0()
+                                                .opacity(0.5)
+                                                .hover(|s| s.opacity(1.0))
+                                                .child(
+                                                    IconButton::new("toggle-height", expand_icon)
+                                                        .icon_size(IconSize::Small)
+                                                        .icon_color(Color::Muted)
+                                                        .tooltip({
+                                                            move |_window, cx| {
+                                                                Tooltip::for_action_in(
+                                                                    expand_tooltip,
+                                                                    &ExpandMessageEditor,
+                                                                    &focus_handle,
+                                                                    cx,
+                                                                )
+                                                            }
+                                                        })
+                                                        .on_click(cx.listener(
+                                                            |this, _, window, cx| {
+                                                                this.expand_message_editor(
+                                                                    &ExpandMessageEditor,
+                                                                    window,
+                                                                    cx,
+                                                                );
+                                                            },
+                                                        )),
+                                                ),
+                                        )
+                                    }),
                             )
                             .child(
                                 h_flex()
+                                    .w_full()
                                     .min_w_0()
+                                    .flex_none()
                                     .flex_wrap()
-                                    .gap_1()
-                                    .children(self.render_token_usage(cx))
-                                    .map(|this| match self.config_options_view.clone() {
-                                        Some(config_view) => this.child(config_view),
-                                        None => this
-                                            .children(self.mode_selector.clone())
-                                            .children(self.model_selector.clone()),
-                                    })
-                                    .children(self.render_permission_mode_selector(cx))
-                                    .child(self.render_send_button(cx)),
+                                    .justify_between()
+                                    .child(
+                                        h_flex()
+                                            .min_w_0()
+                                            .flex_wrap()
+                                            .gap_0p5()
+                                            .child(self.render_add_context_button(cx))
+                                            .child(self.render_follow_toggle(cx))
+                                            .children(self.render_fast_mode_control(cx))
+                                            .children(self.render_thinking_control(cx)),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .min_w_0()
+                                            .flex_wrap()
+                                            .gap_1()
+                                            .children(self.render_token_usage(cx))
+                                            .map(|this| match self.config_options_view.clone() {
+                                                Some(config_view) => this.child(config_view),
+                                                None => this
+                                                    .children(self.mode_selector.clone())
+                                                    .children(self.model_selector.clone()),
+                                            })
+                                            .children(self.render_permission_mode_selector(cx))
+                                            .child(self.render_send_button(cx)),
+                                    ),
                             ),
                     ),
             )
