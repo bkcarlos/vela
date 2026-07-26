@@ -68,13 +68,7 @@ jobs:
           shared-key: release-linux
           cache-on-failure: true
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libasound2-dev libfontconfig-dev libwayland-dev \
-            libxkbcommon-x11-dev libssl-dev libzstd-dev \
-            libvulkan1 libgit2-dev cmake mold clang llvm \
-            musl-tools libclang-dev
+        run: ./script/linux
       - name: Download WASI SDK
         run: ./script/download-wasi-sdk
       - name: Build Linux release tarball
