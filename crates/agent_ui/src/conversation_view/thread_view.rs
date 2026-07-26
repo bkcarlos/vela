@@ -4323,9 +4323,14 @@ impl ThreadView {
                                         .items_center()
                                         .justify_center()
                                         .child(
-                                            Icon::new(IconName::Vela)
-                                                .size(IconSize::Medium)
-                                                .color(Color::Accent),
+                                            Icon::new(IconName::Vela).size(IconSize::Medium).color(
+                                                Color::Custom(gpui::hsla(
+                                                    28. / 360.,
+                                                    0.93,
+                                                    0.72,
+                                                    1.0,
+                                                )),
+                                            ),
                                         ),
                                 )
                                 .child(
