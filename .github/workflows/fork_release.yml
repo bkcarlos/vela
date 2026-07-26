@@ -77,7 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vela-linux-x86_64-tar-gz
-          path: target/vela-linux-x86_64.tar.gz
+          path: target/release/vela-linux-x86_64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
