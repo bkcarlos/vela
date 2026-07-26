@@ -107,6 +107,11 @@ extend-ignore-re = [
     # Mermaid CSS class name for state diagram composites
     "composit",
     # Used in truncating tests to ensure byte-length vs char like in café
-    "caf…"
+    "caf…",
+    # scap screen-capture library name
+    "scap",
+    # Historical spelling in WIT interfaces and public editor APIs; renaming
+    # would break protocol compatibility
+    "writeable",
 ]
 check-filename = true
