@@ -723,7 +723,7 @@ pub struct ProjectPanelAutoOpenSettings {
 #[with_fallible_options]
 #[derive(Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug)]
 pub struct ProjectPanelSettingsContent {
-    /// Whether to show the project panel button in the status bar.
+    /// Whether to show the project panel button in the activity bar.
     ///
     /// Default: true
     pub button: Option<bool>,

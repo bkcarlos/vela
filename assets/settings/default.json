@@ -797,7 +797,7 @@
   // Can be a combination of "left", "right" and "bottom".
   "resize_all_panels_in_dock": ["left"],
   "project_panel": {
-    // Whether to show the project panel button in the status bar
+    // Whether to show the project panel button in the activity bar
     "button": true,
     // Whether to hide the gitignore entries in the project panel.
     "hide_gitignore": false,
@@ -916,7 +916,7 @@
     },
   },
   "outline_panel": {
-    // Whether to show the outline panel button in the status bar
+    // Whether to show the outline panel button in the activity bar
     "button": true,
     // Default width of the outline panel.
     "default_width": 300,
@@ -970,7 +970,7 @@
     "expand_outlines_with_depth": 100,
   },
   "collaboration_panel": {
-    // Whether to show the collaboration panel button in the status bar.
+    // Whether to show the collaboration panel button in the activity bar.
     "button": true,
     // Where to dock the collaboration panel. Can be 'left' or 'right'.
     "dock": "left",
@@ -978,7 +978,7 @@
     "default_width": 240,
   },
   "git_panel": {
-    // Whether to show the git panel button in the status bar.
+    // Whether to show the git panel button in the activity bar.
     "button": true,
     // Where to dock the git panel. Can be 'left' or 'right'.
     "dock": "left",
@@ -1055,7 +1055,7 @@
     "commit_message_include_project_rules": true,
     // Whether the agent is enabled.
     "enabled": true,
-    // Whether to show the agent panel button in the status bar.
+    // Whether to show the agent panel button in the title bar.
     "button": true,
     // Where to dock the agent panel. Can be 'left', 'right' or 'bottom'.
     "dock": "right",

@@ -226,6 +226,15 @@ impl Render for TitleBar {
         let title_bar_settings = *TitleBarSettings::get_global(cx);
         let button_layout = title_bar_settings.button_layout;
         let is_git_enabled = ProjectSettings::get_global(cx).git.enabled.status;
+        let agent_panel_open = self.workspace.upgrade().is_some_and(|workspace| {
+            workspace.read(cx).all_docks().iter().any(|dock| {
+                let dock = dock.read(cx);
+                dock.is_open()
+                    && dock
+                        .visible_panel()
+                        .is_some_and(|panel| panel.persistent_name() == "AgentPanel")
+            })
+        });
 
         let show_menus = show_menus(cx);
 
@@ -353,11 +362,37 @@ impl Render for TitleBar {
                 .children(self.render_connection_status(status, cx))
                 .child(self.update_version.clone())
                 .when(TitleBarSettings::get_global(cx).show_sign_in, |this| {
-                    this.child(self.render_provider_login_button(cx))
+                    this.child(self.render_model_settings_button(cx))
                 })
                 .when(TitleBarSettings::get_global(cx).show_user_menu, |this| {
                     this.child(self.render_user_menu_button(cx))
                 })
+                .when(
+                    AgentSettings::get_global(cx).enabled(cx)
+                        && AgentSettings::get_global(cx).button,
+                    |this| {
+                        this.child(
+                            IconButton::new("toggle-agent-panel", IconName::VelaAgentTwo)
+                                .icon_size(IconSize::Small)
+                                .toggle_state(agent_panel_open)
+                                .tab_index(0isize)
+                                .aria_label("Agent Panel")
+                                .tooltip(|_window, cx| {
+                                    Tooltip::for_action(
+                                        "Agent Panel",
+                                        &vela_actions::assistant::Toggle,
+                                        cx,
+                                    )
+                                })
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(
+                                        vela_actions::assistant::Toggle.boxed_clone(),
+                                        cx,
+                                    );
+                                }),
+                        )
+                    },
+                )
                 .into_any_element(),
         );
 
@@ -428,6 +463,7 @@ impl TitleBar {
         };
 
         let mut subscriptions = Vec::new();
+        subscriptions.push(cx.observe_global::<SettingsStore>(|_, cx| cx.notify()));
         subscriptions.push(
             cx.observe(&workspace.weak_handle().upgrade().unwrap(), |_, _, cx| {
                 cx.notify()
@@ -1181,19 +1217,11 @@ impl TitleBar {
         }
     }
 
-    pub fn render_provider_login_button(&mut self, cx: &mut Context<Self>) -> Button {
-        let has_authenticated_provider =
-            LanguageModelRegistry::read_global(cx).has_authenticated_provider(cx);
-        let logo = Icon::new(IconName::Vela)
-            .size(IconSize::Small)
-            .when(has_authenticated_provider, |icon| icon.color(Color::Accent));
-
-        Button::new("connect_providers", "Connect")
+    pub fn render_model_settings_button(&mut self, _cx: &mut Context<Self>) -> Button {
+        Button::new("connect_providers", "Models")
             .label_size(LabelSize::Small)
-            .start_icon(logo)
-            .tooltip(Tooltip::text(
-                "Connect ChatGPT, GitHub Copilot, OpenRouter, or an API key",
-            ))
+            .start_icon(Icon::new(IconName::Sparkle).size(IconSize::Small))
+            .tooltip(Tooltip::text("Configure Agent models and LLM providers"))
             .tab_index(0isize)
             .on_click(move |_, window, cx| {
                 window.dispatch_action(
@@ -1262,9 +1290,9 @@ impl TitleBar {
                 )
         } else {
             ButtonLike::new("user-menu")
-                .aria_label("User menu")
+                .aria_label("Account and application menu")
                 .tab_index(0isize)
-                .child(Icon::new(IconName::ChevronDown).size(IconSize::Small))
+                .child(Icon::new(IconName::Person).size(IconSize::Small))
         };
 
         PopoverMenu::new("user-menu")

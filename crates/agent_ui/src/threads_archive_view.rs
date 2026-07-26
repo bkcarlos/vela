@@ -202,6 +202,21 @@ impl ThreadsArchiveView {
             },
         );
 
+        // Refresh the list when the window's project folders change, since
+        // the list is filtered to threads belonging to this project.
+        let project_subscription = workspace.upgrade().map(|workspace| {
+            let project = workspace.read(cx).project().clone();
+            cx.subscribe(&project, |this: &mut Self, _, event, cx| match event {
+                project::Event::WorktreeAdded(_)
+                | project::Event::WorktreeRemoved(_)
+                | project::Event::WorktreeOrderChanged
+                | project::Event::WorktreePathsChanged { .. } => {
+                    this.update_items(cx);
+                }
+                _ => {}
+            })
+        });
+
         cx.on_focus_out(&focus_handle, window, |this: &mut Self, _, _window, cx| {
             this.selection = None;
             cx.notify();
@@ -217,10 +232,13 @@ impl ThreadsArchiveView {
             hovered_index: None,
             preserve_selection_on_next_update: false,
             filter_editor,
-            _subscriptions: vec![
-                filter_editor_subscription,
-                thread_metadata_store_subscription,
-            ],
+            _subscriptions: project_subscription
+                .into_iter()
+                .chain([
+                    filter_editor_subscription,
+                    thread_metadata_store_subscription,
+                ])
+                .collect(),
             _refresh_history_task: Task::ready(()),
             workspace,
             agent_connection_store,
@@ -270,11 +288,59 @@ impl ThreadsArchiveView {
     fn update_items(&mut self, cx: &mut Context<Self>) {
         let store = ThreadMetadataStore::global(cx).read(cx);
 
+        // Only show threads that belong to this window's project, so each
+        // project's Conversations list stays separate.
+        let workspace = self.workspace.upgrade();
+        let project_root_paths: Vec<std::path::PathBuf> = workspace
+            .as_ref()
+            .map(|workspace| {
+                workspace
+                    .read(cx)
+                    .root_paths(cx)
+                    .iter()
+                    .map(|path| path.to_path_buf())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let remote_connection = workspace.as_ref().and_then(|workspace| {
+            workspace
+                .read(cx)
+                .project()
+                .read(cx)
+                .remote_connection_options(cx)
+        });
+        let belongs_to_project = |thread: &ThreadMetadata| {
+            if project_root_paths.is_empty() {
+                // Windows without project folders (e.g. an empty new window)
+                // can't be associated with any project, so keep showing all
+                // threads there.
+                return true;
+            }
+            if !thread.matches_remote_connection(remote_connection.as_ref()) {
+                return false;
+            }
+            // Match against both the thread's folder paths and its main
+            // worktree paths, mirroring how the sidebar assigns threads to
+            // project groups: a thread opened in a linked git worktree
+            // belongs to the project of its main checkout.
+            project_root_paths.iter().any(|path| {
+                thread.references_folder_path(path)
+                    || thread
+                        .main_worktree_paths()
+                        .paths()
+                        .iter()
+                        .any(|main_path| main_path.as_path() == path)
+            })
+        };
+
         // If we're filtering to archived threads but none remain (e.g. the
         // user just deleted the last one), fall back to showing all threads
         // so they aren't stranded with an empty list and a disabled toggle.
         if self.thread_filter == ThreadFilter::ArchivedOnly
-            && store.archived_entries().next().is_none()
+            && store
+                .archived_entries()
+                .find(|t| belongs_to_project(t))
+                .is_none()
         {
             self.thread_filter = ThreadFilter::All;
         }
@@ -282,6 +348,7 @@ impl ThreadsArchiveView {
         let thread_filter = self.thread_filter;
         let sessions = store
             .entries()
+            .filter(|t| belongs_to_project(t))
             .filter(|t| match thread_filter {
                 ThreadFilter::All => true,
                 ThreadFilter::ArchivedOnly => t.archived,
@@ -633,7 +700,7 @@ impl ThreadsArchiveView {
                     .and_then(|store| store.read(cx).agent_icon(&thread.agent_id));
 
                 let icon = if thread.agent_id.as_ref() == agent::VELA_AGENT_ID.as_ref() {
-                    IconName::Vela
+                    IconName::VelaAgentTwo
                 } else {
                     IconName::Sparkle
                 };

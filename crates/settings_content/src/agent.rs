@@ -195,7 +195,7 @@ pub struct AgentSettingsContent {
     ///
     /// Default: true
     pub enabled: Option<bool>,
-    /// Whether to show the agent panel button in the status bar.
+    /// Whether to show the agent panel button in the title bar.
     ///
     /// Default: true
     pub button: Option<bool>,

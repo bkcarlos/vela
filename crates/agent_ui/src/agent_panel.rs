@@ -6179,7 +6179,7 @@ impl AgentPanel {
                             })),
                     )
                     .child(
-                        Button::new("agent-section-threads", "Threads")
+                        Button::new("agent-section-threads", "Conversations")
                             .style(ButtonStyle::Subtle)
                             .label_size(LabelSize::Small)
                             .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))

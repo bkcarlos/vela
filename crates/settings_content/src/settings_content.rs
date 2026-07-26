@@ -669,7 +669,7 @@ pub struct CallSettingsContent {
 #[with_fallible_options]
 #[derive(Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug)]
 pub struct GitPanelSettingsContent {
-    /// Whether to show the panel button in the status bar.
+    /// Whether to show the panel button in the activity bar.
     ///
     /// Default: true
     pub button: Option<bool>,
@@ -855,7 +855,7 @@ pub struct ScrollbarSettings {
 #[with_fallible_options]
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
 pub struct PanelSettingsContent {
-    /// Whether to show the panel button in the status bar.
+    /// Whether to show the panel button in the activity bar.
     ///
     /// Default: true
     pub button: Option<bool>,
@@ -1085,7 +1085,7 @@ pub enum HourFormat {
 #[with_fallible_options]
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
 pub struct OutlinePanelSettingsContent {
-    /// Whether to show the outline panel button in the status bar.
+    /// Whether to show the outline panel button in the activity bar.
     ///
     /// Default: true
     pub button: Option<bool>,

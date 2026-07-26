@@ -70,6 +70,8 @@ impl RenderOnce for ProjectEmptyState {
                     .child(
                         Button::new("open_project", "Open Project")
                             .full_width()
+                            .style(ButtonStyle::Filled)
+                            .start_icon(Icon::new(IconName::FolderOpen).size(IconSize::Small))
                             .key_binding(self.open_project_key_binding)
                             .when_some(self.on_open_project, |button, handler| {
                                 button.on_click(handler)
@@ -85,6 +87,8 @@ impl RenderOnce for ProjectEmptyState {
                     .child(
                         Button::new("clone_repo", "Clone Repository")
                             .full_width()
+                            .style(ButtonStyle::Outlined)
+                            .start_icon(Icon::new(IconName::GitBranch).size(IconSize::Small))
                             .when_some(self.on_clone_repo, |button, handler| {
                                 button.on_click(handler)
                             }),

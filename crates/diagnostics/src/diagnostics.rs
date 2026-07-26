@@ -17,9 +17,9 @@ use editor::{
     multibuffer_context_lines,
 };
 use gpui::{
-    AnyElement, App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, FocusOutEvent,
-    Focusable, Global, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    Styled, Subscription, Task, WeakEntity, Window, actions, div,
+    Action, AnyElement, App, AsyncApp, AsyncWindowContext, Context, Entity, EventEmitter,
+    FocusHandle, FocusOutEvent, Focusable, Global, InteractiveElement, IntoElement, ParentElement,
+    Pixels, Render, SharedString, Styled, Subscription, Task, WeakEntity, Window, actions, div, px,
 };
 use itertools::Itertools as _;
 use language::{
@@ -46,6 +46,7 @@ use ui::{Icon, IconName, Label, h_flex, prelude::*};
 use util::ResultExt;
 use workspace::{
     ItemNavHistory, Workspace,
+    dock::{DockPosition, Panel, PanelEvent},
     item::{Item, ItemEvent, ItemHandle, SaveOptions, TabContentParams},
     searchable::SearchableItemHandle,
 };
@@ -70,6 +71,110 @@ pub fn init(cx: &mut App) {
     editor::set_diagnostic_renderer(diagnostic_renderer::DiagnosticRenderer {}, cx);
     cx.observe_new(ProjectDiagnosticsEditor::register).detach();
     cx.observe_new(BufferDiagnosticsEditor::register).detach();
+}
+
+pub struct ProjectDiagnosticsPanel {
+    editor: Entity<ProjectDiagnosticsEditor>,
+}
+
+impl ProjectDiagnosticsPanel {
+    pub fn load(
+        workspace: WeakEntity<Workspace>,
+        cx: &mut AsyncWindowContext,
+    ) -> Task<Result<Entity<Self>>> {
+        cx.spawn(async move |cx| {
+            workspace.update_in(cx, |workspace, window, cx| {
+                let include_warnings = match cx.try_global::<IncludeWarnings>() {
+                    Some(include_warnings) => include_warnings.0,
+                    None => ProjectSettings::get_global(cx).diagnostics.include_warnings,
+                };
+                let workspace_handle = cx.entity().downgrade();
+                let editor = cx.new(|cx| {
+                    ProjectDiagnosticsEditor::new(
+                        include_warnings,
+                        workspace.project().clone(),
+                        workspace_handle,
+                        window,
+                        cx,
+                    )
+                });
+                let panel = cx.new(|_| Self { editor });
+                workspace.register_action(Self::deploy);
+                panel
+            })
+        })
+    }
+
+    fn deploy(
+        workspace: &mut Workspace,
+        _: &Deploy,
+        window: &mut Window,
+        cx: &mut Context<Workspace>,
+    ) {
+        if !workspace.toggle_panel_focus::<Self>(window, cx) {
+            workspace.close_panel::<Self>(window, cx);
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for ProjectDiagnosticsPanel {}
+
+impl Focusable for ProjectDiagnosticsPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.editor.focus_handle(cx)
+    }
+}
+
+impl Panel for ProjectDiagnosticsPanel {
+    fn persistent_name() -> &'static str {
+        "ProjectDiagnosticsPanel"
+    }
+
+    fn panel_key() -> &'static str {
+        "ProjectDiagnosticsPanel"
+    }
+
+    fn position(&self, _window: &Window, _cx: &App) -> DockPosition {
+        DockPosition::Bottom
+    }
+
+    fn position_is_valid(&self, position: DockPosition) -> bool {
+        position == DockPosition::Bottom
+    }
+
+    fn set_position(
+        &mut self,
+        _position: DockPosition,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
+    fn default_size(&self, _window: &Window, _cx: &App) -> Pixels {
+        px(300.)
+    }
+
+    fn icon(&self, _window: &Window, _cx: &App) -> Option<IconName> {
+        Some(IconName::Warning)
+    }
+
+    fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {
+        Some("Problems")
+    }
+
+    fn toggle_action(&self) -> Box<dyn Action> {
+        Box::new(Deploy)
+    }
+
+    fn activation_priority(&self) -> u32 {
+        6
+    }
+}
+
+impl Render for ProjectDiagnosticsPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.editor.clone())
+    }
 }
 
 pub(crate) struct ProjectDiagnosticsEditor {
@@ -160,9 +265,11 @@ impl ProjectDiagnosticsEditor {
     pub fn register(
         workspace: &mut Workspace,
         _window: Option<&mut Window>,
-        _: &mut Context<Workspace>,
+        cx: &mut Context<Workspace>,
     ) {
-        workspace.register_action(Self::deploy);
+        if workspace.panel::<ProjectDiagnosticsPanel>(cx).is_none() {
+            workspace.register_action(Self::deploy);
+        }
     }
 
     fn new(
