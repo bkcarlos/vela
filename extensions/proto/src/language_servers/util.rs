@@ -1,6 +1,6 @@
 use std::fs;
 
-use vela_extension_api::Result;
+use zed_extension_api::Result;
 
 pub(super) fn remove_outdated_versions(
     language_server_id: &'static str,

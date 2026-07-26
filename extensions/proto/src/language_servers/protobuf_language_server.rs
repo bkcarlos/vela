@@ -1,4 +1,4 @@
-use vela_extension_api::{self as vela, Result, settings::LspSettings};
+use zed_extension_api::{self as vela, Result, settings::LspSettings};
 
 pub(crate) struct ProtobufLanguageServer {
     cached_binary_path: Option<String>,

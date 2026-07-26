@@ -1,6 +1,6 @@
 use std::fs;
 use vela::settings::LspSettings;
-use vela_extension_api::{self as vela, LanguageServerId, Result, serde_json};
+use zed_extension_api::{self as vela, LanguageServerId, Result, serde_json};
 
 struct GlslExtension {
     cached_binary_path: Option<String>,

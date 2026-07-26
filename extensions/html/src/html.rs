@@ -1,6 +1,6 @@
 use std::{env, fs};
 use vela::settings::LspSettings;
-use vela_extension_api::{self as vela, LanguageServerId, Result, serde_json::json};
+use zed_extension_api::{self as vela, LanguageServerId, Result, serde_json::json};
 
 const BINARY_NAME: &str = "vscode-html-language-server";
 const SERVER_PATH: &str =
@@ -102,8 +102,8 @@ impl vela::Extension for HtmlExtension {
     fn language_server_initialization_options(
         &mut self,
         _server_id: &LanguageServerId,
-        _worktree: &vela_extension_api::Worktree,
-    ) -> Result<Option<vela_extension_api::serde_json::Value>> {
+        _worktree: &vela::Worktree,
+    ) -> Result<Option<vela::serde_json::Value>> {
         let initialization_options = json!({"provideFormatter": true });
         Ok(Some(initialization_options))
     }

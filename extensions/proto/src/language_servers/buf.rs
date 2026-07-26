@@ -1,6 +1,6 @@
 use std::fs;
 
-use vela_extension_api::{
+use zed_extension_api::{
     self as vela, Architecture, DownloadedFileType, GithubReleaseOptions, Os, Result,
     settings::LspSettings,
 };

@@ -13,4 +13,4 @@ path = "src/glsl.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-vela_extension_api = { package = "zed_extension_api", version = "0.1.0" }
+zed_extension_api = "0.1.0"

@@ -1,4 +1,4 @@
-use vela_extension_api::{self as vela, Result, settings::LspSettings};
+use zed_extension_api::{self as vela, Result, settings::LspSettings};
 
 use crate::language_servers::{BufLsp, ProtoLs, ProtobufLanguageServer};
 
@@ -21,9 +21,9 @@ impl vela::Extension for ProtobufExtension {
 
     fn language_server_command(
         &mut self,
-        language_server_id: &vela_extension_api::LanguageServerId,
-        worktree: &vela_extension_api::Worktree,
-    ) -> vela_extension_api::Result<vela_extension_api::Command> {
+        language_server_id: &vela::LanguageServerId,
+        worktree: &vela::Worktree,
+    ) -> vela::Result<vela::Command> {
         match language_server_id.as_ref() {
             ProtobufLanguageServer::SERVER_NAME => self
                 .protobuf_language_server
@@ -57,7 +57,7 @@ impl vela::Extension for ProtobufExtension {
         &mut self,
         server_id: &vela::LanguageServerId,
         worktree: &vela::Worktree,
-    ) -> Result<Option<vela_extension_api::serde_json::Value>> {
+    ) -> Result<Option<vela::serde_json::Value>> {
         LspSettings::for_worktree(server_id.as_ref(), worktree)
             .map(|lsp_settings| lsp_settings.initialization_options)
     }
