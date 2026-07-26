@@ -29,7 +29,9 @@ concurrency:
 
 jobs:
   build_macos:
-    runs-on: macos-14
+    # macos-15 for Xcode 16: webrtc-sys bridge C++ fails to compile with the
+    # libc++ shipped in Xcode 15.4 (macos-14).
+    runs-on: macos-15
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4

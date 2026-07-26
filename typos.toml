@@ -113,5 +113,13 @@ extend-ignore-re = [
     # Historical spelling in WIT interfaces and public editor APIs; renaming
     # would break protocol compatibility
     "writeable",
+    # `GHIzJ` is intentional test data in crates/text/src/tests.rs
+    "\\AGHIzJ\\z",
+    # `:bd[elete]` / `:d[elete]` vim abbreviation syntax yields an `elete` token;
+    # anchored so `delete`/`elite` are still checked
+    "\\Aelete\\z",
+    # Standalone `ba` only appears inside the commit hash `c36ba15606`;
+    # anchored so real words like `bar`/`bad` are still checked
+    "\\Aba\\z",
 ]
 check-filename = true
