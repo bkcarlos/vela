@@ -1,9 +1,9 @@
-# Lightweight CI for personal forks.
+# Fork CI: checks and tests on GitHub-hosted runners.
 #
 # The upstream run_tests.yml is gated on repository_owner == 'vela-industries'
 # and uses private namespace runners, so it can never run on a personal fork.
-# This workflow runs on GitHub-hosted runners instead and covers the crates we
-# actually change.
+# This workflow mirrors its checks on free runners, minus Windows (too slow on
+# hosted runners) and jobs requiring private secrets (sccache, protobuf buf).
 name: fork_ci
 
 env:
@@ -27,22 +27,159 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-and-test:
+  check_style:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
-          components: rustfmt, clippy
+          components: rustfmt
+      - name: Prettier
+        run: ./script/prettier
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: check-todos
+        run: ./script/check-todos
+      - name: check-keymaps
+        run: ./script/check-keymaps
+      - name: typos
+        uses: crate-ci/typos@v1
+        with:
+          config: ./typos.toml
 
+  check_licenses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: fork-ci
-          cache-on-failure: true
+          shared-key: licenses
+      - name: check-licenses
+        run: ./script/check-licenses
+      - name: generate-licenses
+        run: ./script/generate-licenses
 
+  check_docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mdbook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 0.4.37
+      - name: Build docs book
+        run: |
+          mkdir -p target/deploy
+          mdbook build ./docs --dest-dir=../target/deploy/docs/
+        env:
+          DOCS_CHANNEL: stable
+          MDBOOK_BOOK__SITE_URL: /docs/
+      - name: Link check
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --exclude '^http' 'target/deploy/docs'
+          fail: true
+
+  clippy:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy-${{ matrix.os }}
+          cache-on-failure: true
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libssl-dev libzstd-dev \
+            libvulkan1 libgit2-dev cmake mold clang
+      - name: Download WASI SDK
+        run: ./script/download-wasi-sdk
+      - name: Clippy workspace
+        run: ./script/clippy --workspace --all-targets --all-features
+
+  run_tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    env:
+      CC: clang
+      CXX: clang++
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 500ms --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-${{ matrix.os }}
+          cache-on-failure: true
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libssl-dev libzstd-dev \
+            libvulkan1 libgit2-dev cmake mold clang
+      - name: Download WASI SDK
+        run: ./script/download-wasi-sdk
+      - name: Install nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run workspace tests
+        run: cargo nextest run --workspace --no-fail-fast --no-tests=warn
+
+  doctests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: doctests
+          cache-on-failure: true
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -50,12 +187,54 @@ jobs:
             libasound2-dev libfontconfig-dev libwayland-dev \
             libxkbcommon-x11-dev libssl-dev libzstd-dev \
             libvulkan1 libgit2-dev cmake mold clang
+      - name: Download WASI SDK
+        run: ./script/download-wasi-sdk
+      - name: Run doctests
+        run: cargo test --workspace --doc --no-fail-fast
 
-      - name: Check agent crate
-        run: cargo check -p agent --lib --tests
+  check_workspace_binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: binaries
+          cache-on-failure: true
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libssl-dev libzstd-dev \
+            libvulkan1 libgit2-dev cmake mold clang
+      - name: Download WASI SDK
+        run: ./script/download-wasi-sdk
+      - name: Build workspace binaries and examples
+        run: cargo build --workspace --bins --examples
 
-      - name: Run tool permission tests
-        run: cargo test -p agent --lib tool_permissions
-
-      - name: Clippy on changed crates
-        run: cargo clippy -p agent --lib --tests -- -D warnings
+  check_wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm
+          cache-on-failure: true
+      - name: Check wasm targets
+        run: cargo -Zbuild-std=std,panic_abort check --target wasm32-unknown-unknown -p gpui_platform -p cloud_api_client
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS: -C target-feature=+atomics,+bulk-memory,+mutable-globals
+          RUSTC_BOOTSTRAP: '1'

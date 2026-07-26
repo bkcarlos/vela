@@ -1,0 +1,111 @@
+# Fork release builds: unsigned/ad-hoc-signed installable artifacts.
+#
+# The upstream release.yml requires Apple notarization, Windows signing, R2
+# blob storage, and private runners. This workflow builds distributable
+# artifacts without any secrets:
+#   - macOS arm64: release .dmg signed ad-hoc (Gatekeeper bypass required on
+#     first launch: right-click -> Open, or `xattr -dr com.apple.quarantine`)
+#   - Linux x86_64: release .tar.gz
+#
+# Triggers on version tags (e.g. v1.15.2) or manual dispatch, and uploads both
+# workflow artifacts and (for tags) a GitHub Release.
+name: fork_release
+
+env:
+  CARGO_TERM_COLOR: always
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_macos:
+    runs-on: macos-14
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-macos
+          cache-on-failure: true
+      - name: Build Vela.app bundle and DMG
+        run: ./script/bundle-mac
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vela-macos-arm64-dmg
+          path: target/aarch64-apple-darwin/release/Vela-aarch64.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  build_linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-linux
+          cache-on-failure: true
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libssl-dev libzstd-dev \
+            libvulkan1 libgit2-dev cmake mold clang llvm \
+            musl-tools libclang-dev
+      - name: Download WASI SDK
+        run: ./script/download-wasi-sdk
+      - name: Build Linux release tarball
+        run: ./script/bundle-linux
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vela-linux-x86_64-tar-gz
+          path: target/vela-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish_release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build_macos, build_linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Vela ${{ github.ref_name }}
+          draft: true
+          files: |
+            artifacts/Vela-macos-arm64-dmg/Vela-aarch64.dmg
+            artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz
+          body: |
+            Personal fork build (unsigned).
+
+            - macOS: ad-hoc signed. On first launch, right-click -> Open, or run
+              `xattr -dr com.apple.quarantine /Applications/Vela.app` after install.
+            - Linux: extract and run `bin/vela`.
