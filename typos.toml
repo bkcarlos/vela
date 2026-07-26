@@ -108,13 +108,14 @@ extend-ignore-re = [
     "composit",
     # Used in truncating tests to ensure byte-length vs char like in café
     "caf…",
-    # scap screen-capture library name
-    "scap",
+    # scap screen-capture library name (also `Scap` in type identifiers)
+    "(?i)\\Ascap\\z",
     # Historical spelling in WIT interfaces and public editor APIs; renaming
     # would break protocol compatibility
     "writeable",
-    # `GHIzJ` is intentional test data in crates/text/src/tests.rs
-    "\\AGHIzJ\\z",
+    # `GHIzJ` is intentional test data in crates/text/src/tests.rs; also
+    # matches the `Iz` token that typos splits out of it
+    "\\A(GHIzJ|Iz)\\z",
     # `:bd[elete]` / `:d[elete]` vim abbreviation syntax yields an `elete` token;
     # anchored so `delete`/`elite` are still checked
     "\\Aelete\\z",
