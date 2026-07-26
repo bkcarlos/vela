@@ -23,7 +23,10 @@ mod render;
 use delegate::{Delegate, matches_to_multibuffer};
 use util::ResultExt as _;
 
-use crate::{ProjectSearchView, SearchOptions, text_finder::delegate::PopulateProjectSearch};
+use crate::{
+    ProjectSearchPanel, ProjectSearchView, SearchOptions,
+    text_finder::delegate::PopulateProjectSearch,
+};
 
 actions!(text_finder, [ToProjectSearch, Fold, Unfold, ToggleFoldAll]);
 
@@ -147,14 +150,14 @@ impl TextFinder {
         window: &mut Window,
         cx: &mut Context<T>,
     ) -> Task<()> {
-        let project_search_item_id = project_search_view.entity_id();
         cx.spawn_in(window, async move |_, cx| {
             let workspace =
                 project_search_view.read_with(cx, |view, _| WeakEntity::clone(&view.workspace));
             let delegate = Delegate::new_from_project_search(project_search_view, cx).await;
             workspace
                 .update_in(cx, |workspace, window, cx| {
-                    remove_project_search_tab(project_search_item_id, workspace, window, cx);
+                    // The search view stays hosted by the dock panel while the
+                    // text finder modal is open; nothing to remove from a pane.
                     let workspace_id = workspace.database_id();
                     workspace.toggle_modal(window, cx, |window, cx| {
                         Self::new(delegate, None, workspace_id, window, cx)
@@ -195,13 +198,9 @@ impl TextFinder {
             this.update(cx, |_, cx| cx.emit(DismissEvent)).log_err();
             workspace
                 .update_in(cx, |workspace, window, cx| {
-                    workspace.add_item_to_active_pane(
-                        Box::new(project_search_view.clone()),
-                        None,
-                        true, // focus item
-                        window,
-                        cx,
-                    );
+                    // The search view is hosted by the dock panel; reveal the
+                    // panel instead of adding the view to a center pane.
+                    workspace.reveal_panel::<ProjectSearchPanel>(window, cx);
                 })
                 .log_err();
 
@@ -366,8 +365,10 @@ impl TextFinder {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) -> Option<String> {
-        if let Some(project_search) = item.downcast::<ProjectSearchView>() {
-            let query = project_search.read(cx).search_query_text(cx);
+        // The project search view lives in the dock panel rather than a pane,
+        // so seed from it directly when present.
+        if let Some(panel) = workspace.panel::<ProjectSearchPanel>(cx) {
+            let query = panel.read(cx).search_view().read(cx).search_query_text(cx);
             if !query.is_empty() {
                 return Some(query);
             }
@@ -450,19 +451,6 @@ impl TextFinder {
 
     fn project_search_view(&self, cx: &mut App) -> Entity<ProjectSearchView> {
         Entity::clone(&self.picker.read(cx).delegate.project_search_view)
-    }
-}
-
-fn remove_project_search_tab(
-    project_search_item_id: gpui::EntityId,
-    workspace: &mut Workspace,
-    window: &mut Window,
-    cx: &mut Context<'_, Workspace>,
-) {
-    if let Some(pane) = workspace.pane_for_item_id(project_search_item_id) {
-        pane.update(cx, |pane, cx| {
-            pane.remove_item(project_search_item_id, false, false, window, cx);
-        });
     }
 }
 

@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use editor::test::editor_lsp_test_context::EditorLspTestContext;
 use gpui::{Context, Entity, UpdateGlobal};
-use search::{BufferSearchBar, project_search::ProjectSearchBar};
+use search::{BufferSearchBar, ProjectSearchPanel};
 use semver::Version;
 
 use crate::{state::Operator, *};
@@ -124,15 +124,14 @@ impl VimTestContext {
             Self::init_keybindings(enabled, cx);
         });
 
-        // Setup search toolbars and keypress hook
+        // Setup search UI and keypress hook
         cx.update_workspace(|workspace, window, cx| {
+            let project_search_panel = cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx));
+            workspace.add_panel(project_search_panel, window, cx);
             workspace.active_pane().update(cx, |pane, cx| {
                 pane.toolbar().update(cx, |toolbar, cx| {
                     let buffer_search_bar = cx.new(|cx| BufferSearchBar::new(None, window, cx));
                     toolbar.add_item(buffer_search_bar, window, cx);
-
-                    let project_search_bar = cx.new(|_| ProjectSearchBar::new());
-                    toolbar.add_item(project_search_bar, window, cx);
                 })
             });
             workspace.status_bar().update(cx, |status_bar, cx| {

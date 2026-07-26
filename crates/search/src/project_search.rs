@@ -22,10 +22,10 @@ use editor::{
 };
 use futures::{StreamExt, stream::FuturesOrdered};
 use gpui::{
-    Action, AnyElement, App, AsyncApp, Axis, Context, Entity, EntityId, EventEmitter, FocusHandle,
-    Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyContext, ParentElement, Point,
-    Render, SharedString, Styled, Subscription, Task, TaskExt, UpdateGlobal, WeakEntity, Window,
-    actions, div,
+    Action, AnyElement, App, AsyncApp, AsyncWindowContext, Axis, Context, Entity, EntityId,
+    EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
+    KeyContext, ParentElement, Pixels, Point, Render, SharedString, Styled, Subscription, Task,
+    TaskExt, UpdateGlobal, WeakEntity, Window, actions, div, px,
 };
 use itertools::Itertools;
 use language::{Buffer, Language};
@@ -47,14 +47,11 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-use ui::{
-    CommonAnimationExt, IconButtonShape, KeyBinding, Toggleable, Tooltip, prelude::*,
-    utils::SearchInputWidth,
-};
+use ui::{CommonAnimationExt, IconButtonShape, KeyBinding, Toggleable, Tooltip, prelude::*};
 use util::{ResultExt as _, paths::PathMatcher, rel_path::RelPath};
 use workspace::{
-    DeploySearch, ItemNavHistory, NewSearch, ToolbarItemEvent, ToolbarItemLocation,
-    ToolbarItemView, Workspace, WorkspaceId,
+    DeploySearch, ItemNavHistory, NewSearch, Workspace, WorkspaceId,
+    dock::{DockPosition, Panel, PanelEvent},
     item::{Item, ItemEvent, ItemHandle, SaveOptions},
     searchable::{Direction, SearchEvent, SearchToken, SearchableItem, SearchableItemHandle},
 };
@@ -165,10 +162,8 @@ pub fn init(cx: &mut App) {
         register_workspace_action_for_present_search(
             workspace,
             |workspace, action: &ToggleAllSearchResults, window, cx| {
-                if let Some(search_view) = workspace
-                    .active_item(cx)
-                    .and_then(|item| item.downcast::<ProjectSearchView>())
-                {
+                if let Some(panel) = workspace.panel::<ProjectSearchPanel>(cx) {
+                    let search_view = panel.read(cx).search_view();
                     search_view.update(cx, |search_view, cx| {
                         search_view.toggle_all_search_results(action, window, cx);
                     });
@@ -179,13 +174,7 @@ pub fn init(cx: &mut App) {
         register_workspace_action_for_present_search(
             workspace,
             |workspace, _: &menu::Cancel, window, cx| {
-                if let Some(project_search_bar) = workspace
-                    .active_pane()
-                    .read(cx)
-                    .toolbar()
-                    .read(cx)
-                    .item_of_type::<ProjectSearchBar>()
-                {
+                if let Some(project_search_bar) = search_bar_for(workspace, cx) {
                     project_search_bar.update(cx, |project_search_bar, cx| {
                         let search_is_focused = project_search_bar
                             .active_project_search
@@ -320,6 +309,166 @@ pub struct ProjectSearchSettings {
 pub struct ProjectSearchBar {
     active_project_search: Option<Entity<ProjectSearchView>>,
     subscription: Option<Subscription>,
+}
+
+const PROJECT_SEARCH_PANEL_KEY: &str = "ProjectSearchPanel";
+
+/// A dock panel that hosts the project search UI (query inputs + results),
+/// presented in the sidebar like VSCode's Search view. The results themselves
+/// are rendered by the underlying [`ProjectSearchView`], which still
+/// implements [`Item`] so that the searchable/text-finder integrations keep
+/// working, but it is hosted by this panel instead of a center pane tab.
+pub struct ProjectSearchPanel {
+    search_view: Entity<ProjectSearchView>,
+    search_bar: Entity<ProjectSearchBar>,
+    width: Option<gpui::Pixels>,
+    active: bool,
+}
+
+impl EventEmitter<PanelEvent> for ProjectSearchPanel {}
+
+impl Focusable for ProjectSearchPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        // Defer to the search view's focus so toggling the panel lands in the
+        // query input, matching the old center-tab behavior.
+        self.search_view.focus_handle(cx)
+    }
+}
+
+impl ProjectSearchPanel {
+    pub fn new(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let weak_workspace = workspace.weak_handle();
+        let project = workspace.project().clone();
+        let search_entity = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search_view =
+            cx.new(|cx| ProjectSearchView::new(weak_workspace, search_entity, window, cx, None));
+        search_view.update(cx, |search_view, cx| {
+            search_view.added_to_workspace(workspace, window, cx);
+        });
+        let search_bar = cx.new(|_| ProjectSearchBar::new());
+        search_bar.update(cx, |bar, cx| {
+            bar.set_active_project_search(Some(search_view.clone()), cx);
+        });
+
+        Self {
+            search_view,
+            search_bar,
+            width: None,
+            active: false,
+        }
+    }
+
+    pub async fn load(
+        workspace: WeakEntity<Workspace>,
+        mut cx: AsyncWindowContext,
+    ) -> anyhow::Result<Entity<Self>> {
+        workspace.update_in(&mut cx, |workspace, window, cx| {
+            cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx))
+        })
+    }
+
+    pub fn search_view(&self) -> Entity<ProjectSearchView> {
+        self.search_view.clone()
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    pub fn contains_focused(&self, window: &Window, cx: &App) -> bool {
+        let search_view = self.search_view.read(cx);
+        [
+            &search_view.query_editor,
+            &search_view.replacement_editor,
+            &search_view.results_editor,
+            &search_view.included_files_editor,
+            &search_view.excluded_files_editor,
+        ]
+        .into_iter()
+        .any(|editor| editor.focus_handle(cx).is_focused(window))
+    }
+
+    pub(crate) fn search_bar(&self) -> Entity<ProjectSearchBar> {
+        self.search_bar.clone()
+    }
+
+    /// Opens the dock, activates this panel, and focuses the query editor,
+    /// returning the hosted search view. This is the entry point used by the
+    /// various "deploy search" actions now that search lives in the sidebar.
+    fn reveal(
+        workspace: &mut Workspace,
+        window: &mut Window,
+        cx: &mut Context<Workspace>,
+    ) -> Option<Entity<ProjectSearchView>> {
+        let panel = workspace.panel::<ProjectSearchPanel>(cx)?;
+        workspace.reveal_panel::<ProjectSearchPanel>(window, cx);
+        let search_view = panel.read(cx).search_view();
+        search_view.update(cx, |view, cx| {
+            view.focus_query_editor(window, cx);
+        });
+        Some(search_view)
+    }
+}
+
+impl Render for ProjectSearchPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .key_context("ProjectSearchPanel")
+            .size_full()
+            .child(self.search_bar.clone())
+            .child(div().flex_1().child(self.search_view.clone()))
+    }
+}
+
+impl Panel for ProjectSearchPanel {
+    fn persistent_name() -> &'static str {
+        "Project Search"
+    }
+
+    fn panel_key() -> &'static str {
+        PROJECT_SEARCH_PANEL_KEY
+    }
+
+    fn position(&self, _window: &Window, _cx: &App) -> DockPosition {
+        DockPosition::Left
+    }
+
+    fn position_is_valid(&self, position: DockPosition) -> bool {
+        matches!(position, DockPosition::Left | DockPosition::Right)
+    }
+
+    fn set_active(&mut self, active: bool, _window: &mut Window, cx: &mut Context<Self>) {
+        self.active = active;
+        cx.notify();
+    }
+
+    fn set_position(
+        &mut self,
+        _position: DockPosition,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
+    fn default_size(&self, _window: &Window, _cx: &App) -> Pixels {
+        self.width.unwrap_or_else(|| px(400.))
+    }
+
+    fn icon(&self, _window: &Window, _cx: &App) -> Option<ui::IconName> {
+        Some(ui::IconName::MagnifyingGlass)
+    }
+
+    fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {
+        Some("Project Search")
+    }
+
+    fn toggle_action(&self) -> Box<dyn Action> {
+        Box::new(DeploySearch::default())
+    }
+
+    fn activation_priority(&self) -> u32 {
+        4
+    }
 }
 
 impl ProjectSearch {
@@ -1200,36 +1349,27 @@ impl ProjectSearchView {
         cx: &mut Context<Workspace>,
     ) {
         let filter_str = dir_path.display(workspace.path_style(cx));
-
-        let weak_workspace = cx.entity().downgrade();
-
-        let entity = cx.new(|cx| ProjectSearch::new(workspace.project().clone(), cx));
-        let search = cx.new(|cx| ProjectSearchView::new(weak_workspace, entity, window, cx, None));
-        workspace.add_item_to_active_pane(Box::new(search.clone()), None, true, window, cx);
-        search.update(cx, |search, cx| {
-            search
-                .included_files_editor
-                .update(cx, |editor, cx| editor.set_text(filter_str, window, cx));
-            search.filters_enabled = true;
-            search.focus_query_editor(window, cx)
-        });
+        if let Some(search) = ProjectSearchPanel::reveal(workspace, window, cx) {
+            search.update(cx, |search, cx| {
+                search
+                    .included_files_editor
+                    .update(cx, |editor, cx| editor.set_text(filter_str, window, cx));
+                search.filters_enabled = true;
+                search.focus_query_editor(window, cx)
+            });
+        }
     }
 
-    /// Re-activate the most recently activated search in this pane or the most recent if it has been closed.
-    /// If no search exists in the workspace, create a new one.
+    /// Reveal the project search panel in the sidebar, seeding it from the
+    /// current context (buffer search query or editor selection) and applying
+    /// any options carried by the action.
     pub fn deploy_search(
         workspace: &mut Workspace,
         action: &workspace::DeploySearch,
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        let existing = workspace
-            .active_pane()
-            .read(cx)
-            .items()
-            .find_map(|item| item.downcast::<ProjectSearchView>());
-
-        Self::existing_or_new_search(workspace, existing, action, window, cx);
+        Self::existing_or_new_search(workspace, action, window, cx);
     }
 
     fn search_in_new(
@@ -1238,61 +1378,41 @@ impl ProjectSearchView {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        if let Some(search_view) = workspace
-            .active_item(cx)
-            .and_then(|item| item.downcast::<ProjectSearchView>())
-        {
-            let new_query = search_view.update(cx, |search_view, cx| {
+        // With a single hosted search view there are no extra tabs to spawn;
+        // "search in new" simply re-runs the current query in a fresh search.
+        if let Some(search_view) = ProjectSearchPanel::reveal(workspace, window, cx) {
+            search_view.update(cx, |search_view, cx| {
                 let open_buffers = if search_view.included_opened_only {
                     Some(search_view.open_buffers(cx, workspace))
                 } else {
                     None
                 };
-                let new_query = search_view.build_search_query(cx, open_buffers);
-                if new_query.is_some()
-                    && let Some(old_query) = search_view.entity.read(cx).active_query.clone()
-                {
-                    search_view.query_editor.update(cx, |editor, cx| {
-                        editor.set_text(old_query.as_str(), window, cx);
-                    });
-                    search_view.search_options = SearchOptions::from_query(&old_query);
-                    search_view.adjust_query_regex_language(cx);
+                if let Some(new_query) = search_view.build_search_query(cx, open_buffers) {
+                    search_view
+                        .entity
+                        .update(cx, |entity, cx| entity.search(new_query, cx));
                 }
-                new_query
             });
-            if let Some(new_query) = new_query {
-                let entity = cx.new(|cx| {
-                    let mut entity = ProjectSearch::new(workspace.project().clone(), cx);
-                    entity.search(new_query, cx);
-                    entity
-                });
-                let weak_workspace = cx.entity().downgrade();
-                workspace.add_item_to_active_pane(
-                    Box::new(cx.new(|cx| {
-                        ProjectSearchView::new(weak_workspace, entity, window, cx, None)
-                    })),
-                    None,
-                    true,
-                    window,
-                    cx,
-                );
-            }
         }
     }
 
-    // Add another search tab to the workspace.
+    // Focus the search panel, clearing any previous query for a fresh search.
     fn new_search(
         workspace: &mut Workspace,
         _: &workspace::NewSearch,
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        Self::existing_or_new_search(workspace, None, &DeploySearch::default(), window, cx)
+        if let Some(search_view) = ProjectSearchPanel::reveal(workspace, window, cx) {
+            search_view.update(cx, |search_view, cx| {
+                search_view.set_query("", window, cx);
+                search_view.focus_query_editor(window, cx);
+            });
+        }
     }
 
     fn existing_or_new_search(
         workspace: &mut Workspace,
-        existing: Option<Entity<ProjectSearchView>>,
         action: &workspace::DeploySearch,
         window: &mut Window,
         cx: &mut Context<Workspace>,
@@ -1308,46 +1428,39 @@ impl ProjectSearchView {
             Text(String),
         }
 
-        let query_seed = workspace.active_item(cx).and_then(|item| {
-            if let Some(buffer_search_query) = buffer_search_query(workspace, item.as_ref(), cx) {
-                return Some(QuerySeed::Query(buffer_search_query));
-            }
+        let query_seed = workspace
+            .panel::<ProjectSearchPanel>(cx)
+            .and_then(|panel| {
+                let search_view = panel.read(cx).search_view();
+                let results_editor = search_view.read(cx).results_editor.clone();
+                if !results_editor.focus_handle(cx).is_focused(window) {
+                    return None;
+                }
 
-            let editor = item.act_as::<Editor>(cx)?;
-            let query = editor.query_suggestion(None, window, cx);
-            if query.is_empty() {
-                None
-            } else {
-                Some(QuerySeed::Text(query))
-            }
-        });
+                let query = results_editor
+                    .update(cx, |editor, cx| editor.query_suggestion(None, window, cx));
+                (!query.is_empty()).then_some(QuerySeed::Text(query))
+            })
+            .or_else(|| {
+                workspace.active_item(cx).and_then(|item| {
+                    if let Some(buffer_search_query) =
+                        buffer_search_query(workspace, item.as_ref(), cx)
+                    {
+                        return Some(QuerySeed::Query(buffer_search_query));
+                    }
 
-        let search = if let Some(existing) = existing {
-            workspace.activate_item(&existing, true, true, window, cx);
-            existing
-        } else {
-            let settings = cx
-                .global::<ActiveSettings>()
-                .0
-                .get(&workspace.project().downgrade());
-
-            let settings = settings.cloned();
-
-            let weak_workspace = cx.entity().downgrade();
-
-            let project_search = cx.new(|cx| ProjectSearch::new(workspace.project().clone(), cx));
-            let project_search_view = cx.new(|cx| {
-                ProjectSearchView::new(weak_workspace, project_search, window, cx, settings)
+                    let editor = item.act_as::<Editor>(cx)?;
+                    let query = editor.query_suggestion(None, window, cx);
+                    if query.is_empty() {
+                        None
+                    } else {
+                        Some(QuerySeed::Text(query))
+                    }
+                })
             });
 
-            workspace.add_item_to_active_pane(
-                Box::new(project_search_view.clone()),
-                None,
-                true,
-                window,
-                cx,
-            );
-            project_search_view
+        let Some(search) = ProjectSearchPanel::reveal(workspace, window, cx) else {
+            return;
         };
 
         search.update(cx, |search, cx| {
@@ -1909,7 +2022,6 @@ impl ProjectSearchView {
         }
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     pub fn results_editor(&self) -> &Entity<Editor> {
         &self.results_editor
     }
@@ -1972,6 +2084,18 @@ impl ProjectSearchBar {
             active_project_search: None,
             subscription: None,
         }
+    }
+
+    pub(crate) fn set_active_project_search(
+        &mut self,
+        search: Option<Entity<ProjectSearchView>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.subscription = search
+            .as_ref()
+            .map(|search| cx.observe(search, |_, _, cx| cx.notify()));
+        self.active_project_search = search;
+        cx.notify();
     }
 
     fn confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
@@ -2315,12 +2439,11 @@ impl Render for ProjectSearchBar {
         let search = search.read(cx);
         let focus_handle = search.focus_handle(cx);
 
-        let container_width = window.viewport_size().width;
-        let input_width = SearchInputWidth::calc_width(container_width);
-
+        // The search bar is hosted by the (narrow) dock panel, so inputs grow
+        // to fill the panel width instead of sizing against the viewport.
         let input_base_styles = |panel: InputPanel| {
             input_base_styles(search.border_color_for(panel, cx), |div| match panel {
-                InputPanel::Query | InputPanel::Replacement => div.w(input_width),
+                InputPanel::Query | InputPanel::Replacement => div.flex_grow_1(),
                 InputPanel::Include | InputPanel::Exclude => div.flex_grow_1(),
             })
         };
@@ -2608,13 +2731,7 @@ impl Render for ProjectSearchBar {
                 .w_full()
                 .gap_2()
                 .child(alignment_element())
-                .child(
-                    h_flex()
-                        .w(input_width)
-                        .gap_2()
-                        .child(include)
-                        .child(exclude),
-                )
+                .child(h_flex().flex_grow_1().gap_2().child(include).child(exclude))
                 .child(mode_column)
         });
 
@@ -2704,26 +2821,12 @@ impl Render for ProjectSearchBar {
     }
 }
 
-impl EventEmitter<ToolbarItemEvent> for ProjectSearchBar {}
-
-impl ToolbarItemView for ProjectSearchBar {
-    fn set_active_pane_item(
-        &mut self,
-        active_pane_item: Option<&dyn ItemHandle>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> ToolbarItemLocation {
-        cx.notify();
-        self.subscription = None;
-        self.active_project_search = None;
-        if let Some(search) = active_pane_item.and_then(|i| i.downcast::<ProjectSearchView>()) {
-            self.subscription = Some(cx.observe(&search, |_, _, cx| cx.notify()));
-            self.active_project_search = Some(search);
-            ToolbarItemLocation::PrimaryLeft {}
-        } else {
-            ToolbarItemLocation::Hidden
-        }
-    }
+/// Returns the search bar hosted by the workspace's project search panel, if
+/// the panel has been loaded.
+fn search_bar_for(workspace: &Workspace, cx: &App) -> Option<Entity<ProjectSearchBar>> {
+    workspace
+        .panel::<ProjectSearchPanel>(cx)
+        .map(|panel| panel.read(cx).search_bar())
 }
 
 fn register_workspace_action<A: Action>(
@@ -2736,20 +2839,18 @@ fn register_workspace_action<A: Action>(
             return;
         }
 
-        workspace.active_pane().update(cx, |pane, cx| {
-            pane.toolbar().update(cx, move |workspace, cx| {
-                if let Some(search_bar) = workspace.item_of_type::<ProjectSearchBar>() {
-                    search_bar.update(cx, move |search_bar, cx| {
-                        if search_bar.active_project_search.is_some() {
-                            callback(search_bar, action, window, cx);
-                            cx.notify();
-                        } else {
-                            cx.propagate();
-                        }
-                    });
-                }
-            });
-        })
+        let Some(search_bar) = search_bar_for(workspace, cx) else {
+            cx.propagate();
+            return;
+        };
+        search_bar.update(cx, move |search_bar, cx| {
+            if search_bar.active_project_search.is_some() {
+                callback(search_bar, action, window, cx);
+                cx.notify();
+            } else {
+                cx.propagate();
+            }
+        });
     });
 }
 
@@ -2763,12 +2864,7 @@ fn register_workspace_action_for_present_search<A: Action>(
             return;
         }
 
-        let should_notify = workspace
-            .active_pane()
-            .read(cx)
-            .toolbar()
-            .read(cx)
-            .item_of_type::<ProjectSearchBar>()
+        let should_notify = search_bar_for(workspace, cx)
             .map(|search_bar| search_bar.read(cx).active_project_search.is_some())
             .unwrap_or(false);
         if should_notify {
@@ -2820,7 +2916,7 @@ pub mod tests {
     };
     use util::{path, paths::PathStyle, rel_path::rel_path};
     use util_macros::perf;
-    use workspace::{DeploySearch, MultiWorkspace};
+    use workspace::{DeploySearch, MultiWorkspace, ToolbarItemView};
 
     #[test]
     fn test_split_glob_patterns() {
@@ -3452,7 +3548,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
         let active_item = cx.read(|cx| {
             workspace
@@ -3467,13 +3563,8 @@ pub mod tests {
             "Expected no search panel to be active"
         );
 
-        workspace.update_in(cx, move |workspace, window, cx| {
+        workspace.update_in(cx, |workspace, window, cx| {
             assert_eq!(workspace.panes().len(), 1);
-            workspace.panes()[0].update(cx, |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-
             ProjectSearchView::deploy_search(
                 workspace,
                 &workspace::DeploySearch::default(),
@@ -3482,16 +3573,7 @@ pub mod tests {
             )
         });
 
-        let Some(search_view) = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-        }) else {
-            panic!("Search view expected to appear after new search event trigger")
-        };
+        let search_view = search_view_for(&workspace, cx);
 
         cx.spawn(|mut cx| async move {
             window
@@ -3690,14 +3772,9 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
-        workspace.update_in(cx, move |workspace, window, cx| {
-            workspace.panes()[0].update(cx, |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-
+        workspace.update_in(cx, |workspace, window, cx| {
             ProjectSearchView::deploy_search(
                 workspace,
                 &workspace::DeploySearch::default(),
@@ -3706,16 +3783,7 @@ pub mod tests {
             )
         });
 
-        let Some(search_view) = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-        }) else {
-            panic!("Search view expected to appear after new search event trigger")
-        };
+        let search_view = search_view_for(&workspace, cx);
 
         cx.spawn(|mut cx| async move {
             window
@@ -3811,7 +3879,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
         let active_item = cx.read(|cx| {
             workspace
@@ -3826,26 +3894,12 @@ pub mod tests {
             "Expected no search panel to be active"
         );
 
-        workspace.update_in(cx, move |workspace, window, cx| {
+        workspace.update_in(cx, |workspace, window, cx| {
             assert_eq!(workspace.panes().len(), 1);
-            workspace.panes()[0].update(cx, |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-
             ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
         });
 
-        let Some(search_view) = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-        }) else {
-            panic!("Search view expected to appear after new search event trigger")
-        };
+        let search_view = search_view_for(&workspace, cx);
 
         cx.spawn(|mut cx| async move {
             window
@@ -3982,103 +4036,19 @@ pub mod tests {
             ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
         });
         cx.background_executor.run_until_parked();
-        let Some(search_view_2) = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-        }) else {
-            panic!("Search view expected to appear after new search event trigger")
-        };
-        assert!(
-            search_view_2 != search_view,
-            "New search view should be open after `workspace::NewSearch` event"
-        );
-
-        window.update(cx, |_, window, cx| {
-            search_view.update(cx, |search_view, cx| {
-                    assert_eq!(search_view.query_editor.read(cx).text(cx), "TWO", "First search view should not have an updated query");
-                    assert_eq!(
-                        search_view
-                            .results_editor
-                            .update(cx, |editor, cx| editor.display_text(cx)),
-                        "\n\nconst THREE: usize = one::ONE + two::TWO;\n\n\nconst TWO: usize = one::ONE + one::ONE;",
-                        "Results of the first search view should not update too"
-                    );
-                    assert!(
-                        !search_view.query_editor.focus_handle(cx).is_focused(window),
-                        "Focus should be moved away from the first search view"
-                    );
-                });
-        }).unwrap();
-
-        window.update(cx, |_, window, cx| {
-            search_view_2.update(cx, |search_view_2, cx| {
-                    assert_eq!(
-                        search_view_2.query_editor.read(cx).text(cx),
-                        "two",
-                        "New search view should get the query from the text cursor was at during the event spawn (first search view's first result)"
-                    );
-                    assert_eq!(
-                        search_view_2
-                            .results_editor
-                            .update(cx, |editor, cx| editor.display_text(cx)),
-                        "",
-                        "No search results should be in the 2nd view yet, as we did not spawn a search for it"
-                    );
-                    assert!(
-                        search_view_2.query_editor.focus_handle(cx).is_focused(window),
-                        "Focus should be moved into query editor of the new window"
-                    );
-                });
-        }).unwrap();
+        assert_eq!(search_view_for(&workspace, cx), search_view);
 
         window
             .update(cx, |_, window, cx| {
-                search_view_2.update(cx, |search_view_2, cx| {
-                    search_view_2.query_editor.update(cx, |query_editor, cx| {
-                        query_editor.set_text("FOUR", window, cx)
-                    });
-                    search_view_2.search(cx);
+                search_view.update(cx, |search_view, cx| {
+                    assert!(search_view.query_editor.read(cx).text(cx).is_empty());
+                    assert!(
+                        search_view.query_editor.focus_handle(cx).is_focused(window),
+                        "New search should focus the query editor"
+                    );
                 });
             })
             .unwrap();
-
-        cx.background_executor.run_until_parked();
-        window.update(cx, |_, window, cx| {
-            search_view_2.update(cx, |search_view_2, cx| {
-                    assert_eq!(
-                        search_view_2
-                            .results_editor
-                            .update(cx, |editor, cx| editor.display_text(cx)),
-                        "\n\nconst FOUR: usize = one::ONE + three::THREE;",
-                        "New search view with the updated query should have new search results"
-                    );
-                    assert!(
-                        search_view_2.results_editor.focus_handle(cx).is_focused(window),
-                        "Search view with mismatching query should be focused after search results are available",
-                    );
-                });
-        }).unwrap();
-
-        cx.spawn(|mut cx| async move {
-            window
-                .update(&mut cx, |_, window, cx| {
-                    window.dispatch_action(ToggleFocus.boxed_clone(), cx)
-                })
-                .unwrap();
-        })
-        .detach();
-        cx.background_executor.run_until_parked();
-        window.update(cx, |_, window, cx| {
-            search_view_2.update(cx, |search_view_2, cx| {
-                    assert!(
-                        search_view_2.results_editor.focus_handle(cx).is_focused(window),
-                        "Search view with matching query should switch focus to the results editor after the toggle focus event",
-                    );
-                });}).unwrap();
     }
 
     #[perf]
@@ -4110,7 +4080,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
         let active_item = cx.read(|cx| {
             workspace
@@ -4124,14 +4094,6 @@ pub mod tests {
             active_item.is_none(),
             "Expected no search panel to be active"
         );
-
-        workspace.update_in(cx, move |workspace, window, cx| {
-            assert_eq!(workspace.panes().len(), 1);
-            workspace.panes()[0].update(cx, move |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-        });
 
         let a_dir_entry = cx.update(|_, cx| {
             workspace
@@ -4147,16 +4109,7 @@ pub mod tests {
             ProjectSearchView::new_search_in_directory(workspace, &a_dir_entry.path, window, cx)
         });
 
-        let Some(search_view) = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-        }) else {
-            panic!("Search view expected to appear after new search in directory event trigger")
-        };
+        let search_view = search_view_for(&workspace, cx);
         cx.background_executor.run_until_parked();
         window
             .update(cx, |_, window, cx| {
@@ -4229,30 +4182,15 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
-        workspace.update_in(cx, {
-            let search_bar = search_bar.clone();
-            |workspace, window, cx| {
-                assert_eq!(workspace.panes().len(), 1);
-                workspace.panes()[0].update(cx, |pane, cx| {
-                    pane.toolbar()
-                        .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-                });
-
-                ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
-            }
+        workspace.update_in(cx, |workspace, window, cx| {
+            assert_eq!(workspace.panes().len(), 1);
+            ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
         });
 
-        let search_view = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_pane()
-                .read(cx)
-                .active_item()
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-                .expect("Search view expected to appear after new search event trigger")
-        });
+        let search_view = search_view_for(&workspace, cx);
+        let search_bar = test_search_bar_for(&workspace, cx);
 
         // Add 3 search items into the history + another unsubmitted one.
         window
@@ -4611,7 +4549,7 @@ pub mod tests {
 
     #[perf]
     #[gpui::test]
-    async fn test_search_query_history_with_multiple_views(cx: &mut TestAppContext) {
+    async fn test_search_query_history_shared_across_panes(cx: &mut TestAppContext) {
         init_test(cx);
 
         let fs = FakeFs::new(cx.background_executor.clone());
@@ -4632,11 +4570,11 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
+        add_search_panel(&workspace, cx);
 
         let panes: Vec<_> = workspace.update_in(cx, |this, _, _| this.panes().to_owned());
-
-        let search_bar_1 = window.build_entity(cx, |_, _| ProjectSearchBar::new());
-        let search_bar_2 = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        let search_bar_1 = test_search_bar_for(&workspace, cx);
+        let search_bar_2 = search_bar_1.clone();
 
         assert_eq!(panes.len(), 1);
         let first_pane = panes.first().cloned().unwrap();
@@ -4655,25 +4593,10 @@ pub mod tests {
             .unwrap();
         assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 1);
 
-        // Add a project search item to the first pane
-        workspace.update_in(cx, {
-            let search_bar = search_bar_1.clone();
-            |workspace, window, cx| {
-                first_pane.update(cx, |pane, cx| {
-                    pane.toolbar()
-                        .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-                });
-
-                ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
-            }
+        workspace.update_in(cx, |workspace, window, cx| {
+            ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
         });
-        let search_view_1 = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_item(cx)
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-                .expect("Search view expected to appear after new search event trigger")
-        });
+        let search_view_1 = search_view_for(&workspace, cx);
 
         let second_pane = workspace
             .update_in(cx, |workspace, window, cx| {
@@ -4689,34 +4612,20 @@ pub mod tests {
         assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 1);
 
         assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 1);
-        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 2);
+        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 1);
 
-        // Add a project search item to the second pane
-        workspace.update_in(cx, {
-            let search_bar = search_bar_2.clone();
-            let pane = second_pane.clone();
-            move |workspace, window, cx| {
-                assert_eq!(workspace.panes().len(), 2);
-                pane.update(cx, |pane, cx| {
-                    pane.toolbar()
-                        .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-                });
-
-                ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
-            }
+        workspace.update_in(cx, |workspace, window, cx| {
+            assert_eq!(workspace.panes().len(), 2);
+            ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
         });
 
-        let search_view_2 = cx.read(|cx| {
-            workspace
-                .read(cx)
-                .active_item(cx)
-                .and_then(|item| item.downcast::<ProjectSearchView>())
-                .expect("Search view expected to appear after new search event trigger")
-        });
+        let search_view_2 = search_view_for(&workspace, cx);
 
         cx.run_until_parked();
-        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 2);
-        assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 2);
+        assert_eq!(search_view_1, search_view_2);
+        assert_eq!(search_bar_1, search_bar_2);
+        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 1);
+        assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 1);
 
         let update_search_view =
             |search_view: &Entity<ProjectSearchView>, query: &str, cx: &mut TestAppContext| {
@@ -4769,64 +4678,17 @@ pub mod tests {
 
         update_search_view(&search_view_1, "ONE", cx);
         cx.background_executor.run_until_parked();
+        assert_eq!(active_query(&search_view_1, cx), "ONE");
 
         update_search_view(&search_view_2, "TWO", cx);
         cx.background_executor.run_until_parked();
-
-        assert_eq!(active_query(&search_view_1, cx), "ONE");
-        assert_eq!(active_query(&search_view_2, cx), "TWO");
-
-        // Selecting previous history item should select the query from search view 1.
-        select_prev_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "ONE");
-
-        // Selecting the previous history item should not change the query as it is already the first item.
-        select_prev_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "ONE");
-
-        // Changing the query in search view 2 should not affect the history of search view 1.
-        assert_eq!(active_query(&search_view_1, cx), "ONE");
-
-        // Deploying a new search in search view 2
-        update_search_view(&search_view_2, "THREE", cx);
-        cx.background_executor.run_until_parked();
-
-        select_next_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "THREE");
-
-        select_prev_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "TWO");
+        assert_eq!(active_query(&search_view_1, cx), "TWO");
 
         select_prev_history_item(&search_bar_2, cx);
         assert_eq!(active_query(&search_view_2, cx), "ONE");
-
-        select_prev_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "ONE");
-
-        select_prev_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "ONE");
-
-        // Search view 1 should now see the query from search view 2.
-        assert_eq!(active_query(&search_view_1, cx), "ONE");
-
-        select_next_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "TWO");
-
-        // Here is the new query from search view 2
-        select_next_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "THREE");
-
-        select_next_history_item(&search_bar_2, cx);
-        assert_eq!(active_query(&search_view_2, cx), "THREE");
 
         select_next_history_item(&search_bar_1, cx);
         assert_eq!(active_query(&search_view_1, cx), "TWO");
-
-        select_next_history_item(&search_bar_1, cx);
-        assert_eq!(active_query(&search_view_1, cx), "THREE");
-
-        select_next_history_item(&search_bar_1, cx);
-        assert_eq!(active_query(&search_view_1, cx), "THREE");
     }
 
     #[perf]
@@ -4852,6 +4714,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
+        add_search_panel(&workspace, cx);
         let panes: Vec<_> = workspace.update_in(cx, |this, _, _| this.panes().to_owned());
         assert_eq!(panes.len(), 1);
         let first_pane = panes.first().cloned().unwrap();
@@ -4888,94 +4751,52 @@ pub mod tests {
                     .contains_focused(window, cx))
                 .unwrap()
         );
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
-        workspace.update_in(cx, {
-            let search_bar = search_bar.clone();
-            let pane = first_pane.clone();
-            move |workspace, window, cx| {
-                assert_eq!(workspace.panes().len(), 2);
-                pane.update(cx, move |pane, cx| {
-                    pane.toolbar()
-                        .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-                });
-            }
+        workspace.update_in(cx, |workspace, window, cx| {
+            assert_eq!(workspace.panes().len(), 2);
+            assert_eq!(workspace.active_pane(), &second_pane);
+            ProjectSearchView::deploy_search(
+                workspace,
+                &workspace::DeploySearch::default(),
+                window,
+                cx,
+            );
         });
+        let search_view = search_view_for(&workspace, cx);
 
-        // Add a project search item to the second pane
-        workspace.update_in(cx, {
-            |workspace, window, cx| {
-                assert_eq!(workspace.panes().len(), 2);
-                second_pane.update(cx, |pane, cx| {
-                    pane.toolbar()
-                        .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-                });
-
-                ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
-            }
+        first_pane.update_in(cx, |pane, window, cx| pane.focus_active_item(window, cx));
+        workspace.update_in(cx, |workspace, window, cx| {
+            assert_eq!(workspace.active_pane(), &first_pane);
+            ProjectSearchView::deploy_search(
+                workspace,
+                &workspace::DeploySearch::default(),
+                window,
+                cx,
+            );
         });
+        assert_eq!(search_view_for(&workspace, cx), search_view);
 
-        cx.run_until_parked();
-        assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 2);
-        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 1);
-
-        // Focus the first pane
+        second_pane.update_in(cx, |pane, window, cx| pane.focus_active_item(window, cx));
         workspace.update_in(cx, |workspace, window, cx| {
             assert_eq!(workspace.active_pane(), &second_pane);
-            second_pane.update(cx, |this, cx| {
-                assert_eq!(this.active_item_index(), 1);
-                this.activate_previous_item(&Default::default(), window, cx);
-                assert_eq!(this.active_item_index(), 0);
-            });
-            workspace.activate_pane_in_direction(workspace::SplitDirection::Left, window, cx);
+            ProjectSearchView::deploy_search(
+                workspace,
+                &workspace::DeploySearch::default(),
+                window,
+                cx,
+            );
         });
-        workspace.update_in(cx, |workspace, _, cx| {
-            assert_eq!(workspace.active_pane(), &first_pane);
-            assert_eq!(first_pane.read(cx).items_len(), 1);
-            assert_eq!(second_pane.read(cx).items_len(), 2);
-        });
-
-        // Deploy a new search
-        cx.dispatch_action(DeploySearch::default());
-
-        // Both panes should now have a project search in them
-        workspace.update_in(cx, |workspace, window, cx| {
-            assert_eq!(workspace.active_pane(), &first_pane);
-            first_pane.read_with(cx, |this, _| {
-                assert_eq!(this.active_item_index(), 1);
-                assert_eq!(this.items_len(), 2);
-            });
-            second_pane.update(cx, |this, cx| {
-                assert!(!cx.focus_handle().contains_focused(window, cx));
-                assert_eq!(this.items_len(), 2);
-            });
-        });
-
-        // Focus the second pane's non-search item
+        assert_eq!(search_view_for(&workspace, cx), search_view);
+        assert_eq!(cx.update(|_, cx| first_pane.read(cx).items_len()), 1);
+        assert_eq!(cx.update(|_, cx| second_pane.read(cx).items_len()), 1);
         window
-            .update(cx, |_workspace, window, cx| {
-                second_pane.update(cx, |pane, cx| {
-                    pane.activate_next_item(&Default::default(), window, cx)
-                });
-            })
-            .unwrap();
-
-        // Deploy a new search
-        cx.dispatch_action(DeploySearch::default());
-
-        // The project search view should now be focused in the second pane
-        // And the number of items should be unchanged.
-        window
-            .update(cx, |_workspace, _, cx| {
-                second_pane.update(cx, |pane, _cx| {
-                    assert!(
-                        pane.active_item()
-                            .unwrap()
-                            .downcast::<ProjectSearchView>()
-                            .is_some()
-                    );
-
-                    assert_eq!(pane.items_len(), 2);
-                });
+            .update(cx, |_, window, cx| {
+                assert!(
+                    search_view
+                        .read(cx)
+                        .query_editor
+                        .focus_handle(cx)
+                        .is_focused(window)
+                );
             })
             .unwrap();
     }
@@ -5103,6 +4924,7 @@ pub mod tests {
             .read_with(cx, |multi_workspace, _| multi_workspace.workspace().clone())
             .expect("window should contain a workspace");
         let mut cx = VisualTestContext::from_window(window.into(), cx);
+        add_search_panel(&workspace, &mut cx);
 
         let editor = workspace
             .update_in(&mut cx, |workspace, window, cx| {
@@ -5125,15 +4947,7 @@ pub mod tests {
         });
         cx.run_until_parked();
 
-        let project_search_view = workspace
-            .read_with(&cx, |workspace, cx| {
-                workspace
-                    .active_pane()
-                    .read(cx)
-                    .active_item()
-                    .and_then(|item| item.downcast::<ProjectSearchView>())
-            })
-            .expect("should open a project search view");
+        let project_search_view = search_view_for(&workspace, &cx);
         project_search_view.update(&mut cx, |search_view, cx| {
             assert_eq!(search_view.search_query_text(cx), r"z\.d");
             search_view.search(cx);
@@ -5169,7 +4983,7 @@ pub mod tests {
 
     #[perf]
     #[gpui::test]
-    async fn test_buffer_search_query_reused(cx: &mut TestAppContext) {
+    async fn test_buffer_search_query_reused_by_project_search(cx: &mut TestAppContext) {
         init_test(cx);
 
         let fs = FakeFs::new(cx.background_executor.clone());
@@ -5190,6 +5004,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let mut cx = VisualTestContext::from_window(window.into(), cx);
+        add_search_panel(&workspace, &mut cx);
 
         let editor = workspace
             .update_in(&mut cx, |workspace, window, cx| {
@@ -5230,15 +5045,15 @@ pub mod tests {
             .unwrap();
 
         workspace.update_in(&mut cx, |workspace, window, cx| {
-            ProjectSearchView::new_search(workspace, &workspace::NewSearch, window, cx)
+            ProjectSearchView::deploy_search(
+                workspace,
+                &workspace::DeploySearch::default(),
+                window,
+                cx,
+            )
         });
         cx.run_until_parked();
-        let project_search_view = pane
-            .read_with(&cx, |pane, _| {
-                pane.active_item()
-                    .and_then(|item| item.downcast::<ProjectSearchView>())
-            })
-            .expect("should open a project search view after spawning a new search");
+        let project_search_view = search_view_for(&workspace, &cx);
         project_search_view.update(&mut cx, |search_view, cx| {
             assert_eq!(
                 search_view.search_query_text(cx),
@@ -5632,14 +5447,9 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
         workspace.update_in(cx, |workspace, window, cx| {
-            workspace.panes()[0].update(cx, |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-
             ProjectSearchView::deploy_search(
                 workspace,
                 &workspace::DeploySearch {
@@ -5655,16 +5465,7 @@ pub mod tests {
             )
         });
 
-        let search_view = cx
-            .read(|cx| {
-                workspace
-                    .read(cx)
-                    .active_pane()
-                    .read(cx)
-                    .active_item()
-                    .and_then(|item| item.downcast::<ProjectSearchView>())
-            })
-            .expect("Search view should be active after deploy");
+        let search_view = search_view_for(&workspace, cx);
 
         search_view.update_in(cx, |search_view, _window, cx| {
             assert!(
@@ -5886,14 +5687,9 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search_bar = window.build_entity(cx, |_, _| ProjectSearchBar::new());
+        add_search_panel(&workspace, cx);
 
         workspace.update_in(cx, |workspace, window, cx| {
-            workspace.panes()[0].update(cx, |pane, cx| {
-                pane.toolbar()
-                    .update(cx, |toolbar, cx| toolbar.add_item(search_bar, window, cx))
-            });
-
             ProjectSearchView::deploy_search(
                 workspace,
                 &workspace::DeploySearch {
@@ -5906,16 +5702,7 @@ pub mod tests {
             )
         });
 
-        let search_view = cx
-            .read(|cx| {
-                workspace
-                    .read(cx)
-                    .active_pane()
-                    .read(cx)
-                    .active_item()
-                    .and_then(|item| item.downcast::<ProjectSearchView>())
-            })
-            .expect("Search view should be active after deploy");
+        let search_view = search_view_for(&workspace, cx);
 
         // Smartcase should override the explicit case_sensitive flag
         // because the query is all lowercase.
@@ -5966,6 +5753,52 @@ pub mod tests {
             editor::init(cx);
             crate::init(cx);
         });
+    }
+
+    // Creates a `ProjectSearchPanel`, adds it to the workspace, and returns the
+    // panel entity. With the new dock-panel model every test that wants to
+    // drive the search UI must register the panel before (or as part of)
+    // deploying a search, since `deploy_search`/`new_search` reveal the panel
+    // rather than adding a center-pane tab.
+    fn add_search_panel(
+        workspace: &Entity<Workspace>,
+        cx: &mut VisualTestContext,
+    ) -> Entity<ProjectSearchPanel> {
+        let panel = workspace.update_in(cx, |workspace, window, cx| {
+            cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx))
+        });
+        workspace.update_in(cx, |workspace, window, cx| {
+            workspace.add_panel(panel.clone(), window, cx);
+        });
+        panel
+    }
+
+    fn search_view_for(
+        workspace: &Entity<Workspace>,
+        cx: &VisualTestContext,
+    ) -> Entity<ProjectSearchView> {
+        cx.read(|cx| {
+            workspace
+                .read(cx)
+                .panel::<ProjectSearchPanel>(cx)
+                .expect("ProjectSearchPanel should be registered")
+                .read(cx)
+                .search_view()
+        })
+    }
+
+    fn test_search_bar_for(
+        workspace: &Entity<Workspace>,
+        cx: &VisualTestContext,
+    ) -> Entity<ProjectSearchBar> {
+        cx.read(|cx| {
+            workspace
+                .read(cx)
+                .panel::<ProjectSearchPanel>(cx)
+                .expect("ProjectSearchPanel should be registered")
+                .read(cx)
+                .search_bar()
+        })
     }
 
     fn perform_search(

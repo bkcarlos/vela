@@ -14,7 +14,7 @@ use editor::{
     test::editor_test_context::EditorTestContext,
 };
 use futures::StreamExt;
-use gpui::{KeyBinding, Modifiers, MouseButton, TestAppContext, px};
+use gpui::{AppContext as _, KeyBinding, Modifiers, MouseButton, TestAppContext, px};
 use itertools::Itertools;
 use language::{CursorShape, Language, LanguageConfig, Point};
 pub use neovim_backed_test_context::*;
@@ -27,7 +27,7 @@ use gpui::VisualTestContext;
 use indoc::indoc;
 use project::FakeFs;
 use search::BufferSearchBar;
-use search::{ProjectSearchView, project_search};
+use search::{ProjectSearchPanel, ProjectSearchView, project_search};
 use serde_json::json;
 use workspace::{DeploySearch, MultiWorkspace};
 
@@ -3176,19 +3176,15 @@ async fn test_project_search_opens_in_normal_mode(cx: &mut gpui::TestAppContext)
     });
 
     let cx = &mut VisualTestContext::from_window(window_handle.into(), cx);
-
+    let search_panel = workspace.update_in(cx, |workspace, window, cx| {
+        cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx))
+    });
     workspace.update_in(cx, |workspace, window, cx| {
+        workspace.add_panel(search_panel.clone(), window, cx);
         ProjectSearchView::deploy_search(workspace, &DeploySearch::default(), window, cx)
     });
 
-    let search_view = workspace.update_in(cx, |workspace, _, cx| {
-        workspace
-            .active_pane()
-            .read(cx)
-            .items()
-            .find_map(|item| item.downcast::<ProjectSearchView>())
-            .expect("Project search view should be active")
-    });
+    let search_view = cx.read(|cx| search_panel.read(cx).search_view());
 
     project_search::perform_project_search(&search_view, "File A", cx);
 

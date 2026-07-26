@@ -1754,11 +1754,11 @@ mod test {
     use std::{fmt::Write, time::Duration};
 
     use editor::{HighlightKey, MultiBufferOffset};
-    use gpui::{KeyBinding, UpdateGlobal, VisualTestContext};
+    use gpui::{AppContext as _, KeyBinding, UpdateGlobal, VisualTestContext};
     use indoc::indoc;
     use language::{CursorShape, Point};
     use project::FakeFs;
-    use search::{ProjectSearchView, project_search};
+    use search::{ProjectSearchPanel, ProjectSearchView, project_search};
     use serde_json::json;
     use settings::{SettingsStore, ThemeColorsContent, ThemeStyleContent};
     use theme::ActiveTheme as _;
@@ -3922,19 +3922,15 @@ mod test {
         });
 
         let cx = &mut VisualTestContext::from_window(window_handle.into(), cx);
-
+        let search_panel = workspace.update_in(cx, |workspace, window, cx| {
+            cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx))
+        });
         workspace.update_in(cx, |workspace, window, cx| {
+            workspace.add_panel(search_panel.clone(), window, cx);
             ProjectSearchView::deploy_search(workspace, &DeploySearch::default(), window, cx)
         });
 
-        let search_view = workspace.update_in(cx, |workspace, _, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view should be active")
-        });
+        let search_view = cx.read(|cx| search_panel.read(cx).search_view());
 
         project_search::perform_project_search(&search_view, "File A", cx);
 

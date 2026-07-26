@@ -43,7 +43,7 @@ use std::{
 
 use outline_panel_settings::{DockSide, OutlinePanelSettings, ShowIndentGuides};
 use project::{File, Fs, GitEntry, GitTraversal, Project, ProjectItem};
-use search::{BufferSearchBar, ProjectSearchView};
+use search::{BufferSearchBar, ProjectSearchPanel};
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore};
 use theme::SyntaxTheme;
@@ -731,8 +731,8 @@ impl OutlinePanel {
                     .upgrade()
                     .expect("have a &mut Workspace"),
                 window,
-                move |outline_panel, workspace, event, window, cx| {
-                    if let workspace::Event::ActiveItemChanged = event {
+                move |outline_panel, workspace, event, window, cx| match event {
+                    workspace::Event::ActiveItemChanged => {
                         if let Some((new_active_item, new_active_editor)) =
                             workspace_active_editor(workspace.read(cx), cx)
                         {
@@ -749,6 +749,18 @@ impl OutlinePanel {
                             cx.notify();
                         }
                     }
+                    workspace::Event::PanelAdded(panel) => {
+                        if let Ok(project_search_panel) =
+                            panel.clone().downcast::<ProjectSearchPanel>()
+                        {
+                            outline_panel.subscribe_to_project_search_panel(
+                                &project_search_panel,
+                                window,
+                                cx,
+                            );
+                        }
+                    }
+                    _ => {}
                 },
             );
 
@@ -898,6 +910,9 @@ impl OutlinePanel {
             };
             if let Some((item, editor)) = workspace_active_editor(workspace, cx) {
                 outline_panel.replace_active_editor(item, editor, window, cx);
+            }
+            if let Some(project_search_panel) = workspace.panel::<ProjectSearchPanel>(cx) {
+                outline_panel.subscribe_to_project_search_panel(&project_search_panel, window, cx);
             }
             outline_panel
         })
@@ -4209,6 +4224,30 @@ impl OutlinePanel {
         !self.collapsed_entries.contains(&entry_to_check)
     }
 
+    fn subscribe_to_project_search_panel(
+        &mut self,
+        panel: &Entity<ProjectSearchPanel>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let search_view = panel.read(cx).search_view();
+        let panel_subscription = cx.observe_in(panel, window, |this, _, window, cx| {
+            this.project_search_updated(window, cx);
+        });
+        let search_subscription = cx.observe_in(&search_view, window, |this, _, window, cx| {
+            this.project_search_updated(window, cx);
+        });
+        self._subscriptions
+            .extend([panel_subscription, search_subscription]);
+    }
+
+    fn project_search_updated(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.update_search_matches(window, cx) {
+            self.selected_entry.invalidate();
+            self.update_cached_entries(Some(UPDATE_DEBOUNCE), window, cx);
+        }
+    }
+
     fn update_non_fs_items(&mut self, window: &mut Window, cx: &mut Context<OutlinePanel>) -> bool {
         if !self.active {
             return false;
@@ -4232,9 +4271,63 @@ impl OutlinePanel {
             return false;
         }
 
-        let project_search = self
-            .active_item()
-            .and_then(|item| item.downcast::<ProjectSearchView>());
+        let project_search_panel = self
+            .workspace
+            .upgrade()
+            .and_then(|workspace| workspace.read(cx).panel::<ProjectSearchPanel>(cx));
+        let project_search = project_search_panel.as_ref().and_then(|panel| {
+            let panel = panel.read(cx);
+            let project_search_focused = panel.contains_focused(window, cx);
+            let showing_project_search = matches!(
+                self.mode,
+                ItemsDisplayMode::Search(SearchState {
+                    kind: SearchKind::Project,
+                    ..
+                })
+            );
+            let outline_continues_project_search =
+                showing_project_search && self.focus_handle.contains_focused(window, cx);
+            let project_search_is_only_workspace_item = showing_project_search
+                && self
+                    .workspace
+                    .upgrade()
+                    .is_some_and(|workspace| workspace.read(cx).active_item(cx).is_none());
+            (panel.is_active()
+                && (project_search_focused
+                    || outline_continues_project_search
+                    || project_search_is_only_workspace_item))
+                .then(|| panel.search_view())
+        });
+
+        if let Some(project_search) = project_search.as_ref() {
+            let results_editor = project_search.read(cx).results_editor().clone();
+            if self
+                .active_editor()
+                .is_none_or(|active_editor| active_editor != results_editor)
+            {
+                self.replace_active_editor(
+                    Box::new(project_search.clone()),
+                    results_editor,
+                    window,
+                    cx,
+                );
+            }
+        } else if project_search_panel.is_some()
+            && self
+                .active_item()
+                .and_then(|item| item.downcast::<search::ProjectSearchView>())
+                .is_some()
+        {
+            if let Some(workspace) = self.workspace.upgrade()
+                && let Some((active_item, active_editor)) =
+                    workspace_active_editor(workspace.read(cx), cx)
+            {
+                self.replace_active_editor(active_item, active_editor, window, cx);
+            } else {
+                self.clear_previous(window, cx);
+            }
+        }
+
         let project_search_matches = project_search
             .as_ref()
             .map(|project_search| project_search.read(cx).get_matches(cx))
@@ -5366,23 +5459,7 @@ mod tests {
         outline_panel.update_in(cx, |outline_panel, window, cx| {
             outline_panel.set_active(true, window, cx)
         });
-
-        workspace.update_in(cx, |workspace, window, cx| {
-            ProjectSearchView::deploy_search(
-                workspace,
-                &workspace::DeploySearch::default(),
-                window,
-                cx,
-            )
-        });
-        let search_view = workspace.update_in(cx, |workspace, _window, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view expected to appear after new search event trigger")
-        });
+        let search_view = add_project_search_panel(&workspace, cx);
 
         let query = "param_names_for_lifetime_elision_hints";
         perform_project_search(&search_view, query, cx);
@@ -5595,23 +5672,7 @@ mod tests {
         outline_panel.update_in(cx, |outline_panel, window, cx| {
             outline_panel.set_active(true, window, cx)
         });
-
-        workspace.update_in(cx, |workspace, window, cx| {
-            ProjectSearchView::deploy_search(
-                workspace,
-                &workspace::DeploySearch::default(),
-                window,
-                cx,
-            )
-        });
-        let search_view = workspace.update_in(cx, |workspace, _window, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view expected to appear after new search event trigger")
-        });
+        let search_view = add_project_search_panel(&workspace, cx);
 
         let query = "param_names_for_lifetime_elision_hints";
         perform_project_search(&search_view, query, cx);
@@ -5728,23 +5789,7 @@ mod tests {
         outline_panel.update_in(cx, |outline_panel, window, cx| {
             outline_panel.set_active(true, window, cx)
         });
-
-        workspace.update_in(cx, |workspace, window, cx| {
-            ProjectSearchView::deploy_search(
-                workspace,
-                &workspace::DeploySearch::default(),
-                window,
-                cx,
-            )
-        });
-        let search_view = workspace.update_in(cx, |workspace, _window, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view expected to appear after new search event trigger")
-        });
+        let search_view = add_project_search_panel(&workspace, cx);
 
         let query = "param_names_for_lifetime_elision_hints";
         perform_project_search(&search_view, query, cx);
@@ -5971,22 +6016,7 @@ outline: fn hints_lifetimes_named  <==== selected"
             "Directory should be opened successfully"
         );
 
-        workspace.update_in(cx, |workspace, window, cx| {
-            ProjectSearchView::deploy_search(
-                workspace,
-                &workspace::DeploySearch::default(),
-                window,
-                cx,
-            )
-        });
-        let search_view = workspace.update_in(cx, |workspace, _window, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view expected to appear after new search event trigger")
-        });
+        let search_view = add_project_search_panel(&workspace, cx);
 
         let query = "aaa";
         perform_project_search(&search_view, query, cx);
@@ -6492,22 +6522,7 @@ outline: struct OutlineEntryExcerpt
             outline_panel.set_active(true, window, cx)
         });
 
-        workspace.update_in(cx, |workspace, window, cx| {
-            ProjectSearchView::deploy_search(
-                workspace,
-                &workspace::DeploySearch::default(),
-                window,
-                cx,
-            )
-        });
-        let search_view = workspace.update_in(cx, |workspace, _window, cx| {
-            workspace
-                .active_pane()
-                .read(cx)
-                .items()
-                .find_map(|item| item.downcast::<ProjectSearchView>())
-                .expect("Project search view expected to appear after new search event trigger")
-        });
+        let search_view = add_project_search_panel(&workspace, cx);
 
         let query = "static";
         perform_project_search(&search_view, query, cx);
@@ -6779,6 +6794,27 @@ outline: struct OutlineEntryExcerpt
                 .panel::<OutlinePanel>(cx)
                 .expect("no outline panel")
         })
+    }
+
+    fn add_project_search_panel(
+        workspace: &Entity<Workspace>,
+        cx: &mut VisualTestContext,
+    ) -> Entity<search::ProjectSearchView> {
+        let (panel, search_view) = workspace.update_in(cx, |workspace, window, cx| {
+            let panel = cx.new(|cx| ProjectSearchPanel::new(workspace, window, cx));
+            let search_view = panel.read(cx).search_view();
+            (panel, search_view)
+        });
+        workspace.update_in(cx, |workspace, window, cx| {
+            workspace.add_panel(panel.clone(), window, cx);
+            search::ProjectSearchView::deploy_search(
+                workspace,
+                &workspace::DeploySearch::default(),
+                window,
+                cx,
+            );
+        });
+        search_view
     }
 
     fn display_entries(
