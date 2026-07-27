@@ -3,8 +3,9 @@
 # The upstream release.yml requires Apple notarization, Windows signing, R2
 # blob storage, and private runners. This workflow builds distributable
 # artifacts without any secrets:
-#   - macOS arm64: release .dmg signed ad-hoc (Gatekeeper bypass required on
-#     first launch: right-click -> Open, or `xattr -dr com.apple.quarantine`)
+#   - macOS universal (arm64 + x86_64, lipo-merged): release .dmg signed
+#     ad-hoc (Gatekeeper bypass required on first launch: right-click ->
+#     Open, or `xattr -dr com.apple.quarantine`)
 #   - Linux x86_64: release .tar.gz
 #
 # Triggers on version tags (e.g. v1.15.2) or manual dispatch, and uploads both
@@ -33,22 +34,127 @@ jobs:
     # libc++ shipped in Xcode 15.4 (macos-14).
     runs-on: macos-15
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch_suffix: aarch64
+          # Cross-compile intel mac from the arm runner. Rust + Apple's
+          # universal SDK make this transparent for pure Rust deps, and the
+          # two slices are lipo-merged into a universal binary below.
+          - target: x86_64-apple-darwin
+            arch_suffix: x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: release-macos
+          shared-key: release-macos-${{ matrix.arch_suffix }}
           cache-on-failure: true
       - name: Build Vela.app bundle and DMG
-        run: ./script/bundle-mac
-      - name: Upload DMG artifact
+        run: ./script/bundle-mac ${{ matrix.target }}
+      - name: Collect app bundle for universal merge
+        run: |
+          mkdir -p dist
+          cp -R "target/${{ matrix.target }}/release/dmg/Vela.app" "dist/Vela-${{ matrix.arch_suffix }}.app"
+          cp "target/vela-remote-server-macos-${{ matrix.arch_suffix }}.gz" dist/
+      - name: Upload per-arch artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-macos-arm64-dmg
-          path: target/aarch64-apple-darwin/release/Vela-aarch64.dmg
+          name: vela-macos-${{ matrix.arch_suffix }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  build_macos_universal:
+    name: Lipo universal app + DMG
+    needs: build_macos
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      # Checkout needed for script/terms/terms.json used by dmg-license.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge app binaries with lipo
+        run: |
+          set -euo pipefail
+          ARM_APP="artifacts/vela-macos-aarch64/Vela-aarch64.app"
+          INTEL_APP="artifacts/vela-macos-x86_64/Vela-x86_64.app"
+          UNIVERSAL_APP="Vela.app"
+
+          # Start from the arm64 bundle and replace every mach-o file with a
+          # universal (fat) binary merged from both slices.
+          cp -R "$ARM_APP" "$UNIVERSAL_APP"
+
+          merge_binaries() {
+            local rel_path="$1"
+            local arm_bin="$ARM_APP/$rel_path"
+            local intel_bin="$INTEL_APP/$rel_path"
+            local out_bin="$UNIVERSAL_APP/$rel_path"
+            if [[ -f "$arm_bin" && -f "$intel_bin" ]]; then
+              lipo -create -output "$out_bin" "$arm_bin" "$intel_bin"
+              echo "merged: $rel_path"
+            fi
+          }
+
+          merge_binaries "Contents/MacOS/vela"
+          merge_binaries "Contents/MacOS/cli"
+
+          # Re-sign ad-hoc: lipo invalidates the per-arch signatures.
+          codesign --force --deep --sign - "$UNIVERSAL_APP"
+          codesign --verify --deep --strict "$UNIVERSAL_APP" && echo "signature OK"
+          file "$UNIVERSAL_APP/Contents/MacOS/vela"
+
+      - name: Merge remote_server with lipo
+        run: |
+          set -euo pipefail
+          mkdir -p remote_server_parts
+          gunzip -c artifacts/vela-macos-aarch64/vela-remote-server-macos-aarch64.gz > remote_server_parts/remote_server-arm
+          gunzip -c artifacts/vela-macos-x86_64/vela-remote-server-macos-x86_64.gz > remote_server_parts/remote_server-intel
+          lipo -create -output remote_server_parts/remote_server-universal \
+            remote_server_parts/remote_server-arm remote_server_parts/remote_server-intel
+          codesign --force --sign - remote_server_parts/remote_server-universal
+          file remote_server_parts/remote_server-universal
+
+      - name: Make versioned DMG + checksums
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          DMG="Vela-${VERSION}.dmg"
+
+          DMG_SRC=dmg_universal
+          rm -rf "$DMG_SRC"
+          mkdir -p "$DMG_SRC"
+          cp -R Vela.app "$DMG_SRC/"
+          ln -s /Applications "$DMG_SRC/Applications"
+
+          hdiutil create -volname Vela -srcfolder "$DMG_SRC" -ov -format UDZO "$DMG"
+
+          # Keep the embedded license agreement consistent with per-arch builds.
+          npm install --global dmg-license
+          dmg-license script/terms/terms.json "$DMG" || echo "dmg-license failed; continuing without embedded license"
+
+          mkdir -p dist
+          shasum -a 256 "$DMG" | awk '{print $1}' > "$DMG.sha256"
+          gzip -f --stdout --best remote_server_parts/remote_server-universal > "dist/vela-remote-server-macos-universal.gz"
+          shasum -a 256 "dist/vela-remote-server-macos-universal.gz" | awk '{print $1}' > "dist/vela-remote-server-macos-universal.gz.sha256"
+          mv "$DMG" "$DMG.sha256" dist/
+          ls -lh dist/
+
+      - name: Upload universal artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vela-macos-universal
+          path: dist/
           if-no-files-found: error
           retention-days: 14
 
@@ -73,20 +179,29 @@ jobs:
         run: ./script/download-wasi-sdk
       - name: Build Linux release tarball
         run: ./script/bundle-linux
+      - name: Add checksum
+        run: |
+          cd target/release
+          sha256sum vela-linux-x86_64.tar.gz | awk '{print $1}' > vela-linux-x86_64.tar.gz.sha256
       - name: Upload tarball artifact
         uses: actions/upload-artifact@v4
         with:
           name: vela-linux-x86_64-tar-gz
-          path: target/release/vela-linux-x86_64.tar.gz
+          path: |
+            target/release/vela-linux-x86_64.tar.gz
+            target/release/vela-linux-x86_64.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
 
   publish_release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build_macos, build_linux]
+    needs: [build_macos_universal, build_linux]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -95,13 +210,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Vela ${{ github.ref_name }}
-          draft: true
+          draft: false
           files: |
-            artifacts/Vela-macos-arm64-dmg/Vela-aarch64.dmg
+            artifacts/vela-macos-universal/Vela-*.dmg
+            artifacts/vela-macos-universal/Vela-*.dmg.sha256
+            artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz
+            artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz.sha256
             artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz
+            artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz.sha256
           body: |
             Personal fork build (unsigned).
 
-            - macOS: ad-hoc signed. On first launch, right-click -> Open, or run
+            - macOS (universal: Apple Silicon + Intel): ad-hoc signed. On first
+              launch, right-click -> Open, or run
               `xattr -dr com.apple.quarantine /Applications/Vela.app` after install.
             - Linux: extract and run `bin/vela`.
