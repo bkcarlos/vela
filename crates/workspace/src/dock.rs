@@ -350,7 +350,8 @@ pub struct PanelSizeState {
 struct PanelEntry {
     panel: Arc<dyn PanelHandle>,
     size_state: PanelSizeState,
-    _subscriptions: [Subscription; 3],
+    _panel_observation: Option<Subscription>,
+    _subscriptions: [Subscription; 2],
 }
 
 #[derive(Clone, Copy)]
@@ -603,8 +604,9 @@ impl Dock {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> usize {
+        let panel_observation =
+            (!panel.read(cx).is_agent_panel()).then(|| cx.observe(&panel, |_, _, cx| cx.notify()));
         let subscriptions = [
-            cx.observe(&panel, |_, _, cx| cx.notify()),
             cx.observe_global_in::<SettingsStore>(window, {
                 let workspace = workspace.clone();
                 let panel = panel.clone();
@@ -757,6 +759,7 @@ impl Dock {
             PanelEntry {
                 panel: Arc::new(panel.clone()),
                 size_state,
+                _panel_observation: panel_observation,
                 _subscriptions: subscriptions,
             },
         );
