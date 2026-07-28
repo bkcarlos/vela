@@ -3,9 +3,9 @@
 # The upstream release.yml requires Apple notarization, Windows signing, R2
 # blob storage, and private runners. This workflow builds distributable
 # artifacts without any secrets:
-#   - macOS universal (arm64 + x86_64, lipo-merged): release .dmg signed
-#     ad-hoc (Gatekeeper bypass required on first launch: right-click ->
-#     Open, or `xattr -dr com.apple.quarantine`)
+#   - macOS universal (arm64 + x86_64, lipo-merged): release .app in a ZIP,
+#     signed ad-hoc (Gatekeeper bypass required on first launch: right-click
+#     -> Open, or `xattr -dr com.apple.quarantine`)
 #   - Linux x86_64: release .tar.gz
 #
 # Triggers on version tags (e.g. v1.15.2) or manual dispatch, and uploads both
@@ -55,12 +55,14 @@ jobs:
         with:
           shared-key: release-macos-${{ matrix.arch_suffix }}
           cache-on-failure: true
-      - name: Build Vela.app bundle and DMG
-        run: ./script/bundle-mac ${{ matrix.target }}
+      - name: Build Vela.app bundle
+        run: ./script/bundle-mac -a ${{ matrix.target }}
       - name: Collect app bundle for universal merge
         run: |
           mkdir -p dist
-          cp -R "target/${{ matrix.target }}/release/dmg/Vela.app" "dist/Vela-${{ matrix.arch_suffix }}.app"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "target/${{ matrix.target }}/release/bundle/osx/Vela.app" \
+            "dist/Vela-${{ matrix.arch_suffix }}.app.zip"
           cp "target/vela-remote-server-macos-${{ matrix.arch_suffix }}.gz" dist/
       - name: Upload per-arch artifacts
         uses: actions/upload-artifact@v4
@@ -71,15 +73,13 @@ jobs:
           retention-days: 14
 
   build_macos_universal:
-    name: Lipo universal app + DMG
+    name: Lipo and archive universal app
     needs: build_macos
     runs-on: macos-15
     timeout-minutes: 60
     env:
       TAG: ${{ github.ref_name }}
     steps:
-      # Checkout needed for script/terms/terms.json used by dmg-license.
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -87,13 +87,16 @@ jobs:
       - name: Merge app binaries with lipo
         run: |
           set -euo pipefail
-          ARM_APP="artifacts/vela-macos-aarch64/Vela-aarch64.app"
-          INTEL_APP="artifacts/vela-macos-x86_64/Vela-x86_64.app"
+          ditto -x -k artifacts/vela-macos-aarch64/Vela-aarch64.app.zip arm
+          ditto -x -k artifacts/vela-macos-x86_64/Vela-x86_64.app.zip intel
+
+          ARM_APP="arm/Vela.app"
+          INTEL_APP="intel/Vela.app"
           UNIVERSAL_APP="Vela.app"
 
-          # Start from the arm64 bundle and replace every mach-o file with a
+          # Start from the arm64 bundle and replace every Mach-O file with a
           # universal (fat) binary merged from both slices.
-          cp -R "$ARM_APP" "$UNIVERSAL_APP"
+          ditto "$ARM_APP" "$UNIVERSAL_APP"
 
           merge_binaries() {
             local rel_path="$1"
@@ -125,29 +128,17 @@ jobs:
           codesign --force --sign - remote_server_parts/remote_server-universal
           file remote_server_parts/remote_server-universal
 
-      - name: Make versioned DMG + checksums
+      - name: Make versioned app archive and checksums
         run: |
           set -euo pipefail
           VERSION="${TAG#v}"
-          DMG="Vela-${VERSION}.dmg"
-
-          DMG_SRC=dmg_universal
-          rm -rf "$DMG_SRC"
-          mkdir -p "$DMG_SRC"
-          cp -R Vela.app "$DMG_SRC/"
-          ln -s /Applications "$DMG_SRC/Applications"
-
-          hdiutil create -volname Vela -srcfolder "$DMG_SRC" -ov -format UDZO "$DMG"
-
-          # Keep the embedded license agreement consistent with per-arch builds.
-          npm install --global dmg-license
-          dmg-license script/terms/terms.json "$DMG" || echo "dmg-license failed; continuing without embedded license"
+          APP_ARCHIVE="Vela-${VERSION}-macos-universal.zip"
 
           mkdir -p dist
-          shasum -a 256 "$DMG" | awk '{print $1}' > "$DMG.sha256"
+          ditto -c -k --sequesterRsrc --keepParent Vela.app "dist/$APP_ARCHIVE"
+          shasum -a 256 "dist/$APP_ARCHIVE" | awk '{print $1}' > "dist/$APP_ARCHIVE.sha256"
           gzip -f --stdout --best remote_server_parts/remote_server-universal > "dist/vela-remote-server-macos-universal.gz"
           shasum -a 256 "dist/vela-remote-server-macos-universal.gz" | awk '{print $1}' > "dist/vela-remote-server-macos-universal.gz.sha256"
-          mv "$DMG" "$DMG.sha256" dist/
           ls -lh dist/
 
       - name: Upload universal artifacts
@@ -212,8 +203,8 @@ jobs:
           name: Vela ${{ github.ref_name }}
           draft: false
           files: |
-            artifacts/vela-macos-universal/Vela-*.dmg
-            artifacts/vela-macos-universal/Vela-*.dmg.sha256
+            artifacts/vela-macos-universal/Vela-*-macos-universal.zip
+            artifacts/vela-macos-universal/Vela-*-macos-universal.zip.sha256
             artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz
             artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz.sha256
             artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz
@@ -221,7 +212,8 @@ jobs:
           body: |
             Personal fork build (unsigned).
 
-            - macOS (universal: Apple Silicon + Intel): ad-hoc signed. On first
+            - macOS (universal: Apple Silicon + Intel): extract the ZIP and move
+              `Vela.app` to `/Applications`. The app is ad-hoc signed. On first
               launch, right-click -> Open, or run
-              `xattr -dr com.apple.quarantine /Applications/Vela.app` after install.
+              `xattr -dr com.apple.quarantine /Applications/Vela.app`.
             - Linux: extract and run `bin/vela`.
