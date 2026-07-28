@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use crate::{
     RemoteArch, RemoteOs, RemotePlatform,
     json_log::LogRecord,
@@ -181,6 +179,12 @@ fn handle_rpc_messages_over_child_process_stdio(
                 .read(&mut stderr_buffer[stderr_offset..])
                 .await?;
             if len == 0 {
+                if stderr_offset > 0 {
+                    log::warn!(
+                        "(remote) {}",
+                        String::from_utf8_lossy(&stderr_buffer[..stderr_offset])
+                    );
+                }
                 return anyhow::Ok(());
             }
 
@@ -196,12 +200,7 @@ fn handle_rpc_messages_over_child_process_stdio(
                 if let Ok(record) = serde_json::from_slice::<LogRecord>(content) {
                     record.log(log::logger())
                 } else {
-                    std::io::stderr()
-                        .write_fmt(format_args!(
-                            "(remote) {}\n",
-                            String::from_utf8_lossy(content)
-                        ))
-                        .ok();
+                    log::warn!("(remote) {}", String::from_utf8_lossy(content));
                 }
             }
             stderr_buffer.drain(0..start_ix);

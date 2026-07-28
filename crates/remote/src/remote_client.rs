@@ -444,6 +444,9 @@ impl RemoteClient {
                     state: Some(State::Connecting),
                 });
 
+                log::info!(
+                    "starting remote server handshake (type={connection_type}, identifier={unique_identifier})"
+                );
                 let io_task = remote_connection.start_proxy(
                     unique_identifier,
                     false,
@@ -459,7 +462,9 @@ impl RemoteClient {
                     .with_timeout(INITIAL_CONNECTION_TIMEOUT, cx.background_executor())
                     .await;
                 match ready {
-                    Ok(Some(_)) => {}
+                    Ok(Some(_)) => {
+                        log::info!("remote server reported ready (type={connection_type})");
+                    }
                     Ok(None) => {
                         let mut error = "remote client exited before becoming ready".to_owned();
                         if let Some(status) = io_task.now_or_never() {
@@ -497,6 +502,7 @@ impl RemoteClient {
                     log::error!("failed to establish connection: {}", error);
                     return Err(error);
                 }
+                log::info!("remote server handshake completed (type={connection_type})");
 
                 let heartbeat_task = Self::heartbeat(this.downgrade(), connection_activity_rx, cx);
 
@@ -1287,6 +1293,17 @@ impl ConnectionPool {
                             )),
                         },
                     };
+
+                    match &connection {
+                        Ok(_) => log::info!(
+                            "{} remote transport connection established",
+                            opts.connection_type()
+                        ),
+                        Err(error) => log::error!(
+                            "failed to establish {} remote transport connection: {error:#}",
+                            opts.connection_type()
+                        ),
+                    }
 
                     cx.update_global(|pool: &mut Self, _| {
                         debug_assert!(matches!(

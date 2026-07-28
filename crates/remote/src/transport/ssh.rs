@@ -451,6 +451,10 @@ impl RemoteConnection for SshRemoteConnection {
     ) -> Task<Result<i32>> {
         const VARS: [&str; 3] = ["RUST_LOG", "RUST_BACKTRACE", "VELA_GENERATE_MINIDUMPS"];
         delegate.set_status(Some("Starting proxy"), cx);
+        log::info!(
+            "starting SSH remote server proxy for {unique_identifier} on {}",
+            self.socket.connection_options.ssh_destination()
+        );
 
         let Some(remote_binary_path) = self.remote_binary_path.clone() else {
             return Task::ready(Err(anyhow!("Remote binary path not set")));
@@ -504,6 +508,7 @@ impl RemoteConnection for SshRemoteConnection {
                 ));
             }
         };
+        log::info!("SSH remote server proxy process started");
 
         super::handle_rpc_messages_over_child_process_stdio(
             ssh_proxy_process,
@@ -616,6 +621,7 @@ impl SshRemoteConnection {
         use askpass::AskPassResult;
 
         let destination = connection_options.ssh_destination();
+        log::info!("starting SSH remote connection to {destination}");
 
         let temp_dir = tempfile::Builder::new()
             .prefix("vela-ssh-session")
@@ -761,6 +767,8 @@ impl SshRemoteConnection {
             (socket, Some(master_process))
         };
 
+        log::info!("SSH transport connected to {destination}");
+
         let is_windows = socket.probe_is_windows().await;
         log::info!("Remote is windows: {}", is_windows);
 
@@ -795,10 +803,12 @@ impl SshRemoteConnection {
 
         let (release_channel, version) =
             cx.update(|cx| (ReleaseChannel::global(cx), AppVersion::global(cx)));
+        log::info!("preparing remote development server on {destination}");
         this.remote_binary_path = Some(
             this.ensure_server_binary(&delegate, release_channel, version, cx)
                 .await?,
         );
+        log::info!("SSH remote connection to {destination} is ready");
 
         Ok(this)
     }
@@ -827,6 +837,10 @@ impl SshRemoteConnection {
         let dst_path =
             paths::remote_server_dir_relative().join(RelPath::from_unix_str(&binary_name).unwrap());
 
+        log::info!(
+            "checking for remote development server binary at {}",
+            dst_path.display(self.path_style())
+        );
         let binary_exists_on_server = self
             .socket
             .run_command(
@@ -863,8 +877,11 @@ impl SshRemoteConnection {
         }
 
         if binary_exists_on_server {
+            log::info!("using existing remote development server binary");
             return Ok(dst_path.into());
         }
+
+        log::info!("remote development server binary is missing; installing it");
 
         let wanted_version = cx.update(|cx| match release_channel {
             ReleaseChannel::Nightly => Ok(None),
