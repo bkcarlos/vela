@@ -28,7 +28,7 @@ use picker::{
     Picker, PickerDelegate,
     highlighted_match_with_paths::{HighlightedMatch, HighlightedMatchWithPaths},
 };
-use project::{AgentId, AgentServerStore};
+use project::{AgentId, AgentServerStore, Project};
 use settings::Settings as _;
 use theme::ActiveTheme;
 use ui::{
@@ -149,6 +149,7 @@ pub struct ThreadsArchiveView {
     _subscriptions: Vec<gpui::Subscription>,
     _refresh_history_task: Task<()>,
     workspace: WeakEntity<Workspace>,
+    project: Entity<Project>,
     agent_connection_store: WeakEntity<AgentConnectionStore>,
     agent_server_store: WeakEntity<AgentServerStore>,
     restoring: HashSet<ThreadId>,
@@ -161,6 +162,7 @@ pub struct ThreadsArchiveView {
 impl ThreadsArchiveView {
     pub fn new(
         workspace: WeakEntity<Workspace>,
+        project: Entity<Project>,
         agent_connection_store: WeakEntity<AgentConnectionStore>,
         agent_server_store: WeakEntity<AgentServerStore>,
         window: &mut Window,
@@ -204,8 +206,7 @@ impl ThreadsArchiveView {
 
         // Refresh the list when the window's project folders change, since
         // the list is filtered to threads belonging to this project.
-        let project_subscription = workspace.upgrade().map(|workspace| {
-            let project = workspace.read(cx).project().clone();
+        let project_subscription =
             cx.subscribe(&project, |this: &mut Self, _, event, cx| match event {
                 project::Event::WorktreeAdded(_)
                 | project::Event::WorktreeRemoved(_)
@@ -214,8 +215,7 @@ impl ThreadsArchiveView {
                     this.update_items(cx);
                 }
                 _ => {}
-            })
-        });
+            });
 
         cx.on_focus_out(&focus_handle, window, |this: &mut Self, _, _window, cx| {
             this.selection = None;
@@ -232,15 +232,14 @@ impl ThreadsArchiveView {
             hovered_index: None,
             preserve_selection_on_next_update: false,
             filter_editor,
-            _subscriptions: project_subscription
-                .into_iter()
-                .chain([
-                    filter_editor_subscription,
-                    thread_metadata_store_subscription,
-                ])
-                .collect(),
+            _subscriptions: vec![
+                project_subscription,
+                filter_editor_subscription,
+                thread_metadata_store_subscription,
+            ],
             _refresh_history_task: Task::ready(()),
             workspace,
+            project,
             agent_connection_store,
             agent_server_store,
             restoring: HashSet::default(),
@@ -290,25 +289,12 @@ impl ThreadsArchiveView {
 
         // Only show threads that belong to this window's project, so each
         // project's Conversations list stays separate.
-        let workspace = self.workspace.upgrade();
-        let project_root_paths: Vec<std::path::PathBuf> = workspace
-            .as_ref()
-            .map(|workspace| {
-                workspace
-                    .read(cx)
-                    .root_paths(cx)
-                    .iter()
-                    .map(|path| path.to_path_buf())
-                    .collect()
-            })
-            .unwrap_or_default();
-        let remote_connection = workspace.as_ref().and_then(|workspace| {
-            workspace
-                .read(cx)
-                .project()
-                .read(cx)
-                .remote_connection_options(cx)
-        });
+        let project = self.project.read(cx);
+        let project_root_paths: Vec<std::path::PathBuf> = project
+            .visible_worktrees(cx)
+            .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
+            .collect();
+        let remote_connection = project.remote_connection_options(cx);
         let belongs_to_project = |thread: &ThreadMetadata| {
             if project_root_paths.is_empty() {
                 // Windows without project folders (e.g. an empty new window)

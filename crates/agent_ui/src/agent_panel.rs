@@ -1487,6 +1487,7 @@ impl AgentPanel {
         let threads_view = cx.new(|cx| {
             ThreadsArchiveView::new(
                 workspace.clone(),
+                project.clone(),
                 connection_store.downgrade(),
                 project.read(cx).agent_server_store().downgrade(),
                 _window,

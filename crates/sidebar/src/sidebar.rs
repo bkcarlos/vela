@@ -7826,18 +7826,15 @@ impl Sidebar {
             return;
         };
 
-        let agent_server_store = active_workspace
-            .read(cx)
-            .project()
-            .read(cx)
-            .agent_server_store()
-            .downgrade();
+        let project = active_workspace.read(cx).project().clone();
+        let agent_server_store = project.read(cx).agent_server_store().downgrade();
 
         let agent_connection_store = agent_panel.read(cx).connection_store().downgrade();
 
         let archive_view = cx.new(|cx| {
             ThreadsArchiveView::new(
                 active_workspace.downgrade(),
+                project.clone(),
                 agent_connection_store.clone(),
                 agent_server_store.clone(),
                 window,
