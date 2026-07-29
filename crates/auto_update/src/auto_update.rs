@@ -109,16 +109,6 @@ actions!(
     ]
 );
 
-#[derive(Serialize, Debug)]
-pub struct AssetQuery<'a> {
-    asset: &'a str,
-    os: &'a str,
-    arch: &'a str,
-    metrics_id: Option<&'a str>,
-    system_id: Option<&'a str>,
-    is_staff: Option<bool>,
-}
-
 #[derive(Clone, Debug)]
 pub enum AutoUpdateStatus {
     Idle,
@@ -187,6 +177,38 @@ pub struct AutoUpdater {
 pub struct ReleaseAsset {
     pub version: String,
     pub url: String,
+}
+
+/// GitHub repository whose Releases serve app updates and remote server binaries.
+const GITHUB_RELEASES_REPO: &str = "bkcarlos/vela";
+
+#[derive(Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// Returns the name of the GitHub Release asset that provides `asset` for the
+/// given platform, matching the artifacts published by `fork_release.yml`.
+fn github_asset_name(asset: &str, version: &str, os: &str, arch: &str) -> Option<String> {
+    match (asset, os, arch) {
+        // The macOS app archive is a lipo-merged universal build.
+        ("vela", "macos", _) => Some(format!("Vela-{version}-macos-universal.dmg")),
+        ("vela", "linux", arch) => Some(format!("vela-linux-{arch}.tar.gz")),
+        ("vela-remote-server", "macos", _) => {
+            Some("vela-remote-server-macos-universal.gz".to_string())
+        }
+        ("vela-remote-server", "linux", arch) => {
+            Some(format!("vela-remote-server-linux-{arch}.gz"))
+        }
+        _ => None,
+    }
 }
 
 struct MacOsUnmounter<'a> {
@@ -345,14 +367,12 @@ pub fn release_notes_url(cx: &mut App) -> Option<String> {
             let mut current_version = auto_updater.current_version.clone();
             current_version.pre = semver::Prerelease::EMPTY;
             current_version.build = semver::BuildMetadata::EMPTY;
-            let release_channel = release_channel.dev_name();
-            let path = format!("/releases/{release_channel}/{current_version}");
-            auto_updater.client.http_client().build_url(&path)
+            format!("https://github.com/{GITHUB_RELEASES_REPO}/releases/tag/v{current_version}")
         }
         ReleaseChannel::Nightly => {
-            "https://github.com/vela-industries/vela/commits/nightly/".to_string()
+            format!("https://github.com/{GITHUB_RELEASES_REPO}/commits/nightly/")
         }
-        ReleaseChannel::Dev => "https://github.com/vela-industries/vela/commits/main/".to_string(),
+        ReleaseChannel::Dev => format!("https://github.com/{GITHUB_RELEASES_REPO}/commits/main/"),
     };
     Some(url)
 }
@@ -641,7 +661,7 @@ impl AutoUpdater {
 
     async fn get_release_asset(
         this: &Entity<Self>,
-        release_channel: ReleaseChannel,
+        _release_channel: ReleaseChannel,
         version: Option<Version>,
         asset: &str,
         os: &str,
@@ -649,16 +669,6 @@ impl AutoUpdater {
         cx: &mut AsyncApp,
     ) -> Result<ReleaseAsset> {
         let client = this.read_with(cx, |this, _| this.client.clone());
-
-        let (system_id, metrics_id, is_staff) = if client.telemetry().metrics_enabled() {
-            (
-                client.telemetry().system_id(),
-                client.telemetry().metrics_id(),
-                client.telemetry().is_staff(),
-            )
-        } else {
-            (None, None, None)
-        };
 
         let version = if let Some(mut version) = version {
             version.pre = semver::Prerelease::EMPTY;
@@ -669,18 +679,11 @@ impl AutoUpdater {
         };
         let http_client = client.http_client();
 
-        let path = format!("/releases/{}/{}/asset", release_channel.dev_name(), version,);
-        let url = http_client.build_vela_cloud_url_with_query(
-            &path,
-            AssetQuery {
-                os,
-                arch,
-                asset,
-                metrics_id: metrics_id.as_deref(),
-                system_id: system_id.as_deref(),
-                is_staff,
-            },
-        )?;
+        let url = if version == "latest" {
+            format!("https://api.github.com/repos/{GITHUB_RELEASES_REPO}/releases/latest")
+        } else {
+            format!("https://api.github.com/repos/{GITHUB_RELEASES_REPO}/releases/tags/v{version}")
+        };
 
         let mut response = http_client
             .get(url.as_str(), Default::default(), true)
@@ -694,11 +697,34 @@ impl AutoUpdater {
             String::from_utf8_lossy(&body),
         );
 
-        serde_json::from_slice(body.as_slice()).with_context(|| {
-            format!(
-                "error deserializing release {:?}",
-                String::from_utf8_lossy(&body),
-            )
+        let release: GithubRelease =
+            serde_json::from_slice(body.as_slice()).with_context(|| {
+                format!(
+                    "error deserializing release {:?}",
+                    String::from_utf8_lossy(&body),
+                )
+            })?;
+        let release_version = release.tag_name.trim_start_matches('v').to_string();
+
+        let asset_name =
+            github_asset_name(asset, &release_version, os, arch).with_context(|| {
+                format!("no {asset} build available for {os}/{arch} on this release channel")
+            })?;
+        let download_url = release
+            .assets
+            .iter()
+            .find(|release_asset| release_asset.name == asset_name)
+            .map(|release_asset| release_asset.browser_download_url.clone())
+            .with_context(|| {
+                format!(
+                    "release {} has no asset named {asset_name}",
+                    release.tag_name
+                )
+            })?;
+
+        Ok(ReleaseAsset {
+            version: release_version,
+            url: download_url,
         })
     }
 
@@ -1380,14 +1406,14 @@ mod tests {
                 let release_available = release_available.load(atomic::Ordering::Relaxed);
                 let dmg_rx = dmg_rx.clone();
                 async move {
-                if req.uri().path() == "/releases/stable/latest/asset" {
+                if req.uri().path() == "/repos/bkcarlos/vela/releases/latest" {
                     if release_available {
                         return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.1","url":"https://test.example/new-download"}"#.into()
+                            r#"{"tag_name":"v0.100.1","assets":[{"name":"Vela-0.100.1-macos-universal.dmg","browser_download_url":"https://test.example/new-download"}]}"#.into()
                         ).unwrap());
                     } else {
                         return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.0","url":"https://test.example/old-download"}"#.into()
+                            r#"{"tag_name":"v0.100.0","assets":[{"name":"Vela-0.100.0-macos-universal.dmg","browser_download_url":"https://test.example/old-download"}]}"#.into()
                         ).unwrap());
                     }
                 } else if req.uri().path() == "/new-download" {

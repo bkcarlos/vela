@@ -141,6 +141,22 @@ jobs:
           shasum -a 256 "dist/vela-remote-server-macos-universal.gz" | awk '{print $1}' > "dist/vela-remote-server-macos-universal.gz.sha256"
           ls -lh dist/
 
+      - name: Make versioned DMG and checksum
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          DMG_NAME="Vela-${VERSION}-macos-universal.dmg"
+
+          # The auto-updater installs macOS updates from a DMG (hdiutil attach),
+          # so the release must provide one alongside the ZIP.
+          DMG_DIR="$(mktemp -d)/dmg"
+          mkdir -p "$DMG_DIR"
+          ditto Vela.app "$DMG_DIR/Vela.app"
+          ln -s /Applications "$DMG_DIR/Applications"
+          hdiutil create -volname Vela -srcfolder "$DMG_DIR" -ov -format UDZO "dist/$DMG_NAME"
+          shasum -a 256 "dist/$DMG_NAME" | awk '{print $1}' > "dist/$DMG_NAME.sha256"
+          ls -lh dist/
+
       - name: Upload universal artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -174,6 +190,8 @@ jobs:
         run: |
           cd target/release
           sha256sum vela-linux-x86_64.tar.gz | awk '{print $1}' > vela-linux-x86_64.tar.gz.sha256
+          cd ../..
+          sha256sum target/vela-remote-server-linux-x86_64.gz | awk '{print $1}' > target/vela-remote-server-linux-x86_64.gz.sha256
       - name: Upload tarball artifact
         uses: actions/upload-artifact@v4
         with:
@@ -181,6 +199,8 @@ jobs:
           path: |
             target/release/vela-linux-x86_64.tar.gz
             target/release/vela-linux-x86_64.tar.gz.sha256
+            target/vela-remote-server-linux-x86_64.gz
+            target/vela-remote-server-linux-x86_64.gz.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -205,10 +225,14 @@ jobs:
           files: |
             artifacts/vela-macos-universal/Vela-*-macos-universal.zip
             artifacts/vela-macos-universal/Vela-*-macos-universal.zip.sha256
+            artifacts/vela-macos-universal/Vela-*-macos-universal.dmg
+            artifacts/vela-macos-universal/Vela-*-macos-universal.dmg.sha256
             artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz
             artifacts/vela-macos-universal/vela-remote-server-macos-universal.gz.sha256
             artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz
             artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz.sha256
+            artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz
+            artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz.sha256
           body: |
             Personal fork build (unsigned).
 
