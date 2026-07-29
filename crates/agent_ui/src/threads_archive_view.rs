@@ -272,6 +272,11 @@ impl ThreadsArchiveView {
         cx.notify();
     }
 
+    #[cfg(test)]
+    pub(crate) fn is_restoring(&self, thread_id: &ThreadId) -> bool {
+        self.restoring.contains(thread_id)
+    }
+
     pub fn focus_filter_editor(&self, window: &mut Window, cx: &mut App) {
         let handle = self.filter_editor.read(cx).focus_handle(cx);
         handle.focus(window, cx);

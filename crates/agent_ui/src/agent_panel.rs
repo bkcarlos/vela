@@ -1497,7 +1497,7 @@ impl AgentPanel {
         let _threads_view_subscription = cx.subscribe_in(
             &threads_view,
             _window,
-            |this, _, event: &ThreadsArchiveViewEvent, window, cx| match event {
+            |this, threads_view, event: &ThreadsArchiveViewEvent, window, cx| match event {
                 ThreadsArchiveViewEvent::Close => {
                     this.active_section = AgentPanelSection::Agent;
                     cx.notify();
@@ -1514,6 +1514,9 @@ impl AgentPanel {
                         window,
                         cx,
                     );
+                    threads_view.update(cx, |view, cx| {
+                        view.clear_restoring(&thread.thread_id, cx);
+                    });
                     cx.notify();
                 }
                 ThreadsArchiveViewEvent::CancelRestore { .. } => {}
@@ -10579,6 +10582,39 @@ mod tests {
             weak_view_a.upgrade().is_some(),
             "Idle non-loadable ConnectionView should still be retained"
         );
+    }
+
+    #[gpui::test]
+    async fn test_conversations_thread_can_be_reopened_after_activation(cx: &mut TestAppContext) {
+        let (panel, mut cx) = setup_panel(cx).await;
+
+        let connection = StubAgentConnection::new();
+        open_thread_with_connection(&panel, connection, &mut cx);
+        send_message(&panel, &mut cx);
+        cx.run_until_parked();
+
+        let thread_id = active_thread_id(&panel, &cx);
+        let thread = cx.update(|_, cx| {
+            ThreadMetadataStore::global(cx)
+                .read(cx)
+                .entry(thread_id)
+                .cloned()
+                .expect("active thread should have metadata")
+        });
+        let threads_view = panel.read_with(&cx, |panel, _| panel.threads_view.clone());
+
+        threads_view.update(&mut cx, |view, cx| {
+            view.mark_restoring(&thread_id, cx);
+            cx.emit(ThreadsArchiveViewEvent::Activate { thread });
+        });
+        cx.run_until_parked();
+
+        threads_view.read_with(&cx, |view, _| {
+            assert!(
+                !view.is_restoring(&thread_id),
+                "activated thread should remain clickable in Conversations"
+            );
+        });
     }
 
     #[gpui::test]
