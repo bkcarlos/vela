@@ -24,7 +24,7 @@
   // 6. "TextMate"
   "base_keymap": "VSCode",
   // The name of a font to use for rendering text in the editor
-  // ".VelaMono" currently aliases to Lilex
+  // ".VelaMono" currently aliases to Google Sans Code
   // but this may change in the future.
   "buffer_font_family": ".VelaMono",
   // Set the buffer text's font fallbacks, this will be merged with

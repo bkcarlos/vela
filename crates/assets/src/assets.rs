@@ -59,6 +59,9 @@ impl Assets {
         cx.text_system()
             .add_fonts(vec![
                 self.load("fonts/lilex/Lilex-Regular.ttf").unwrap().unwrap(),
+                self.load("fonts/google-sans-code/GoogleSansCode-Regular.ttf")
+                    .unwrap()
+                    .unwrap(),
             ])
             .unwrap()
     }

@@ -271,6 +271,7 @@ fn load_bundled_fonts(asset_source: &dyn AssetSource, db: &mut usvg::fontdb::Dat
     let font_paths = [
         "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf",
         "fonts/lilex/Lilex-Regular.ttf",
+        "fonts/google-sans-code/GoogleSansCode-Regular.ttf",
     ];
     for path in font_paths {
         match asset_source.load(path) {
@@ -291,7 +292,7 @@ fn fix_generic_font_families(db: &mut usvg::fontdb::Database) {
         (Family::SansSerif, "IBM Plex Sans"),
         // No serif font bundled; use sans-serif as best available fallback.
         (Family::Serif, "IBM Plex Sans"),
-        (Family::Monospace, "Lilex"),
+        (Family::Monospace, "Google Sans Code"),
         (Family::Cursive, "IBM Plex Sans"),
         (Family::Fantasy, "IBM Plex Sans"),
     ];
@@ -322,11 +323,14 @@ mod tests {
     const IBM_PLEX_REGULAR: &[u8] =
         include_bytes!("../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
     const LILEX_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf");
+    const GOOGLE_SANS_CODE_REGULAR: &[u8] =
+        include_bytes!("../../../assets/fonts/google-sans-code/GoogleSansCode-Regular.ttf");
 
     fn db_with_bundled_fonts() -> Database {
         let mut db = Database::new();
         db.load_font_data(IBM_PLEX_REGULAR.to_vec());
         db.load_font_data(LILEX_REGULAR.to_vec());
+        db.load_font_data(GOOGLE_SANS_CODE_REGULAR.to_vec());
         db
     }
 
@@ -439,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn fix_generic_font_families_monospace_resolves_to_lilex() {
+    fn fix_generic_font_families_monospace_resolves_to_google_sans_code() {
         let mut db = db_with_bundled_fonts();
         fix_generic_font_families(&mut db);
 
@@ -450,8 +454,10 @@ mod tests {
         let id = db.query(&query).expect("Monospace should resolve");
         let face = db.face(id).expect("Face should exist");
         assert!(
-            face.families.iter().any(|(name, _)| name.contains("Lilex")),
-            "Monospace should map to Lilex, got {:?}",
+            face.families
+                .iter()
+                .any(|(name, _)| name.contains("Google Sans Code")),
+            "Monospace should map to Google Sans Code, got {:?}",
             face.families
         );
     }

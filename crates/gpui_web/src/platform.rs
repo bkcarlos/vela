@@ -29,6 +29,8 @@ static BUNDLED_FONTS: &[&[u8]] = &[
     include_bytes!("../../../assets/fonts/lilex/Lilex-Bold.ttf"),
     include_bytes!("../../../assets/fonts/lilex/Lilex-Italic.ttf"),
     include_bytes!("../../../assets/fonts/lilex/Lilex-BoldItalic.ttf"),
+    include_bytes!("../../../assets/fonts/google-sans-code/GoogleSansCode-Regular.ttf"),
+    include_bytes!("../../../assets/fonts/google-sans-code/GoogleSansCode-Italic.ttf"),
 ];
 
 pub struct WebPlatform {

@@ -1183,7 +1183,7 @@ pub fn font_name_with_fallbacks<'a>(name: &'a str, system: &'a str) -> &'a str {
     match name {
         ".SystemUIFont" => system,
         ".VelaSans" | "Vela Plex Sans" => "IBM Plex Sans",
-        ".VelaMono" | "Vela Plex Mono" => "Lilex",
+        ".VelaMono" | "Vela Plex Mono" => "Google Sans Code",
         _ => name,
     }
 }
@@ -1200,7 +1200,7 @@ pub fn font_name_with_fallbacks_shared<'a>(
     match name.as_str() {
         ".SystemUIFont" => system,
         ".VelaSans" | "Vela Plex Sans" => const { &SharedString::new_static("IBM Plex Sans") },
-        ".VelaMono" | "Vela Plex Mono" => const { &SharedString::new_static("Lilex") },
+        ".VelaMono" | "Vela Plex Mono" => const { &SharedString::new_static("Google Sans Code") },
         _ => name,
     }
 }
