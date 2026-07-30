@@ -1395,8 +1395,7 @@ fn save_llm_provider_form(
             return;
         }
     };
-    let original_id = values.original_id.clone();
-    let is_edit = original_id.is_some();
+    let is_edit = values.original_id.is_some();
 
     let fs = <dyn fs::Fs>::global(cx);
     cx.spawn_in(window, async move |this, cx| {

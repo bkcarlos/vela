@@ -108,8 +108,6 @@ extend-ignore-re = [
     "composit",
     # Used in truncating tests to ensure byte-length vs char like in café
     "caf…",
-    # scap screen-capture library name (also `Scap` in type identifiers)
-    "(?i)\\Ascap\\z",
     # Historical spelling in WIT interfaces and public editor APIs; renaming
     # would break protocol compatibility
     "writeable",
@@ -124,3 +122,7 @@ extend-ignore-re = [
     "\\Aba\\z",
 ]
 check-filename = true
+
+[default.extend-words]
+# `scap` is the name of the screen-capture crate.
+scap = "scap"
