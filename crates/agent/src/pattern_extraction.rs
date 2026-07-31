@@ -137,6 +137,21 @@ pub fn extract_path_pattern_display(path: &str) -> Option<String> {
     Some(format!("{}/", parent_str))
 }
 
+pub fn extract_directory_pattern(path: &str) -> Option<String> {
+    if path.is_empty() {
+        return None;
+    }
+    if path == "/" {
+        return Some("^/".to_string());
+    }
+    let path = path.trim_end_matches('/');
+    Some(format!("^{}(?:/|$)", escape_for_pattern(path)))
+}
+
+pub fn extract_directory_pattern_display(path: &str) -> Option<String> {
+    (!path.is_empty()).then(|| path.to_string())
+}
+
 fn common_parent_dir(path_a: &str, path_b: &str) -> Option<PathBuf> {
     let parent_a = Path::new(path_a).parent()?;
     let parent_b = Path::new(path_b).parent()?;
@@ -378,6 +393,28 @@ mod tests {
             extract_path_pattern_display("src/lib.rs"),
             Some("src/".to_string())
         );
+    }
+
+    #[test]
+    fn test_extract_directory_pattern() {
+        assert_eq!(
+            extract_directory_pattern("/Users/alice/project"),
+            Some("^/Users/alice/project(?:/|$)".to_string())
+        );
+        assert_eq!(
+            extract_directory_pattern("C:/Users/alice/project"),
+            Some(r"^C:/Users/alice/project(?:/|$)".to_string())
+        );
+        assert_eq!(extract_directory_pattern("/"), Some("^/".to_string()));
+        assert_eq!(
+            extract_directory_pattern_display("C:/Users/alice/project"),
+            Some("C:/Users/alice/project".to_string())
+        );
+
+        let unix_backslash_pattern = extract_directory_pattern(r"/tmp/a\b").unwrap();
+        let unix_backslash_pattern = regex::Regex::new(&unix_backslash_pattern).unwrap();
+        assert!(unix_backslash_pattern.is_match(r"/tmp/a\b/file"));
+        assert!(!unix_backslash_pattern.is_match("/tmp/a/b/file"));
     }
 
     #[test]

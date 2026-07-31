@@ -687,6 +687,78 @@ pub fn decide_permission_from_settings(
     decide_permission_from_settings_internal(tool_name, inputs, settings, true)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExplicitToolPermissionDecision {
+    NoMatch,
+    Allow,
+    Confirm,
+    Deny(String),
+}
+
+fn decide_permission_from_explicit_rules(
+    tool_name: &str,
+    inputs: &[String],
+    settings: &AgentSettings,
+) -> ExplicitToolPermissionDecision {
+    if let Some(ToolPermissionDecision::Deny(reason)) =
+        check_hardcoded_security_rules(tool_name, inputs, ShellKind::system())
+    {
+        return ExplicitToolPermissionDecision::Deny(reason);
+    }
+
+    let Some(rules) = settings.tool_permissions.tools.get(tool_name) else {
+        return if settings.permission_mode == AgentPermissionMode::FullAccess {
+            ExplicitToolPermissionDecision::Allow
+        } else {
+            ExplicitToolPermissionDecision::NoMatch
+        };
+    };
+    if let Some(error) = check_invalid_patterns(tool_name, rules) {
+        return ExplicitToolPermissionDecision::Deny(error);
+    }
+
+    let mut matched_confirm = false;
+    let mut matched_allow = !inputs.is_empty();
+    for input in inputs {
+        if rules.always_deny.iter().any(|rule| rule.is_match(input)) {
+            return ExplicitToolPermissionDecision::Deny(format!(
+                "Command blocked by security rule for {} tool",
+                tool_name
+            ));
+        }
+        if rules.always_confirm.iter().any(|rule| rule.is_match(input)) {
+            matched_confirm = true;
+        }
+        if !rules.always_allow.iter().any(|rule| rule.is_match(input)) {
+            matched_allow = false;
+        }
+    }
+
+    let decision = if matched_confirm {
+        ExplicitToolPermissionDecision::Confirm
+    } else if matched_allow {
+        ExplicitToolPermissionDecision::Allow
+    } else if let Some(default) = rules.default {
+        match default {
+            ToolPermissionMode::Allow => ExplicitToolPermissionDecision::Allow,
+            ToolPermissionMode::Confirm => ExplicitToolPermissionDecision::Confirm,
+            ToolPermissionMode::Deny => {
+                ExplicitToolPermissionDecision::Deny(format!("{} tool is disabled", tool_name))
+            }
+        }
+    } else {
+        ExplicitToolPermissionDecision::NoMatch
+    };
+
+    match (settings.permission_mode, decision) {
+        (_, ExplicitToolPermissionDecision::Deny(reason)) => {
+            ExplicitToolPermissionDecision::Deny(reason)
+        }
+        (AgentPermissionMode::FullAccess, _) => ExplicitToolPermissionDecision::Allow,
+        (_, decision) => decision,
+    }
+}
+
 fn decide_permission_from_settings_internal(
     tool_name: &str,
     inputs: &[String],
@@ -764,6 +836,43 @@ pub fn normalize_path(raw: &str) -> String {
     }
 }
 
+fn normalize_windows_permission_path(raw: &str) -> String {
+    let normalized = raw.replace('\\', "/");
+    let (prefix, remainder, protected_components) =
+        if let Some(remainder) = normalized.strip_prefix("//?/UNC/") {
+            ("//?/UNC/", remainder, 2)
+        } else if let Some(remainder) = normalized.strip_prefix("//?/") {
+            ("//?/", remainder, 1)
+        } else if let Some(remainder) = normalized.strip_prefix("//") {
+            ("//", remainder, 2)
+        } else if normalized.len() >= 3
+            && normalized.as_bytes()[0].is_ascii_alphabetic()
+            && normalized.as_bytes()[1] == b':'
+            && normalized.as_bytes()[2] == b'/'
+        {
+            (&normalized[..3], &normalized[3..], 0)
+        } else if let Some(remainder) = normalized.strip_prefix('/') {
+            ("/", remainder, 0)
+        } else {
+            ("", normalized.as_str(), 0)
+        };
+
+    let mut components = Vec::new();
+    for component in remainder.split('/') {
+        match component {
+            "" | "." => {}
+            ".." if components.len() > protected_components => {
+                components.pop();
+            }
+            ".." if prefix.is_empty() => components.push(component),
+            ".." => {}
+            component => components.push(component),
+        }
+    }
+
+    format!("{prefix}{}", components.join("/"))
+}
+
 /// Decides permission by checking both the raw input path and a simplified/canonicalized
 /// version. Returns the most restrictive decision (Deny > Confirm > Allow).
 pub fn decide_permission_for_paths(
@@ -772,6 +881,47 @@ pub fn decide_permission_for_paths(
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
     decide_permission_for_paths_internal(tool_name, raw_paths, settings, true)
+}
+
+pub fn decide_permission_for_paths_from_explicit_rules(
+    tool_name: &str,
+    raw_paths: &[String],
+    windows_path_style: bool,
+    settings: &AgentSettings,
+) -> ExplicitToolPermissionDecision {
+    let raw_decision = decide_permission_from_explicit_rules(tool_name, raw_paths, settings);
+    let normalized: Vec<String> = raw_paths
+        .iter()
+        .map(|path| {
+            if windows_path_style {
+                normalize_windows_permission_path(path)
+            } else {
+                normalize_path(path)
+            }
+        })
+        .collect();
+    if raw_paths
+        .iter()
+        .zip(&normalized)
+        .all(|(raw_path, normalized_path)| raw_path == normalized_path)
+    {
+        return raw_decision;
+    }
+
+    let normalized_decision =
+        decide_permission_from_explicit_rules(tool_name, &normalized, settings);
+    match (raw_decision, normalized_decision) {
+        (ExplicitToolPermissionDecision::Deny(reason), _)
+        | (_, ExplicitToolPermissionDecision::Deny(reason)) => {
+            ExplicitToolPermissionDecision::Deny(reason)
+        }
+        (ExplicitToolPermissionDecision::Confirm, _)
+        | (_, ExplicitToolPermissionDecision::Confirm) => ExplicitToolPermissionDecision::Confirm,
+        (ExplicitToolPermissionDecision::Allow, _) | (_, ExplicitToolPermissionDecision::Allow) => {
+            ExplicitToolPermissionDecision::Allow
+        }
+        _ => ExplicitToolPermissionDecision::NoMatch,
+    }
 }
 
 fn decide_permission_for_paths_internal(
@@ -841,7 +991,7 @@ pub fn most_restrictive(
 mod tests {
     use super::*;
     use crate::pattern_extraction::extract_terminal_pattern;
-    use crate::tools::{DeletePathTool, FetchTool, TerminalTool};
+    use crate::tools::{DeletePathTool, FetchTool, FindPathTool, TerminalTool};
     use crate::{AgentTool, EditFileTool};
     use agent_settings::{CompiledRegex, InvalidRegexPattern, ToolRules};
     use gpui::px;
@@ -1197,6 +1347,98 @@ mod tests {
                 &settings,
             ),
             ToolPermissionDecision::Allow,
+        );
+    }
+
+    #[test]
+    fn explicit_rules_distinguish_no_match_from_find_path_allow() {
+        let mut settings = settings_with_permission_mode(AgentPermissionMode::Auto);
+        let inputs = vec![
+            "/tmp/project".to_string(),
+            "/tmp/project/**/*.rs".to_string(),
+        ];
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &inputs,
+                false,
+                &settings,
+            ),
+            ExplicitToolPermissionDecision::NoMatch,
+        );
+
+        settings.tool_permissions.tools.insert(
+            FindPathTool::NAME.into(),
+            ToolRules {
+                always_allow: vec![CompiledRegex::new(r"^/tmp/project(?:/|$)", false).unwrap()],
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &inputs,
+                false,
+                &settings,
+            ),
+            ExplicitToolPermissionDecision::Allow,
+        );
+
+        settings
+            .tool_permissions
+            .tools
+            .get_mut(FindPathTool::NAME)
+            .unwrap()
+            .always_confirm
+            .push(CompiledRegex::new(r"^/tmp/project", false).unwrap());
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &inputs,
+                false,
+                &settings,
+            ),
+            ExplicitToolPermissionDecision::Confirm,
+        );
+
+        let mut windows_settings = settings_with_permission_mode(AgentPermissionMode::Auto);
+        windows_settings.tool_permissions.tools.insert(
+            FindPathTool::NAME.into(),
+            ToolRules {
+                always_confirm: vec![CompiledRegex::new(r"^C:/alias", false).unwrap()],
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &[r"C:\alias\**\*.rs".to_string()],
+                true,
+                &windows_settings,
+            ),
+            ExplicitToolPermissionDecision::Confirm,
+        );
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &[r"C:\safe\..\alias\**\*.rs".to_string()],
+                true,
+                &windows_settings,
+            ),
+            ExplicitToolPermissionDecision::Confirm,
+        );
+        assert_eq!(
+            normalize_windows_permission_path(r"\\server\share\safe\..\alias\*.rs"),
+            r"//server/share/alias/*.rs"
+        );
+        assert_eq!(
+            decide_permission_for_paths_from_explicit_rules(
+                FindPathTool::NAME,
+                &[r"C:\alias\**\*.rs".to_string()],
+                false,
+                &windows_settings,
+            ),
+            ExplicitToolPermissionDecision::NoMatch,
         );
     }
 

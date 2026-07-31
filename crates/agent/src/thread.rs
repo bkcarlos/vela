@@ -1046,6 +1046,11 @@ impl ToolPermissionContext {
                     extract_terminal_pattern(value),
                     extract_terminal_pattern_display(value),
                 )
+            } else if tool_name == FindPathTool::NAME {
+                (
+                    extract_directory_pattern(value),
+                    extract_directory_pattern_display(value),
+                )
             } else if tool_name == CopyPathTool::NAME
                 || tool_name == MovePathTool::NAME
                 || tool_name == EditFileTool::NAME
