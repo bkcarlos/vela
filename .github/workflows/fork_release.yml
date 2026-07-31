@@ -1,11 +1,6 @@
-# Fork release builds: unsigned/ad-hoc-signed installable artifacts.
-#
-# The upstream release.yml requires Apple notarization, Windows signing, R2
-# blob storage, and private runners. This workflow builds distributable
-# artifacts without any secrets:
-#   - macOS universal (arm64 + x86_64, lipo-merged): release .app in a ZIP,
-#     signed ad-hoc (Gatekeeper bypass required on first launch: right-click
-#     -> Open, or `xattr -dr com.apple.quarantine`)
+# Fork release builds:
+#   - macOS universal (arm64 + x86_64, lipo-merged): Developer ID signed and
+#     notarized release app in both ZIP and DMG formats
 #   - Linux x86_64: release .tar.gz
 #
 # Triggers on version tags (e.g. v1.15.2) or manual dispatch, and uploads both
@@ -76,13 +71,63 @@ jobs:
     name: Lipo and archive universal app
     needs: build_macos
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       TAG: ${{ github.ref_name }}
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+      APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+      APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Import Developer ID certificate
+        run: |
+          set -euo pipefail
+          : "${MACOS_CERTIFICATE:?missing MACOS_CERTIFICATE secret}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?missing MACOS_CERTIFICATE_PASSWORD secret}"
+          : "${MACOS_SIGNING_IDENTITY:?missing MACOS_SIGNING_IDENTITY secret}"
+          : "${APPLE_NOTARIZATION_KEY:?missing APPLE_NOTARIZATION_KEY secret}"
+          : "${APPLE_NOTARIZATION_KEY_ID:?missing APPLE_NOTARIZATION_KEY_ID secret}"
+          : "${APPLE_NOTARIZATION_ISSUER_ID:?missing APPLE_NOTARIZATION_ISSUER_ID secret}"
+
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          DEVELOPER_ID_CA_PATH="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          KEYCHAIN_PATH="$RUNNER_TEMP/vela-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          printf '%s' "$MACOS_CERTIFICATE" | base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          curl --fail --silent --show-error --location \
+            'https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer' \
+            --output "$DEVELOPER_ID_CA_PATH"
+          security import "$DEVELOPER_ID_CA_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          NOTARIZATION_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_NOTARIZATION_KEY_ID}.p8"
+          printf '%s' "$APPLE_NOTARIZATION_KEY" > "$NOTARIZATION_KEY_PATH"
+          chmod 600 "$NOTARIZATION_KEY_PATH"
+          echo "NOTARIZATION_KEY_PATH=$NOTARIZATION_KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Merge app binaries with lipo
         run: |
@@ -112,9 +157,6 @@ jobs:
           merge_binaries "Contents/MacOS/vela"
           merge_binaries "Contents/MacOS/cli"
 
-          # Re-sign ad-hoc: lipo invalidates the per-arch signatures.
-          codesign --force --deep --sign - "$UNIVERSAL_APP"
-          codesign --verify --deep --strict "$UNIVERSAL_APP" && echo "signature OK"
           file "$UNIVERSAL_APP/Contents/MacOS/vela"
 
       - name: Merge remote_server with lipo
@@ -125,8 +167,41 @@ jobs:
           gunzip -c artifacts/vela-macos-x86_64/vela-remote-server-macos-x86_64.gz > remote_server_parts/remote_server-intel
           lipo -create -output remote_server_parts/remote_server-universal \
             remote_server_parts/remote_server-arm remote_server_parts/remote_server-intel
-          codesign --force --sign - remote_server_parts/remote_server-universal
           file remote_server_parts/remote_server-universal
+
+      - name: Sign and notarize universal app
+        run: |
+          set -euo pipefail
+          APP="Vela.app"
+          ENTITLEMENTS="crates/vela/resources/vela.entitlements"
+          rm -f "$APP/Contents/embedded.provisionprofile"
+
+          codesign --force --timestamp --options runtime \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP/Contents/MacOS/cli"
+          codesign --force --timestamp --options runtime \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP/Contents/MacOS/vela"
+          codesign --force --timestamp --options runtime \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP"
+          codesign --force --timestamp --options runtime \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            remote_server_parts/remote_server-universal
+
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          NOTARIZATION_ARCHIVE="$RUNNER_TEMP/Vela-notarization.zip"
+          ditto -c -k --keepParent "$APP" "$NOTARIZATION_ARCHIVE"
+          xcrun notarytool submit "$NOTARIZATION_ARCHIVE" \
+            --key "$NOTARIZATION_KEY_PATH" \
+            --key-id "$APPLE_NOTARIZATION_KEY_ID" \
+            --issuer "$APPLE_NOTARIZATION_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
 
       - name: Make versioned app archive and checksums
         run: |
@@ -141,7 +216,7 @@ jobs:
           shasum -a 256 "dist/vela-remote-server-macos-universal.gz" | awk '{print $1}' > "dist/vela-remote-server-macos-universal.gz.sha256"
           ls -lh dist/
 
-      - name: Make versioned DMG and checksum
+      - name: Make and notarize versioned DMG
         run: |
           set -euo pipefail
           VERSION="${TAG#v}"
@@ -154,6 +229,15 @@ jobs:
           ditto Vela.app "$DMG_DIR/Vela.app"
           ln -s /Applications "$DMG_DIR/Applications"
           hdiutil create -volname Vela -srcfolder "$DMG_DIR" -ov -format UDZO "dist/$DMG_NAME"
+          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "dist/$DMG_NAME"
+          xcrun notarytool submit "dist/$DMG_NAME" \
+            --key "$NOTARIZATION_KEY_PATH" \
+            --key-id "$APPLE_NOTARIZATION_KEY_ID" \
+            --issuer "$APPLE_NOTARIZATION_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "dist/$DMG_NAME"
+          xcrun stapler validate "dist/$DMG_NAME"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "dist/$DMG_NAME"
           shasum -a 256 "dist/$DMG_NAME" | awk '{print $1}' > "dist/$DMG_NAME.sha256"
           ls -lh dist/
 
@@ -234,10 +318,9 @@ jobs:
             artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz
             artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz.sha256
           body: |
-            Personal fork build (unsigned).
+            Personal fork build.
 
-            - macOS (universal: Apple Silicon + Intel): extract the ZIP and move
-              `Vela.app` to `/Applications`. The app is ad-hoc signed. On first
-              launch, right-click -> Open, or run
-              `xattr -dr com.apple.quarantine /Applications/Vela.app`.
+            - macOS (universal: Apple Silicon + Intel): Developer ID signed and
+              notarized. Install from the DMG or extract the ZIP and move
+              `Vela.app` to `/Applications`.
             - Linux: extract and run `bin/vela`.
