@@ -684,6 +684,15 @@ pub fn decide_permission_from_settings(
     inputs: &[String],
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
+    decide_permission_from_settings_internal(tool_name, inputs, settings, true)
+}
+
+fn decide_permission_from_settings_internal(
+    tool_name: &str,
+    inputs: &[String],
+    settings: &AgentSettings,
+    apply_auto_mode_safety: bool,
+) -> ToolPermissionDecision {
     let permission_mode = settings.permission_mode;
     if permission_mode == AgentPermissionMode::Auto
         && tool_name == TerminalTool::NAME
@@ -713,7 +722,8 @@ pub fn decide_permission_from_settings(
             }
         },
         AgentPermissionMode::Auto
-            if decision == ToolPermissionDecision::Allow
+            if apply_auto_mode_safety
+                && decision == ToolPermissionDecision::Allow
                 && auto_mode_requires_confirmation(tool_name, inputs) =>
         {
             ToolPermissionDecision::Confirm
@@ -761,8 +771,22 @@ pub fn decide_permission_for_paths(
     raw_paths: &[String],
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
+    decide_permission_for_paths_internal(tool_name, raw_paths, settings, true)
+}
+
+fn decide_permission_for_paths_internal(
+    tool_name: &str,
+    raw_paths: &[String],
+    settings: &AgentSettings,
+    apply_auto_mode_safety: bool,
+) -> ToolPermissionDecision {
     let raw_inputs: Vec<String> = raw_paths.to_vec();
-    let raw_decision = decide_permission_from_settings(tool_name, &raw_inputs, settings);
+    let raw_decision = decide_permission_from_settings_internal(
+        tool_name,
+        &raw_inputs,
+        settings,
+        apply_auto_mode_safety,
+    );
 
     let normalized: Vec<String> = raw_paths.iter().map(|p| normalize_path(p)).collect();
     let any_changed = raw_paths
@@ -773,7 +797,12 @@ pub fn decide_permission_for_paths(
         return raw_decision;
     }
 
-    let normalized_decision = decide_permission_from_settings(tool_name, &normalized, settings);
+    let normalized_decision = decide_permission_from_settings_internal(
+        tool_name,
+        &normalized,
+        settings,
+        apply_auto_mode_safety,
+    );
 
     most_restrictive(raw_decision, normalized_decision)
 }
@@ -784,6 +813,14 @@ pub fn decide_permission_for_path(
     settings: &AgentSettings,
 ) -> ToolPermissionDecision {
     decide_permission_for_paths(tool_name, &[raw_path.to_string()], settings)
+}
+
+pub(crate) fn decide_permission_for_path_without_auto_mode_safety(
+    tool_name: &str,
+    raw_path: &str,
+    settings: &AgentSettings,
+) -> ToolPermissionDecision {
+    decide_permission_for_paths_internal(tool_name, &[raw_path.to_string()], settings, false)
 }
 
 pub fn most_restrictive(
@@ -1123,6 +1160,44 @@ mod tests {
                 "expected Auto mode to confirm {tool_name} for {input:?}"
             );
         }
+    }
+
+    #[test]
+    fn auto_mode_safety_bypass_preserves_delete_rules() {
+        let mut settings = settings_with_permission_mode(AgentPermissionMode::Auto);
+        settings.tool_permissions.tools.insert(
+            DeletePathTool::NAME.into(),
+            ToolRules {
+                always_confirm: vec![CompiledRegex::new(r"\.tmp$", false).unwrap()],
+                always_deny: vec![CompiledRegex::new(r"protected", false).unwrap()],
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            decide_permission_for_path_without_auto_mode_safety(
+                DeletePathTool::NAME,
+                "scratch.tmp",
+                &settings,
+            ),
+            ToolPermissionDecision::Confirm,
+        );
+        assert!(matches!(
+            decide_permission_for_path_without_auto_mode_safety(
+                DeletePathTool::NAME,
+                "protected.txt",
+                &settings,
+            ),
+            ToolPermissionDecision::Deny(_),
+        ));
+        assert_eq!(
+            decide_permission_for_path_without_auto_mode_safety(
+                DeletePathTool::NAME,
+                "generated.txt",
+                &settings,
+            ),
+            ToolPermissionDecision::Allow,
+        );
     }
 
     #[test]

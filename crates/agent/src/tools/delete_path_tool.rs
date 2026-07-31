@@ -2,6 +2,7 @@ use super::tool_permissions::{
     authorize_symlink_access, canonicalize_worktree_roots, detect_symlink_escape,
     resolve_global_skill_descendant_path, resolves_to_global_skills_dir, sensitive_settings_kind,
 };
+use crate::tool_permissions::decide_permission_for_path_without_auto_mode_safety;
 use crate::{
     AgentTool, ToolCallEventStream, ToolInput, ToolPermissionDecision,
     authorize_with_sensitive_settings, decide_permission_for_path,
@@ -85,9 +86,23 @@ impl AgentTool for DeletePathTool {
         cx.spawn(async move |cx| {
             let input = input.recv().await.map_err(|e| e.to_string())?;
             let path = input.path;
+            let project_path =
+                project.read_with(cx, |project, cx| project.find_project_path(&path, cx));
+            let is_agent_created_file = project_path.as_ref().is_some_and(|project_path| {
+                action_log.read_with(cx, |action_log, cx| {
+                    action_log.is_agent_created_file(project_path, cx)
+                })
+            });
 
             let decision = cx.update(|cx| {
-                decide_permission_for_path(Self::NAME, &path, AgentSettings::get_global(cx))
+                let settings = AgentSettings::get_global(cx);
+                if settings.permission_mode == settings::AgentPermissionMode::Auto
+                    && is_agent_created_file
+                {
+                    decide_permission_for_path_without_auto_mode_safety(Self::NAME, &path, settings)
+                } else {
+                    decide_permission_for_path(Self::NAME, &path, settings)
+                }
             });
 
             if let ToolPermissionDecision::Deny(reason) = decision {
@@ -192,7 +207,7 @@ impl AgentTool for DeletePathTool {
             }
 
             let (project_path, worktree_snapshot) = project.read_with(cx, |project, cx| {
-                let project_path = project.find_project_path(&path, cx).ok_or_else(|| {
+                let project_path = project_path.clone().ok_or_else(|| {
                     format!("Couldn't delete {path} because that path isn't in this project.")
                 })?;
                 let worktree = project
@@ -288,6 +303,141 @@ mod tests {
             settings.permission_mode = settings::AgentPermissionMode::Auto;
             AgentSettings::override_global(settings, cx);
         });
+    }
+
+    #[gpui::test]
+    async fn test_auto_mode_deletes_agent_created_file_without_authorization(
+        cx: &mut TestAppContext,
+    ) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        fs.insert_tree(path!("/root/project"), json!({})).await;
+        let project = Project::test(fs.clone(), [path!("/root/project").as_ref()], cx).await;
+        let action_log = cx.new(|_| ActionLog::new(project.clone()));
+        let project_path = project
+            .read_with(cx, |project, cx| {
+                project.find_project_path("project/scratch.tmp", cx)
+            })
+            .unwrap();
+        let buffer = project
+            .update(cx, |project, cx| project.open_buffer(project_path, cx))
+            .await
+            .unwrap();
+
+        cx.update(|cx| {
+            action_log.update(cx, |action_log, cx| {
+                action_log.buffer_created(buffer.clone(), cx)
+            });
+            buffer.update(cx, |buffer, cx| buffer.set_text("temporary", cx));
+            action_log.update(cx, |action_log, cx| {
+                action_log.buffer_edited(buffer.clone(), cx)
+            });
+        });
+        project
+            .update(cx, |project, cx| project.save_buffer(buffer, cx))
+            .await
+            .unwrap();
+        cx.run_until_parked();
+
+        let tool = Arc::new(DeletePathTool::new(project, action_log));
+        let (event_stream, mut event_rx) = ToolCallEventStream::test();
+        let result = cx
+            .update(|cx| {
+                tool.run(
+                    ToolInput::resolved(DeletePathToolInput {
+                        path: "project/scratch.tmp".into(),
+                    }),
+                    event_stream,
+                    cx,
+                )
+            })
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "agent-created file should be deleted: {result:?}"
+        );
+        assert!(
+            !fs.is_file(path!("/root/project/scratch.tmp").as_ref())
+                .await
+        );
+        assert!(
+            !matches!(
+                event_rx.try_recv(),
+                Ok(Ok(crate::ThreadEvent::ToolCallAuthorization(_)))
+            ),
+            "agent-created file should not require authorization in auto mode",
+        );
+    }
+
+    #[gpui::test]
+    async fn test_auto_mode_confirms_deleting_agent_overwrite(cx: &mut TestAppContext) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        fs.insert_tree(
+            path!("/root/project"),
+            json!({ "existing.txt": "original" }),
+        )
+        .await;
+        let project = Project::test(fs.clone(), [path!("/root/project").as_ref()], cx).await;
+        let action_log = cx.new(|_| ActionLog::new(project.clone()));
+        let project_path = project
+            .read_with(cx, |project, cx| {
+                project.find_project_path("project/existing.txt", cx)
+            })
+            .unwrap();
+        let buffer = project
+            .update(cx, |project, cx| project.open_buffer(project_path, cx))
+            .await
+            .unwrap();
+
+        cx.update(|cx| {
+            action_log.update(cx, |action_log, cx| {
+                action_log.buffer_created(buffer.clone(), cx)
+            });
+            buffer.update(cx, |buffer, cx| buffer.set_text("replacement", cx));
+            action_log.update(cx, |action_log, cx| {
+                action_log.buffer_edited(buffer.clone(), cx)
+            });
+        });
+        project
+            .update(cx, |project, cx| project.save_buffer(buffer, cx))
+            .await
+            .unwrap();
+        cx.run_until_parked();
+
+        let tool = Arc::new(DeletePathTool::new(project, action_log));
+        let (event_stream, mut event_rx) = ToolCallEventStream::test();
+        let task = cx.update(|cx| {
+            tool.run(
+                ToolInput::resolved(DeletePathToolInput {
+                    path: "project/existing.txt".into(),
+                }),
+                event_stream,
+                cx,
+            )
+        });
+
+        let authorization = event_rx.expect_authorization().await;
+        authorization
+            .response
+            .send(acp_thread::SelectedPermissionOutcome::new(
+                acp::PermissionOptionId::new("allow"),
+                acp::PermissionOptionKind::AllowOnce,
+            ))
+            .unwrap();
+        let result = task.await;
+
+        assert!(
+            result.is_ok(),
+            "file should be deleted after approval: {result:?}"
+        );
+        assert!(
+            !fs.is_file(path!("/root/project/existing.txt").as_ref())
+                .await
+        );
     }
 
     #[gpui::test]

@@ -85,6 +85,29 @@ impl ActionLog {
         &self.project
     }
 
+    pub fn is_agent_created_file(&self, project_path: &project::ProjectPath, cx: &App) -> bool {
+        self.tracked_buffers.values().any(|tracked_buffer| {
+            let TrackedBufferStatus::Created {
+                existing_file_content: None,
+            } = &tracked_buffer.status
+            else {
+                return false;
+            };
+
+            let buffer = tracked_buffer.buffer.read(cx);
+            if tracked_buffer.version != buffer.version()
+                || tracked_buffer.snapshot.text() != buffer.text()
+            {
+                return false;
+            }
+
+            buffer.file().is_some_and(|file| {
+                file.worktree_id(cx) == project_path.worktree_id
+                    && file.path().as_ref() == project_path.path.as_ref()
+            })
+        })
+    }
+
     pub fn file_read_time(&self, path: &Path) -> Option<MTime> {
         self.file_read_times.get(path).copied()
     }
