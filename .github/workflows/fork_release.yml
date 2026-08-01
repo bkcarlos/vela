@@ -42,6 +42,8 @@ jobs:
             arch_suffix: x86_64
     steps:
       - uses: actions/checkout@v4
+      - name: Configure stable release channel
+        run: printf 'stable\n' > crates/vela/RELEASE_CHANNEL
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
@@ -258,6 +260,8 @@ jobs:
       CXX: clang++
     steps:
       - uses: actions/checkout@v4
+      - name: Configure stable release channel
+        run: printf 'stable\n' > crates/vela/RELEASE_CHANNEL
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
