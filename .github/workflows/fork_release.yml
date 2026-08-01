@@ -303,8 +303,12 @@ jobs:
         architecture: [x86_64, aarch64]
     env:
       CARGO_INCREMENTAL: 0
+      CARGO_HOME: C:\c
     steps:
       - uses: actions/checkout@v4
+      - name: Enable long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
       - name: Configure stable release channel
         shell: pwsh
         run: Set-Content -Path crates/vela/RELEASE_CHANNEL -Value stable
