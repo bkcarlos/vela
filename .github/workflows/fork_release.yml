@@ -2,6 +2,7 @@
 #   - macOS universal (arm64 + x86_64, lipo-merged): Developer ID signed and
 #     notarized release app in both ZIP and DMG formats
 #   - Linux x86_64: release .tar.gz
+#   - Windows x86_64 + ARM64: release installers and remote server archives
 #
 # Triggers on version tags (e.g. v1.15.2) or manual dispatch, and uploads both
 # workflow artifacts and (for tags) a GitHub Release.
@@ -293,9 +294,55 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build_windows:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x86_64, aarch64]
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure stable release channel
+        shell: pwsh
+        run: Set-Content -Path crates/vela/RELEASE_CHANNEL -Value stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.architecture }}-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-windows-${{ matrix.architecture }}
+          cache-on-failure: true
+      - name: Build Windows installer
+        shell: pwsh
+        run: script/bundle-windows.ps1 -Architecture ${{ matrix.architecture }}
+      - name: Add checksums
+        shell: pwsh
+        run: |
+          $installer = "target/Vela-${{ matrix.architecture }}.exe"
+          $remoteServer = "target/vela-remote-server-windows-${{ matrix.architecture }}.zip"
+          (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant() |
+            Set-Content "$installer.sha256"
+          (Get-FileHash -Algorithm SHA256 $remoteServer).Hash.ToLowerInvariant() |
+            Set-Content "$remoteServer.sha256"
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vela-windows-${{ matrix.architecture }}
+          path: |
+            target/Vela-${{ matrix.architecture }}.exe
+            target/Vela-${{ matrix.architecture }}.exe.sha256
+            target/vela-remote-server-windows-${{ matrix.architecture }}.zip
+            target/vela-remote-server-windows-${{ matrix.architecture }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   publish_release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build_macos_universal, build_linux]
+    needs: [build_macos_universal, build_linux, build_windows]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -322,6 +369,14 @@ jobs:
             artifacts/vela-linux-x86_64-tar-gz/vela-linux-x86_64.tar.gz.sha256
             artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz
             artifacts/vela-linux-x86_64-tar-gz/vela-remote-server-linux-x86_64.gz.sha256
+            artifacts/vela-windows-x86_64/Vela-x86_64.exe
+            artifacts/vela-windows-x86_64/Vela-x86_64.exe.sha256
+            artifacts/vela-windows-x86_64/vela-remote-server-windows-x86_64.zip
+            artifacts/vela-windows-x86_64/vela-remote-server-windows-x86_64.zip.sha256
+            artifacts/vela-windows-aarch64/Vela-aarch64.exe
+            artifacts/vela-windows-aarch64/Vela-aarch64.exe.sha256
+            artifacts/vela-windows-aarch64/vela-remote-server-windows-aarch64.zip
+            artifacts/vela-windows-aarch64/vela-remote-server-windows-aarch64.zip.sha256
           body: |
             Personal fork build.
 
@@ -329,3 +384,5 @@ jobs:
               notarized. Install from the DMG or extract the ZIP and move
               `Vela.app` to `/Applications`.
             - Linux: extract and run `bin/vela`.
+            - Windows (x86_64 and ARM64): run the matching `.exe` installer.
+              Windows artifacts are not code signed.
