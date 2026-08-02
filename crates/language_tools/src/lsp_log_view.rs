@@ -2,8 +2,9 @@ use collections::VecDeque;
 use edit_prediction::EditPredictionStore;
 use editor::{Editor, EditorEvent, MultiBufferOffset, actions::MoveToEnd, scroll::Autoscroll};
 use gpui::{
-    Anchor, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Subscription, Task, WeakEntity, Window, actions, div,
+    Action, Anchor, App, AsyncWindowContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    Global, IntoElement, ParentElement, Pixels, Render, Styled, Subscription, Task, WeakEntity,
+    Window, actions, div, px,
 };
 use itertools::Itertools as _;
 use language::{LanguageServerId, language_settings::SoftWrap};
@@ -23,11 +24,121 @@ use ui::{Checkbox, ContextMenu, PopoverMenu, ToggleState, prelude::*};
 use util::ResultExt as _;
 use workspace::{
     SplitDirection, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, Workspace, WorkspaceId,
+    dock::{DockPosition, Panel, PanelEvent},
     item::{Item, ItemHandle},
     searchable::{Direction, SearchEvent, SearchToken, SearchableItem, SearchableItemHandle},
 };
 
 use crate::get_or_create_tool;
+
+struct GlobalLogStore(Entity<LogStore>);
+impl Global for GlobalLogStore {}
+
+pub struct LspLogPanel {
+    log_view: Entity<LspLogView>,
+    toolbar: Entity<LspLogToolbarItemView>,
+}
+
+impl LspLogPanel {
+    pub fn load(
+        workspace: WeakEntity<Workspace>,
+        cx: &mut AsyncWindowContext,
+    ) -> Task<anyhow::Result<Entity<Self>>> {
+        cx.spawn(async move |cx| {
+            workspace.update_in(cx, |workspace, window, cx| {
+                let project = workspace.project().clone();
+                let log_store = cx.global::<GlobalLogStore>().0.clone();
+                let log_view = cx.new(|cx| LspLogView::new(project, log_store, window, cx));
+                let toolbar = cx.new({
+                    let log_view = log_view.clone();
+                    move |cx| LspLogToolbarItemView {
+                        log_view: Some(log_view.clone()),
+                        _log_view_subscription: Some(cx.observe(&log_view, |_, _, cx| {
+                            cx.notify();
+                        })),
+                    }
+                });
+                let panel = cx.new(|_| Self { log_view, toolbar });
+                workspace.register_action(Self::deploy);
+                panel
+            })
+        })
+    }
+
+    fn deploy(
+        workspace: &mut Workspace,
+        _: &OpenLanguageServerLogs,
+        window: &mut Window,
+        cx: &mut Context<Workspace>,
+    ) {
+        if !workspace.toggle_panel_focus::<Self>(window, cx) {
+            workspace.close_panel::<Self>(window, cx);
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for LspLogPanel {}
+
+impl Focusable for LspLogPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.log_view.focus_handle(cx)
+    }
+}
+
+impl Panel for LspLogPanel {
+    fn persistent_name() -> &'static str {
+        "LspLogPanel"
+    }
+
+    fn panel_key() -> &'static str {
+        "LspLogPanel"
+    }
+
+    fn position(&self, _window: &Window, _cx: &App) -> DockPosition {
+        DockPosition::Bottom
+    }
+
+    fn position_is_valid(&self, position: DockPosition) -> bool {
+        position == DockPosition::Bottom
+    }
+
+    fn set_position(
+        &mut self,
+        _position: DockPosition,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
+    fn default_size(&self, _window: &Window, _cx: &App) -> Pixels {
+        px(300.)
+    }
+
+    fn icon(&self, _window: &Window, _cx: &App) -> Option<IconName> {
+        Some(IconName::FileCode)
+    }
+
+    fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {
+        Some("Language Server Logs")
+    }
+
+    fn toggle_action(&self) -> Box<dyn Action> {
+        Box::new(OpenLanguageServerLogs)
+    }
+
+    fn activation_priority(&self) -> u32 {
+        7
+    }
+}
+
+impl Render for LspLogPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .size_full()
+            .child(div().flex_none().child(self.toolbar.clone()))
+            .child(div().flex_1().min_h_0().child(self.log_view.clone()))
+    }
+}
 
 pub fn open(
     log_store: &Entity<LogStore>,
@@ -43,34 +154,37 @@ pub fn open(
             };
             workspace
                 .update_in(cx, |workspace, window, cx| {
-                    let project = workspace.project().clone();
-                    let tool_log_store = log_store.clone();
-                    let log_view = get_or_create_tool(
-                        workspace,
-                        SplitDirection::Right,
-                        window,
-                        cx,
-                        move |window, cx| LspLogView::new(project, tool_log_store, window, cx),
-                    );
-                    log_view.update(cx, |log_view, cx| {
-                        let server_id = match server {
-                            LanguageServerSelector::Id(id) => Some(id),
-                            LanguageServerSelector::Name(name) => {
-                                log_store.read(cx).language_servers.iter().find_map(
-                                    |(id, state)| {
-                                        if state.name.as_ref() == Some(&name) {
-                                            Some(*id)
-                                        } else {
-                                            None
-                                        }
-                                    },
-                                )
-                            }
-                        };
-                        if let Some(server_id) = server_id {
+                    let server_id = match server {
+                        LanguageServerSelector::Id(id) => Some(id),
+                        LanguageServerSelector::Name(name) => log_store
+                            .read(cx)
+                            .language_servers
+                            .iter()
+                            .find_map(|(id, state)| {
+                                (state.name.as_ref() == Some(&name)).then_some(*id)
+                            }),
+                    };
+                    let log_view = if let Some(panel) = workspace.panel::<LspLogPanel>(cx) {
+                        workspace.reveal_panel::<LspLogPanel>(window, cx);
+                        let log_view = panel.read(cx).log_view.clone();
+                        log_view.focus_handle(cx).focus(window, cx);
+                        log_view
+                    } else {
+                        let project = workspace.project().clone();
+                        let tool_log_store = log_store.clone();
+                        get_or_create_tool(
+                            workspace,
+                            SplitDirection::Right,
+                            window,
+                            cx,
+                            move |window, cx| LspLogView::new(project, tool_log_store, window, cx),
+                        )
+                    };
+                    if let Some(server_id) = server_id {
+                        log_view.update(cx, |log_view, cx| {
                             log_view.show_logs_for_server(server_id, window, cx);
-                        }
-                    });
+                        });
+                    }
                 })
                 .ok();
         })
@@ -115,6 +229,7 @@ actions!(
 
 pub fn init(on_headless_host: bool, cx: &mut App) {
     let log_store = log_store::init(on_headless_host, cx);
+    cx.set_global(GlobalLogStore(log_store.clone()));
 
     cx.observe_new(move |workspace: &mut Workspace, _, cx| {
         log_store.update(cx, |store, cx| {
@@ -123,15 +238,22 @@ pub fn init(on_headless_host: bool, cx: &mut App) {
 
         let log_store = log_store.clone();
         workspace.register_action(move |workspace, _: &OpenLanguageServerLogs, window, cx| {
-            let log_store = log_store.clone();
-            let project = workspace.project().clone();
-            get_or_create_tool(
-                workspace,
-                SplitDirection::Right,
-                window,
-                cx,
-                move |window, cx| LspLogView::new(project, log_store, window, cx),
-            );
+            if workspace.panel::<LspLogPanel>(cx).is_some() {
+                workspace.reveal_panel::<LspLogPanel>(window, cx);
+                if let Some(panel) = workspace.panel::<LspLogPanel>(cx) {
+                    panel.focus_handle(cx).focus(window, cx);
+                }
+            } else {
+                let log_store = log_store.clone();
+                let project = workspace.project().clone();
+                get_or_create_tool(
+                    workspace,
+                    SplitDirection::Right,
+                    window,
+                    cx,
+                    move |window, cx| LspLogView::new(project, log_store, window, cx),
+                );
+            }
         });
     })
     .detach();
