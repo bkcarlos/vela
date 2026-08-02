@@ -24,9 +24,9 @@ use editor::{
 };
 use futures::{FutureExt as _, future::join_all};
 use gpui::{
-    AppContext, ClipboardEntry, ClipboardItem, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, Image, ImageFormat, KeyContext, SharedString, Subscription, Task, TaskExt,
-    TextStyle, WeakEntity,
+    AppContext, ClipboardEntry, ClipboardItem, Context, Entity, EventEmitter, ExternalPaths,
+    FocusHandle, Focusable, Image, ImageFormat, KeyContext, SharedString, Subscription, Task,
+    TaskExt, TextStyle, WeakEntity,
 };
 use language::{Buffer, language_settings::InlayHintKind};
 use parking_lot::RwLock;
@@ -36,7 +36,7 @@ use project::{
 };
 use rope::Point;
 use settings::Settings;
-use std::{cmp::min, fmt::Write, ops::Range, rc::Rc, sync::Arc};
+use std::{cmp::min, fmt::Write, ops::Range, path::PathBuf, rc::Rc, sync::Arc};
 use text::LineEnding;
 use theme_settings::ThemeSettings;
 use ui::{ContextMenu, prelude::*};
@@ -309,6 +309,15 @@ fn insert_mention_for_project_path(
 enum ResolvedPastedContextItem {
     Image(gpui::Image, gpui::SharedString),
     ProjectPath(ProjectPath),
+    LocalFile(LocalFileContext),
+}
+
+struct LocalFileContext {
+    path: PathBuf,
+    content: String,
+    included_end_line: usize,
+    total_lines: usize,
+    is_truncated: bool,
 }
 
 async fn resolve_pasted_context_items(
@@ -354,21 +363,35 @@ async fn resolve_pasted_context_items(
                         continue;
                     }
 
-                    if !project_is_local {
-                        continue;
-                    }
+                    if project_is_local {
+                        let path = path.clone();
+                        let Ok(resolve_task) = cx.update({
+                            let project = project.clone();
+                            move |_, cx| Workspace::project_path_for_path(project, &path, false, cx)
+                        }) else {
+                            continue;
+                        };
 
-                    let path = path.clone();
-                    let Ok(resolve_task) = cx.update({
-                        let project = project.clone();
-                        move |_, cx| Workspace::project_path_for_path(project, &path, false, cx)
-                    }) else {
-                        continue;
-                    };
-
-                    if let Some((worktree, project_path)) = resolve_task.await.log_err() {
-                        added_worktrees.push(worktree);
-                        items.push(ResolvedPastedContextItem::ProjectPath(project_path));
+                        if let Some((worktree, project_path)) = resolve_task.await.log_err() {
+                            added_worktrees.push(worktree);
+                            items.push(ResolvedPastedContextItem::ProjectPath(project_path));
+                        }
+                    } else {
+                        let local_fs = match cx.update(|_, cx| <dyn fs::Fs>::global(cx)) {
+                            Ok(local_fs) => local_fs,
+                            Err(error) => {
+                                log::error!("failed to access local filesystem: {error:#}");
+                                continue;
+                            }
+                        };
+                        match local_fs.load(path).await {
+                            Ok(content) => items.push(ResolvedPastedContextItem::LocalFile(
+                                local_file_context(path.clone(), content),
+                            )),
+                            Err(error) => {
+                                log::error!("failed to read dropped file {path:?}: {error:#}");
+                            }
+                        }
                     }
                 }
             }
@@ -376,6 +399,41 @@ async fn resolve_pasted_context_items(
     }
 
     (items, added_worktrees)
+}
+
+const LOCAL_FILE_PREVIEW_SIZE: usize = 1024;
+
+fn text_line_count(content: &str) -> usize {
+    (content.bytes().filter(|byte| *byte == b'\n').count() + usize::from(!content.ends_with('\n')))
+        .max(1)
+}
+
+fn local_file_context(path: PathBuf, content: String) -> LocalFileContext {
+    let total_lines = text_line_count(&content);
+    let is_truncated = content.len() > LOCAL_FILE_PREVIEW_SIZE;
+    let content = if is_truncated {
+        let mut end = content.len().min(LOCAL_FILE_PREVIEW_SIZE);
+        while !content.is_char_boundary(end) {
+            end -= 1;
+        }
+        content[..end].to_owned()
+    } else {
+        content
+    };
+    let included_end_line = text_line_count(&content);
+    let content = format!(
+        "# Local file: {}\n# Included lines: 1-{included_end_line} of {total_lines}{}\n\n{content}",
+        path.display(),
+        if is_truncated { " (truncated)" } else { "" }
+    );
+
+    LocalFileContext {
+        path,
+        content,
+        included_end_line,
+        total_lines,
+        is_truncated,
+    }
 }
 
 fn insert_project_path_as_context(
@@ -405,6 +463,79 @@ fn insert_project_path_as_context(
     .flatten()
 }
 
+fn insert_local_file_as_context(
+    local_file: LocalFileContext,
+    editor: Entity<Editor>,
+    mention_set: Entity<MentionSet>,
+    workspace: WeakEntity<Workspace>,
+    cx: &mut gpui::AsyncWindowContext,
+) -> Option<()> {
+    let workspace = workspace.upgrade()?;
+    cx.update(move |window, cx| {
+        let file_name = local_file
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| local_file.path.display().to_string());
+        let crease_label = format!(
+            "{file_name} · lines 1-{} of {}{}",
+            local_file.included_end_line,
+            local_file.total_lines,
+            if local_file.is_truncated {
+                " · truncated"
+            } else {
+                ""
+            }
+        );
+        let mention_uri = MentionUri::File {
+            abs_path: local_file.path,
+        };
+        let mention_text = mention_uri.as_link().to_string();
+        let content_len = mention_text.len();
+        let text_anchor = editor.update(cx, |editor, cx| {
+            let snapshot = editor.buffer().read(cx).snapshot(cx);
+            let buffer_snapshot = snapshot.as_singleton()?;
+            let text_anchor = snapshot
+                .anchor_to_buffer_anchor(editor.selections.newest_anchor().start)?
+                .0
+                .bias_left(&buffer_snapshot);
+            editor.insert(&mention_text, window, cx);
+            editor.insert(" ", window, cx);
+            Some(text_anchor)
+        })?;
+        let (crease_id, sender, crease_entity) = insert_crease_for_mention(
+            text_anchor,
+            content_len,
+            crease_label.into(),
+            mention_uri.icon_path(cx),
+            mention_uri.tooltip_text(),
+            Some(mention_uri.clone()),
+            Some(workspace.downgrade()),
+            None,
+            editor,
+            window,
+            cx,
+        )?;
+        drop(sender);
+        mention_set.update(cx, |mention_set, cx| {
+            mention_set.insert_mention(
+                crease_id,
+                mention_uri,
+                Task::ready(Ok(Mention::Text {
+                    content: local_file.content,
+                    tracked_buffers: Vec::new(),
+                }))
+                .shared(),
+                crease_entity,
+                cx,
+            );
+        });
+        Some(())
+    })
+    .ok()
+    .flatten()
+}
+
 async fn insert_resolved_pasted_context_items(
     items: Vec<ResolvedPastedContextItem>,
     added_worktrees: Vec<Entity<Worktree>>,
@@ -415,6 +546,7 @@ async fn insert_resolved_pasted_context_items(
     cx: &mut gpui::AsyncWindowContext,
 ) {
     let mut path_mention_tasks = Vec::new();
+    let mut local_file_summaries = Vec::new();
 
     for item in items {
         match item {
@@ -440,11 +572,61 @@ async fn insert_resolved_pasted_context_items(
                     path_mention_tasks.push(task);
                 }
             }
+            ResolvedPastedContextItem::LocalFile(local_file) => {
+                let summary = format!(
+                    "{}: lines 1-{} of {}{}",
+                    local_file.path.display(),
+                    local_file.included_end_line,
+                    local_file.total_lines,
+                    if local_file.is_truncated {
+                        " (truncated)"
+                    } else {
+                        ""
+                    }
+                );
+                if insert_local_file_as_context(
+                    local_file,
+                    editor.clone(),
+                    mention_set.clone(),
+                    workspace.clone(),
+                    cx,
+                )
+                .is_some()
+                {
+                    local_file_summaries.push(summary);
+                }
+            }
         }
     }
 
     join_all(path_mention_tasks).await;
     drop(added_worktrees);
+
+    if !local_file_summaries.is_empty() {
+        let message = format!(
+            "Loaded {} local file(s):\n{}",
+            local_file_summaries.len(),
+            local_file_summaries.join("\n")
+        );
+        cx.update(|_, cx| {
+            if let Some(workspace) = workspace.upgrade() {
+                workspace.update(cx, |workspace, cx| {
+                    struct LocalFilesLoadedToast;
+                    workspace.show_toast(
+                        workspace::Toast::new(
+                            workspace::notifications::NotificationId::unique::<
+                                LocalFilesLoadedToast,
+                            >(),
+                            message,
+                        )
+                        .autohide(),
+                        cx,
+                    );
+                });
+            }
+        })
+        .log_err();
+    }
 }
 
 impl MessageEditor {
@@ -1367,7 +1549,13 @@ impl MessageEditor {
         let project = workspace.read(cx).project().clone();
         let project_is_local = project.read(cx).is_local();
         let supports_images = self.session_capabilities.read().supports_images();
-        if !project_is_local && !supports_images {
+        if !project_is_local
+            && !supports_images
+            && !clipboard
+                .entries()
+                .iter()
+                .any(|entry| matches!(entry, ClipboardEntry::ExternalPaths(_)))
+        {
             return false;
         }
         let editor = self.editor.clone();
@@ -1400,6 +1588,46 @@ impl MessageEditor {
             .detach_and_log_err(cx);
 
         true
+    }
+
+    pub fn insert_local_files_as_context(
+        &mut self,
+        paths: ExternalPaths,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(workspace) = self.workspace.upgrade() else {
+            return;
+        };
+        let project = workspace.read(cx).project().clone();
+        let supports_images = self.session_capabilities.read().supports_images();
+        let editor = self.editor.clone();
+        let mention_set = self.mention_set.clone();
+        let workspace = self.workspace.clone();
+
+        window
+            .spawn(cx, async move |mut cx| {
+                let (items, added_worktrees) = resolve_pasted_context_items(
+                    project,
+                    false,
+                    supports_images,
+                    vec![ClipboardEntry::ExternalPaths(paths)],
+                    &mut cx,
+                )
+                .await;
+                insert_resolved_pasted_context_items(
+                    items,
+                    added_worktrees,
+                    editor,
+                    mention_set,
+                    workspace,
+                    supports_images,
+                    &mut cx,
+                )
+                .await;
+                Ok::<(), anyhow::Error>(())
+            })
+            .detach_and_log_err(cx);
     }
 
     pub fn insert_dragged_files(
@@ -5223,6 +5451,47 @@ mod tests {
                 format!("Hello [@file.txt]({expected_uri}) world")
             );
         });
+    }
+
+    #[gpui::test]
+    async fn test_local_file_inserts_as_context_for_remote_project(cx: &mut TestAppContext) {
+        init_test(cx);
+        let (message_editor, _editor, mut cx) =
+            setup_paste_test_message_editor(json!({"file.txt": "local content"}), cx).await;
+
+        message_editor.update_in(&mut cx, |message_editor, window, cx| {
+            message_editor.insert_local_files_as_context(
+                ExternalPaths(vec![PathBuf::from(path!("/project/file.txt"))].into()),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+
+        let contents = mention_contents(&message_editor, &mut cx).await;
+        let [
+            (
+                uri,
+                Mention::Text {
+                    content,
+                    tracked_buffers,
+                },
+            ),
+        ] = contents.as_slice()
+        else {
+            panic!("Unexpected mentions: {contents:?}");
+        };
+        assert_eq!(
+            uri,
+            &MentionUri::File {
+                abs_path: path!("/project/file.txt").into(),
+            }
+        );
+        assert_eq!(
+            content,
+            "# Local file: /project/file.txt\n# Included lines: 1-1 of 1\n\nlocal content"
+        );
+        assert!(tracked_buffers.is_empty());
     }
 
     #[gpui::test]

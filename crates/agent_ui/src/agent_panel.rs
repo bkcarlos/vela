@@ -6200,7 +6200,8 @@ impl AgentPanel {
     }
 
     fn render_drag_target(&self, cx: &Context<Self>) -> Div {
-        let is_local = self.project.read(cx).is_local();
+        let accepts_external_paths = self.project.read(cx).is_local()
+            || matches!(self.base_view, BaseView::AgentThread { .. });
         div()
             .invisible()
             .absolute()
@@ -6211,7 +6212,7 @@ impl AgentPanel {
             .bg(cx.theme().colors().drop_target_background)
             .drag_over::<DraggedTab>(|this, _, _, _| this.visible())
             .drag_over::<DraggedSelection>(|this, _, _, _| this.visible())
-            .when(is_local, |this| {
+            .when(accepts_external_paths, |this| {
                 this.drag_over::<ExternalPaths>(|this, _, _, _| this.visible())
             })
             .on_drop(cx.listener(move |this, tab: &DraggedTab, window, cx| {
@@ -6254,6 +6255,13 @@ impl AgentPanel {
             return;
         };
         let conversation_view = conversation_view.clone();
+        if !self.project.read(cx).is_local() {
+            conversation_view.update(cx, |conversation_view, cx| {
+                conversation_view.insert_local_files_as_context(paths.clone(), window, cx);
+            });
+            return;
+        }
+
         let tasks = paths
             .paths()
             .iter()
