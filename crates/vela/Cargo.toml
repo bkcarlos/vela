@@ -2,7 +2,7 @@
 description = "The fast, collaborative code editor."
 edition.workspace = true
 name = "vela"
-version = "1.16.8"
+version = "1.16.9"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Vela Team <hi@vela.dev>"]
