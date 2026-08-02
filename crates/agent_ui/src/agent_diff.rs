@@ -135,7 +135,7 @@ impl AgentDiffPane {
             .read(cx)
             .action_log()
             .read(cx)
-            .changed_buffers(cx);
+            .changed_git_tracked_buffers(cx);
 
         // Sort edited files alphabetically for consistency with Git diff view
         let mut sorted_buffers: Vec<_> = changed_buffers.collect();
@@ -1596,7 +1596,10 @@ impl AgentDiff {
         };
 
         let action_log = thread.read(cx).action_log();
-        let changed_buffers = action_log.read(cx).changed_buffers(cx).collect::<Vec<_>>();
+        let changed_buffers = action_log
+            .read(cx)
+            .changed_git_tracked_buffers(cx)
+            .collect::<Vec<_>>();
 
         let mut unaffected = self.reviewing_editors.clone();
 
@@ -1827,7 +1830,11 @@ impl AgentDiff {
         if matches!(review_result, PostReviewState::AllReviewed)
             && let Some(curr_buffer) = editor.read(cx).buffer().read(cx).as_singleton()
         {
-            let changed_buffers = thread.read(cx).action_log().read(cx).changed_buffers(cx);
+            let changed_buffers = thread
+                .read(cx)
+                .action_log()
+                .read(cx)
+                .changed_git_tracked_buffers(cx);
 
             let mut keys = changed_buffers.map(|(buffer, _)| buffer);
             keys.find(|k| *k == curr_buffer);

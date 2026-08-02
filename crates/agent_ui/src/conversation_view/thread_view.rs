@@ -2865,7 +2865,11 @@ impl ThreadView {
         let thread = &self.thread;
         let telemetry = ActionLogTelemetry::from(thread.read(cx));
         let action_log = thread.read(cx).action_log().clone();
-        let has_changes = action_log.read(cx).changed_buffers(cx).next().is_some();
+        let has_changes = action_log
+            .read(cx)
+            .changed_git_tracked_buffers(cx)
+            .next()
+            .is_some();
 
         action_log
             .update(cx, |action_log, cx| {
@@ -3043,7 +3047,10 @@ impl ThreadView {
         let thread = self.thread.read(cx);
         let action_log = thread.action_log();
         let telemetry = ActionLogTelemetry::from(thread);
-        let changed_buffers = action_log.read(cx).changed_buffers(cx).collect::<Vec<_>>();
+        let changed_buffers = action_log
+            .read(cx)
+            .changed_git_tracked_buffers(cx)
+            .collect::<Vec<_>>();
         let plan = thread.plan();
         let queue_is_empty = !self.has_queued_messages();
 
@@ -10548,7 +10555,11 @@ impl ThreadView {
             .map(|thread| thread.read(cx).session_id().clone());
         let action_log = thread.as_ref().map(|thread| thread.read(cx).action_log());
         let changed_buffers = action_log
-            .map(|log| log.read(cx).changed_buffers(cx).collect::<Vec<_>>())
+            .map(|log| {
+                log.read(cx)
+                    .changed_git_tracked_buffers(cx)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
 
         let is_pending_tool_call = thread_view

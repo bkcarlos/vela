@@ -7,7 +7,7 @@ use futures::{FutureExt, StreamExt, channel::mpsc};
 use gpui::{
     App, AppContext, AsyncApp, Context, Entity, SharedString, Subscription, Task, WeakEntity,
 };
-use language::{Anchor, Buffer, BufferEvent, Point, ToOffset, ToPoint};
+use language::{Anchor, Buffer, BufferEvent, DiskState, Point, ToOffset, ToPoint};
 use project::{Project, ProjectItem, lsp_store::OpenLspBufferHandle};
 use std::{
     cmp,
@@ -1040,6 +1040,38 @@ impl ActionLog {
             .iter()
             .filter(|(_, tracked)| tracked.has_edits(cx))
             .map(|(buffer, tracked)| (buffer.clone(), tracked.diff.clone()))
+    }
+
+    /// Returns changed buffers for files tracked by a Git repository.
+    pub fn changed_git_tracked_buffers(
+        &self,
+        cx: &App,
+    ) -> impl Iterator<Item = (Entity<Buffer>, Entity<BufferDiff>)> {
+        self.changed_buffers(cx)
+            .filter(|(buffer, _)| self.buffer_is_git_tracked(buffer, cx))
+    }
+
+    fn buffer_is_git_tracked(&self, buffer: &Entity<Buffer>, cx: &App) -> bool {
+        let buffer = buffer.read(cx);
+        let Some(file) = buffer.file() else {
+            return false;
+        };
+        if file.disk_state() == DiskState::New {
+            return false;
+        }
+        let buffer_id = buffer.remote_id();
+        let project = self.project.read(cx);
+        let git_store = project.git_store().read(cx);
+        if git_store
+            .repository_and_path_for_buffer_id(buffer_id, cx)
+            .is_none()
+        {
+            return false;
+        }
+
+        !git_store
+            .status_for_buffer_id(buffer_id, cx)
+            .is_some_and(|status| status.is_untracked() || status.is_ignored())
     }
 
     /// Returns the total number of lines added and removed across all unreviewed buffers.
@@ -3285,6 +3317,69 @@ mod tests {
             parent_changed.contains(&buffer_a) && parent_changed.contains(&buffer_b),
             "parent should contain both buffer_a and buffer_b"
         );
+    }
+
+    #[gpui::test]
+    async fn test_changed_git_tracked_buffers_excludes_untracked_files(cx: &mut TestAppContext) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        fs.insert_tree(
+            path!("/project"),
+            json!({
+                ".git": {},
+                "tracked.txt": "tracked",
+                "untracked.txt": "untracked",
+            }),
+        )
+        .await;
+        fs.set_head_for_repo(
+            path!("/project/.git").as_ref(),
+            &[("tracked.txt", "tracked".into())],
+            "0000000",
+        );
+        let project = Project::test(fs, [path!("/project").as_ref()], cx).await;
+        cx.run_until_parked();
+
+        let tracked_path = project
+            .read_with(cx, |project, cx| {
+                project.find_project_path("project/tracked.txt", cx)
+            })
+            .unwrap();
+        let untracked_path = project
+            .read_with(cx, |project, cx| {
+                project.find_project_path("project/untracked.txt", cx)
+            })
+            .unwrap();
+        let tracked_buffer = project
+            .update(cx, |project, cx| project.open_buffer(tracked_path, cx))
+            .await
+            .unwrap();
+        let untracked_buffer = project
+            .update(cx, |project, cx| project.open_buffer(untracked_path, cx))
+            .await
+            .unwrap();
+        let action_log = cx.new(|_| ActionLog::new(project));
+
+        cx.update(|cx| {
+            for buffer in [&tracked_buffer, &untracked_buffer] {
+                action_log.update(cx, |log, cx| log.buffer_read(buffer.clone(), cx));
+                buffer.update(cx, |buffer, cx| {
+                    buffer.edit([(0..0, "changed ")], None, cx).unwrap();
+                });
+                action_log.update(cx, |log, cx| log.buffer_edited(buffer.clone(), cx));
+            }
+        });
+        cx.run_until_parked();
+
+        let changed_buffers = cx.read(|cx| {
+            action_log
+                .read(cx)
+                .changed_git_tracked_buffers(cx)
+                .map(|(buffer, _)| buffer)
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(changed_buffers, vec![tracked_buffer]);
     }
 
     #[gpui::test]
