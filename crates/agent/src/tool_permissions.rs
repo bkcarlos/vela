@@ -464,7 +464,7 @@ fn auto_mode_requires_confirmation(tool_name: &str, inputs: &[String]) -> bool {
     // trust in a specific MCP server via `always_allow` instead of being
     // prompted for every call.
     if tool_name == "delete_path" {
-        return true;
+        return inputs.iter().any(|path| !is_temporary_path(path));
     }
 
     if tool_name == TerminalTool::NAME
@@ -512,7 +512,7 @@ fn auto_mode_terminal_command_requires_confirmation(command: &str) -> bool {
         .any(|token| matches!(*token, "rm" | "rmdir" | "remove-item"))
         && (has_flag(&tokens, 'r', "--recursive") || tokens.contains(&"-recurse")))
         || (tokens.iter().any(|token| matches!(*token, "rd" | "del")) && tokens.contains(&"/s"));
-    if recursive_delete {
+    if recursive_delete && recursive_delete_has_non_temporary_target(&command) {
         return true;
     }
 
@@ -621,6 +621,57 @@ fn auto_mode_terminal_command_requires_confirmation(command: &str) -> bool {
         && [".env", ".pem", ".key", "credential", "secret", "token"]
             .iter()
             .any(|marker| command.contains(marker))
+}
+
+fn recursive_delete_has_non_temporary_target(command: &str) -> bool {
+    let command = command.replace('\\', "/");
+    let Some(commands) = extract_commands(&command) else {
+        return true;
+    };
+
+    for command in commands {
+        let tokens = command_tokens(&command);
+        let Some(command_index) = tokens.iter().position(|token| {
+            matches!(
+                token.to_ascii_lowercase().as_str(),
+                "rm" | "rmdir" | "remove-item" | "rd" | "del"
+            )
+        }) else {
+            continue;
+        };
+        let targets = tokens[command_index + 1..]
+            .iter()
+            .filter(|token| {
+                !token.starts_with('-')
+                    && !matches!(token.to_ascii_lowercase().as_str(), "/s" | "/q" | "/f")
+                    && **token != "--"
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        if targets.is_empty() || targets.iter().any(|target| !is_temporary_path(target)) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn is_temporary_path(path: &str) -> bool {
+    let normalized = normalize_path(&path.replace('\\', "/")).to_ascii_lowercase();
+    normalized.split('/').any(|component| {
+        matches!(component, "tmp" | "temp" | ".tmp" | ".temp")
+            || component.starts_with("vela-agent-terminal-")
+            || component.starts_with("tmp-")
+            || component.starts_with("temp-")
+            || component.starts_with(".tmp-")
+            || component.starts_with(".temp-")
+            || component.ends_with("-tmp")
+            || component.ends_with("-temp")
+            || component.ends_with("_tmp")
+            || component.ends_with("_temp")
+            || component.ends_with(".tmp")
+            || component.ends_with(".temp")
+    })
 }
 
 fn command_tokens(command: &str) -> Vec<&str> {
@@ -798,7 +849,14 @@ fn decide_permission_from_settings_internal(
                 && decision == ToolPermissionDecision::Allow
                 && auto_mode_requires_confirmation(tool_name, inputs) =>
         {
-            ToolPermissionDecision::Confirm
+            match decide_permission_from_explicit_rules(tool_name, inputs, settings) {
+                ExplicitToolPermissionDecision::Allow => ToolPermissionDecision::Allow,
+                ExplicitToolPermissionDecision::Deny(reason) => {
+                    ToolPermissionDecision::Deny(reason)
+                }
+                ExplicitToolPermissionDecision::NoMatch
+                | ExplicitToolPermissionDecision::Confirm => ToolPermissionDecision::Confirm,
+            }
         }
         AgentPermissionMode::Manual | AgentPermissionMode::Auto => decision,
     }
@@ -1297,6 +1355,50 @@ mod tests {
     }
 
     #[test]
+    fn auto_mode_allows_temporary_path_cleanup() {
+        let settings = settings_with_permission_mode(AgentPermissionMode::Auto);
+        for path in [
+            "tmp/session",
+            ".tmp/cache",
+            "build/test-temp",
+            ".storage-cli-test-tmp",
+            "cache/output.tmp",
+            "/private/var/folders/session/vela-agent-terminal-123/output",
+        ] {
+            assert_eq!(
+                decide_permission_for_path(DeletePathTool::NAME, path, &settings),
+                ToolPermissionDecision::Allow,
+                "expected Auto mode to allow deleting temporary path {path:?}",
+            );
+        }
+
+        for command in [
+            "rm -rf .storage-cli-test-tmp",
+            "rm -rf tmp/session",
+            "rm -rf build/test-temp",
+            "rd /s /q tmp\\session",
+        ] {
+            assert_eq!(
+                decide_permission_from_settings(TerminalTool::NAME, &[command.into()], &settings),
+                ToolPermissionDecision::Allow,
+                "expected Auto mode to allow temporary cleanup command {command:?}",
+            );
+        }
+
+        for command in ["rm -rf tmp/session src", "rm -rf tmp/../src"] {
+            assert_eq!(
+                decide_permission_from_settings(TerminalTool::NAME, &[command.into()], &settings),
+                ToolPermissionDecision::Confirm,
+                "expected Auto mode to confirm cleanup outside a temporary path",
+            );
+        }
+        assert_eq!(
+            decide_permission_for_path(DeletePathTool::NAME, "tmp/../src", &settings),
+            ToolPermissionDecision::Confirm,
+        );
+    }
+
+    #[test]
     fn auto_mode_confirms_sensitive_file_and_third_party_actions() {
         let settings = settings_with_permission_mode(AgentPermissionMode::Auto);
         for (tool_name, input) in [
@@ -1310,6 +1412,38 @@ mod tests {
                 "expected Auto mode to confirm {tool_name} for {input:?}"
             );
         }
+    }
+
+    #[test]
+    fn auto_mode_explicit_allow_bypasses_delete_confirmation() {
+        let mut settings = settings_with_permission_mode(AgentPermissionMode::Auto);
+        settings.tool_permissions.tools.insert(
+            DeletePathTool::NAME.into(),
+            ToolRules {
+                always_allow: vec![CompiledRegex::new(r"^tmp/", false).unwrap()],
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            decide_permission_for_path(DeletePathTool::NAME, "tmp/session", &settings),
+            ToolPermissionDecision::Allow,
+        );
+        assert_eq!(
+            decide_permission_for_path(DeletePathTool::NAME, "src/generated", &settings),
+            ToolPermissionDecision::Confirm,
+        );
+
+        settings
+            .tool_permissions
+            .tools
+            .get_mut(DeletePathTool::NAME)
+            .unwrap()
+            .default = Some(ToolPermissionMode::Allow);
+        assert_eq!(
+            decide_permission_for_path(DeletePathTool::NAME, "src/generated", &settings),
+            ToolPermissionDecision::Allow,
+        );
     }
 
     #[test]
