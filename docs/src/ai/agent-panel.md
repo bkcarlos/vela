@@ -33,13 +33,9 @@ The sections below cover what you can do from here.
 
 By default, the Agent Panel uses Vela's first-party agent.
 
-Start a new thread with {#kb agent::NewThread}, or open the "New Thread…" menu using the agent selector button on the left (in the empty state) or the `+` icon in the top-right of the panel toolbar. You can also open that menu with {#kb agent::ToggleNewThreadMenu}.
+Start a new thread with {#kb agent::NewThread} or the `+` icon in the top-right of the panel toolbar. You can also create one with {#kb agent::ToggleNewThreadMenu}.
 
-From the "New Thread…" menu you can:
-
-- Pick **Vela Agent** or any installed [External Agent](./external-agents.md) to start a new thread with that agent.
-- Choose **New From Summary** to start a fresh Vela Agent thread seeded with a summary of the current conversation — useful for compacting long threads as you approach the context window limit.
-- Choose **Terminal** to open a terminal thread directly in the Agent Panel — see [Terminal Threads](#terminal-threads) for details.
+The new thread uses the currently selected Vela Agent or [External Agent](./external-agents.md).
 
 {#action agent::NewExternalAgentThread} creates a new thread with the specified External Agent id.
 

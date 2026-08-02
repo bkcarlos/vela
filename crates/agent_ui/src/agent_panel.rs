@@ -7,7 +7,6 @@ use agent_servers::AgentServer;
 use agent_settings::UserAgentsMd;
 use collections::HashSet;
 use db::kvp::KeyValueStore;
-use itertools::Itertools;
 use project::{AgentId, ProjectItem};
 use serde::{Deserialize, Serialize};
 
@@ -78,8 +77,8 @@ use terminal_view::{TerminalView, terminal_panel::TerminalPanel};
 use text::OffsetRangeExt;
 use theme_settings::ThemeSettings;
 use ui::{
-    ContextMenu, ContextMenuEntry, GradientFade, IconButton, KeyBinding, PopoverMenu,
-    PopoverMenuHandle, ProjectEmptyState, Tab, Tooltip, prelude::*, utils::WithRemSize,
+    ContextMenu, GradientFade, IconButton, KeyBinding, PopoverMenu, PopoverMenuHandle,
+    ProjectEmptyState, Tab, Tooltip, prelude::*, utils::WithRemSize,
 };
 use util::ResultExt as _;
 use workspace::{
@@ -460,7 +459,7 @@ pub fn init(cx: &mut App) {
                     if let Some(panel) = workspace.panel::<AgentPanel>(cx) {
                         workspace.focus_panel::<AgentPanel>(window, cx);
                         panel.update(cx, |panel, cx| {
-                            panel.toggle_new_thread_menu(&ToggleNewThreadMenu, window, cx);
+                            panel.create_new_thread(&ToggleNewThreadMenu, window, cx);
                         });
                     }
                 })
@@ -1149,7 +1148,6 @@ pub struct AgentPanel {
     retained_threads: HashMap<ThreadId, Entity<ConversationView>>,
     terminals: HashMap<TerminalId, AgentTerminal>,
     pending_terminal_spawn: Option<TerminalId>,
-    new_thread_menu_handle: PopoverMenuHandle<ContextMenu>,
     agent_panel_menu_handle: PopoverMenuHandle<ContextMenu>,
     _extension_subscription: Option<Subscription>,
     _project_subscription: Subscription,
@@ -1575,7 +1573,6 @@ impl AgentPanel {
             retained_threads: HashMap::default(),
             terminals: HashMap::default(),
             pending_terminal_spawn: None,
-            new_thread_menu_handle: PopoverMenuHandle::default(),
             agent_panel_menu_handle: PopoverMenuHandle::default(),
 
             _extension_subscription: extension_subscription,
@@ -3563,7 +3560,7 @@ impl AgentPanel {
         self.agent_panel_menu_handle.toggle(window, cx);
     }
 
-    pub fn toggle_new_thread_menu(
+    pub fn create_new_thread(
         &mut self,
         _: &ToggleNewThreadMenu,
         window: &mut Window,
@@ -3573,7 +3570,7 @@ impl AgentPanel {
             return;
         }
 
-        self.new_thread_menu_handle.toggle(window, cx);
+        self.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
     }
 
     pub fn increase_font_size(
@@ -5771,10 +5768,6 @@ impl AgentPanel {
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
 
-        let focus_handle = self.focus_handle(cx);
-
-        let can_create_entries = self.has_open_project(cx);
-        let supports_terminal = self.supports_terminal(cx);
         let showing_terminal = matches!(self.visible_surface(), VisibleSurface::Terminal(_));
 
         let (selected_agent_custom_icon, selected_agent_label) = if showing_terminal {
@@ -5789,195 +5782,6 @@ impl AgentPanel {
             (icon, label)
         } else {
             (None, self.selected_agent.label())
-        };
-
-        let new_thread_menu_builder: Rc<
-            dyn Fn(&mut Window, &mut App) -> Option<Entity<ContextMenu>>,
-        > = {
-            let selected_agent = self.selected_agent.clone();
-            let is_agent_selected = move |agent: Agent| selected_agent == agent;
-
-            let workspace = self.workspace.clone();
-            let is_via_collab = workspace
-                .update(cx, |workspace, cx| {
-                    workspace.project().read(cx).is_via_collab()
-                })
-                .unwrap_or_default();
-
-            let focus_handle = focus_handle.clone();
-            let agent_server_store = agent_server_store;
-
-            Rc::new(move |window, cx| {
-                Some(ContextMenu::build(window, cx, |menu, _window, cx| {
-                    menu.context(focus_handle.clone())
-                        .item(
-                            ContextMenuEntry::new("Vela Agent")
-                                .when(
-                                    !showing_terminal && is_agent_selected(Agent::NativeAgent),
-                                    |this| this.action(Box::new(NewThread)),
-                                )
-                                .icon(IconName::Vela)
-                                .icon_color(Color::Muted)
-                                .handler({
-                                    let workspace = workspace.clone();
-                                    move |window, cx| {
-                                        if let Some(workspace) = workspace.upgrade() {
-                                            workspace.update(cx, |workspace, cx| {
-                                                if let Some(panel) =
-                                                    workspace.panel::<AgentPanel>(cx)
-                                                {
-                                                    panel.update(cx, |panel, cx| {
-                                                        panel.selected_agent = Agent::NativeAgent;
-                                                        panel.activate_new_thread(
-                                                            true,
-                                                            AgentThreadSource::AgentPanel,
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    });
-                                                }
-                                            });
-                                        }
-                                    }
-                                }),
-                        )
-                        .when(supports_terminal, |menu| {
-                            menu.item(
-                                ContextMenuEntry::new("Terminal")
-                                    .when(showing_terminal, |this| this.action(Box::new(NewThread)))
-                                    .when(!showing_terminal, |this| {
-                                        this.action(Box::new(NewTerminalThread))
-                                    })
-                                    .icon(IconName::Terminal)
-                                    .icon_color(Color::Muted)
-                                    .handler({
-                                        let workspace = workspace.clone();
-                                        move |window, cx| {
-                                            if let Some(workspace) = workspace.upgrade() {
-                                                workspace.update(cx, |workspace, cx| {
-                                                    if let Some(panel) =
-                                                        workspace.panel::<AgentPanel>(cx)
-                                                    {
-                                                        panel.update(cx, |panel, cx| {
-                                                            panel.new_terminal(
-                                                                Some(workspace),
-                                                                AgentThreadSource::AgentPanel,
-                                                                window,
-                                                                cx,
-                                                            );
-                                                        });
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    }),
-                            )
-                        })
-                        .map(|mut menu| {
-                            let agent_server_store = agent_server_store.read(cx);
-                            let registry_store = project::AgentRegistryStore::try_global(cx);
-                            let registry_store_ref = registry_store.as_ref().map(|s| s.read(cx));
-
-                            struct AgentMenuItem {
-                                id: AgentId,
-                                display_name: SharedString,
-                            }
-
-                            let agent_items = agent_server_store
-                                .external_agents()
-                                .map(|agent_id| {
-                                    let display_name = agent_server_store
-                                        .agent_display_name(agent_id)
-                                        .or_else(|| {
-                                            registry_store_ref
-                                                .as_ref()
-                                                .and_then(|store| store.agent(agent_id))
-                                                .map(|a| a.name().clone())
-                                        })
-                                        .unwrap_or_else(|| agent_id.0.clone());
-                                    AgentMenuItem {
-                                        id: agent_id.clone(),
-                                        display_name,
-                                    }
-                                })
-                                .sorted_unstable_by_key(|e| e.display_name.to_lowercase())
-                                .collect::<Vec<_>>();
-
-                            if !agent_items.is_empty() {
-                                menu = menu.separator().header("External Agents");
-                            }
-                            for item in &agent_items {
-                                let mut entry = ContextMenuEntry::new(item.display_name.clone());
-
-                                let icon_path =
-                                    agent_server_store.agent_icon(&item.id).or_else(|| {
-                                        registry_store_ref
-                                            .as_ref()
-                                            .and_then(|store| store.agent(&item.id))
-                                            .and_then(|a| a.icon_path().cloned())
-                                    });
-
-                                if let Some(icon_path) = icon_path {
-                                    entry = entry.custom_icon_svg(icon_path);
-                                } else {
-                                    entry = entry.icon(IconName::Sparkle);
-                                }
-
-                                entry = entry
-                                    .when(
-                                        !showing_terminal
-                                            && is_agent_selected(Agent::Custom {
-                                                id: item.id.clone(),
-                                            }),
-                                        |this| this.action(Box::new(NewThread)),
-                                    )
-                                    .icon_color(Color::Muted)
-                                    .disabled(is_via_collab)
-                                    .handler({
-                                        let workspace = workspace.clone();
-                                        let agent_id = item.id.clone();
-                                        move |window, cx| {
-                                            if let Some(workspace) = workspace.upgrade() {
-                                                workspace.update(cx, |workspace, cx| {
-                                                    if let Some(panel) =
-                                                        workspace.panel::<AgentPanel>(cx)
-                                                    {
-                                                        panel.update(cx, |panel, cx| {
-                                                            panel.new_external_agent_thread(
-                                                                &NewExternalAgentThread {
-                                                                    agent: agent_id.clone(),
-                                                                },
-                                                                window,
-                                                                cx,
-                                                            );
-                                                        });
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    });
-
-                                menu = menu.item(entry);
-                            }
-
-                            menu
-                        })
-                        .separator()
-                        .item(
-                            ContextMenuEntry::new("Add More Agents")
-                                .icon(IconName::Plus)
-                                .icon_color(Color::Muted)
-                                .handler({
-                                    move |window, cx| {
-                                        window.dispatch_action(
-                                            Box::new(vela_actions::AcpRegistry),
-                                            cx,
-                                        )
-                                    }
-                                }),
-                        )
-                }))
-            })
         };
 
         let is_thread_loading = self
@@ -6045,27 +5849,6 @@ impl AgentPanel {
             ToolbarMode::EmptyThread
         };
 
-        let is_full_screen = self.is_zoomed(window, cx);
-        let (icon_id, icon_name, tooltip_text) = if is_full_screen {
-            (
-                "disable-full-screen",
-                IconName::Minimize,
-                "Disable Full Screen",
-            )
-        } else {
-            (
-                "enable-full-screen",
-                IconName::Maximize,
-                "Enable Full Screen",
-            )
-        };
-        let full_screen_button = IconButton::new(icon_id, icon_name)
-            .icon_size(IconSize::Small)
-            .tooltip(move |_, cx| Tooltip::for_action(tooltip_text, &ToggleZoom, cx))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.toggle_zoom(&ToggleZoom, window, cx);
-            }));
-
         let max_content_width = AgentSettings::get_global(cx).max_content_width;
 
         let base_container = h_flex()
@@ -6085,26 +5868,6 @@ impl AgentPanel {
         });
 
         let toolbar_content = {
-            let new_thread_menu = PopoverMenu::new("new_thread_menu")
-                .trigger_with_tooltip(
-                    IconButton::new("new_thread_menu_btn", IconName::Plus)
-                        .icon_size(IconSize::Small)
-                        .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent)),
-                    {
-                        move |_window, cx| {
-                            Tooltip::for_action_in(
-                                "New Thread\u{2026}",
-                                &ToggleNewThreadMenu,
-                                &focus_handle,
-                                cx,
-                            )
-                        }
-                    },
-                )
-                .anchor(Anchor::TopRight)
-                .with_handle(self.new_thread_menu_handle.clone())
-                .menu(move |window, cx| new_thread_menu_builder(window, cx));
-
             let sandbox_status = self
                 .active_conversation_view()
                 .and_then(|conversation_view| conversation_view.read(cx).root_thread_view())
@@ -6134,10 +5897,7 @@ impl AgentPanel {
                         .h_full()
                         .flex_none()
                         .gap_0p5()
-                        .children(sandbox_status)
-                        .when(can_create_entries, |this| this.child(new_thread_menu))
-                        .child(full_screen_button)
-                        .child(self.render_panel_options_menu(window, cx)),
+                        .children(sandbox_status),
                 )
                 .into_any_element()
         };
@@ -6153,8 +5913,44 @@ impl AgentPanel {
             .child(toolbar_content)
     }
 
-    fn render_section_switcher(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_section_switcher(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let max_content_width = AgentSettings::get_global(cx).max_content_width;
+        let focus_handle = self.focus_handle(cx);
+        let can_create_entries = self.has_open_project(cx);
+        let new_thread_button = IconButton::new("new-thread", IconName::Plus)
+            .icon_size(IconSize::Small)
+            .tooltip(move |_, cx| {
+                Tooltip::for_action_in("New Agent Thread", &NewThread, &focus_handle, cx)
+            })
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.active_section = AgentPanelSection::Agent;
+                this.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
+            }));
+
+        let is_full_screen = self.is_zoomed(window, cx);
+        let (icon_id, icon_name, tooltip_text) = if is_full_screen {
+            (
+                "disable-full-screen",
+                IconName::Minimize,
+                "Disable Full Screen",
+            )
+        } else {
+            (
+                "enable-full-screen",
+                IconName::Maximize,
+                "Enable Full Screen",
+            )
+        };
+        let full_screen_button = IconButton::new(icon_id, icon_name)
+            .icon_size(IconSize::Small)
+            .tooltip(move |_, cx| Tooltip::for_action(tooltip_text, &ToggleZoom, cx))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.toggle_zoom(&ToggleZoom, window, cx);
+            }));
 
         h_flex()
             .flex_none()
@@ -6169,32 +5965,43 @@ impl AgentPanel {
                     .when_some(max_content_width, |this, max_width| {
                         this.max_w(max_width).mx_auto()
                     })
-                    .gap_1()
+                    .justify_between()
                     .child(
-                        Button::new("agent-section-agent", "Agent")
-                            .style(ButtonStyle::Subtle)
-                            .label_size(LabelSize::Small)
-                            .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                            .toggle_state(self.active_section == AgentPanelSection::Agent)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.active_section = AgentPanelSection::Agent;
-                                this.focus_handle.focus(window, cx);
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .gap_1()
+                            .child(
+                                Button::new("agent-section-agent", "Agent")
+                                    .style(ButtonStyle::Subtle)
+                                    .label_size(LabelSize::Small)
+                                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                                    .toggle_state(self.active_section == AgentPanelSection::Agent)
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.active_section = AgentPanelSection::Agent;
+                                        this.focus_handle.focus(window, cx);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("agent-section-threads", "Conversations")
+                                    .style(ButtonStyle::Subtle)
+                                    .label_size(LabelSize::Small)
+                                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                                    .toggle_state(self.active_section == AgentPanelSection::Threads)
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.active_section = AgentPanelSection::Threads;
+                                        this.threads_view.update(cx, |view, cx| {
+                                            view.focus_filter_editor(window, cx);
+                                        });
+                                        cx.notify();
+                                    })),
+                            ),
                     )
                     .child(
-                        Button::new("agent-section-threads", "Conversations")
-                            .style(ButtonStyle::Subtle)
-                            .label_size(LabelSize::Small)
-                            .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                            .toggle_state(self.active_section == AgentPanelSection::Threads)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.active_section = AgentPanelSection::Threads;
-                                this.threads_view.update(cx, |view, cx| {
-                                    view.focus_filter_editor(window, cx);
-                                });
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .gap_0p5()
+                            .when(can_create_entries, |this| this.child(new_thread_button))
+                            .child(full_screen_button)
+                            .child(self.render_panel_options_menu(window, cx)),
                     ),
             )
     }
@@ -6409,7 +6216,7 @@ impl Render for AgentPanel {
                     })
                 }
             }))
-            .child(self.render_section_switcher(cx))
+            .child(self.render_section_switcher(window, cx))
             .when(self.active_section == AgentPanelSection::Agent, |parent| {
                 parent.child(self.render_toolbar(window, cx))
             })
