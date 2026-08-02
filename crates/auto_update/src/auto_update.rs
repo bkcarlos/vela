@@ -113,6 +113,9 @@ actions!(
 pub enum AutoUpdateStatus {
     Idle,
     Checking,
+    UpToDate {
+        version: Version,
+    },
     Downloading {
         version: Version,
         /// Download progress as a fraction in the range `0.0..=1.0`, or `None`
@@ -137,6 +140,10 @@ impl PartialEq for AutoUpdateStatus {
         match (self, other) {
             (AutoUpdateStatus::Idle, AutoUpdateStatus::Idle) => true,
             (AutoUpdateStatus::Checking, AutoUpdateStatus::Checking) => true,
+            (
+                AutoUpdateStatus::UpToDate { version: v1 },
+                AutoUpdateStatus::UpToDate { version: v2 },
+            ) => v1 == v2,
             (
                 AutoUpdateStatus::Downloading { version: v1, .. },
                 AutoUpdateStatus::Downloading { version: v2, .. },
@@ -342,6 +349,13 @@ pub fn check(_: &Check, window: &mut Window, cx: &mut App) {
         .map(|channel| channel.poll_for_updates())
         .unwrap_or(false)
     {
+        drop(window.prompt(
+            gpui::PromptLevel::Info,
+            "Updates are unavailable for development builds",
+            Some("Install a bundled Vela release to use automatic updates."),
+            &["OK"],
+            cx,
+        ));
         return;
     }
 
@@ -763,6 +777,9 @@ impl AutoUpdater {
             this.update(cx, |this, cx| {
                 let status = match previous_status {
                     AutoUpdateStatus::Updated { .. } => previous_status,
+                    _ if this.update_check_type.is_manual() => AutoUpdateStatus::UpToDate {
+                        version: this.current_version.clone(),
+                    },
                     _ => AutoUpdateStatus::Idle,
                 };
                 this.status = status;

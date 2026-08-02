@@ -40,7 +40,10 @@ impl UpdateVersion {
     pub fn update_simulation(&mut self, cx: &mut Context<Self>) {
         let next_state = match self.status {
             AutoUpdateStatus::Idle => AutoUpdateStatus::Checking,
-            AutoUpdateStatus::Checking => AutoUpdateStatus::Downloading {
+            AutoUpdateStatus::Checking => AutoUpdateStatus::UpToDate {
+                version: Version::new(1, 99, 0),
+            },
+            AutoUpdateStatus::UpToDate { .. } => AutoUpdateStatus::Downloading {
                 version: Version::new(1, 99, 0),
                 progress: Some(0.5),
             },
@@ -94,6 +97,11 @@ impl Render for UpdateVersion {
         match &self.status {
             AutoUpdateStatus::Checking if self.update_check_type.is_manual() => {
                 UpdateButton::checking().into_any_element()
+            }
+            AutoUpdateStatus::UpToDate { version } => {
+                UpdateButton::up_to_date(format!("Current version: {version}"))
+                    .on_dismiss(cx.listener(|this, _, _window, cx| this.dismiss(cx)))
+                    .into_any_element()
             }
             AutoUpdateStatus::Downloading { version, progress } => {
                 let rendered_version = version.clone();

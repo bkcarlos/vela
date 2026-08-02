@@ -1194,6 +1194,7 @@ impl TitleBar {
                     | Some(AutoUpdateStatus::Downloading { .. })
                     | Some(AutoUpdateStatus::Checking) => "Updating...",
                     Some(AutoUpdateStatus::Idle)
+                    | Some(AutoUpdateStatus::UpToDate { .. })
                     | Some(AutoUpdateStatus::Errored { .. })
                     | None => "Please update Vela to Collaborate",
                 };

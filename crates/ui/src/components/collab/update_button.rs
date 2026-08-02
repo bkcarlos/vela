@@ -105,6 +105,13 @@ impl UpdateButton {
             .disabled(true)
     }
 
+    pub fn up_to_date(version: impl Into<SharedString>) -> Self {
+        Self::new(IconName::Check, "Vela is Up to Date")
+            .icon_color(Color::Success)
+            .tooltip(version)
+            .with_dismiss()
+    }
+
     pub fn downloading(progress: Option<f32>) -> Self {
         Self::new(IconName::Download, "Downloading Vela Update…")
             .progress(progress)
