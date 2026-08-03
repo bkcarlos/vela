@@ -80,8 +80,8 @@ There are two additional Vela-specific options per connection, `upload_binary_ov
     {
       "host": "192.168.1.10",
       "projects": [{ "paths": ["~/code/vela/vela"] }],
-      // by default Vela will download the server binary from the internet on the remote.
-      // When this is true, it'll be downloaded to your laptop and uploaded over SSH.
+      // By default Vela will download the server binary to your laptop and upload it.
+      // Set this to false to download directly on the remote host.
       // This is useful when your remote server has restricted internet access.
       "upload_binary_over_ssh": true,
       // Shown in the Vela UI to help distinguish multiple hosts.
@@ -222,7 +222,9 @@ Any prompts that SSH needs will be shown in the UI, so you can verify host keys,
 
 Once the master connection is established, Vela will check to see if the remote server binary is present in `~/.vela_server` on the remote, and that its version matches the current version of Vela that you're using.
 
-If it is not there or the version mismatches, Vela will try to download the latest version. By default, it will download from `https://vela.dev` directly, but if you set: `{"upload_binary_over_ssh":true}` in your settings for that server, it will download the binary to your local machine and then upload it to the remote server.
+If it is not there or the version mismatches, Vela will try to download the latest version.
+By default, Vela downloads the binary to your local machine and uploads it to the remote host.
+If this is disabled (`"upload_binary_over_ssh": false`) and direct remote download fails, Vela will automatically fall back to local download + upload.
 
 If you'd like to maintain the server binary yourself you can. You can either download our prebuilt versions from [GitHub](https://github.com/vela-industries/vela/releases), or [build your own](https://vela.dev/docs/development):
 

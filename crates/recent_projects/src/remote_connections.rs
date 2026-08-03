@@ -52,7 +52,7 @@ impl RemoteSettings {
                 && conn.port == options.port
             {
                 options.nickname = conn.nickname;
-                options.upload_binary_over_ssh = conn.upload_binary_over_ssh.unwrap_or_default();
+                options.upload_binary_over_ssh = conn.upload_binary_over_ssh.unwrap_or(true);
                 options.args = Some(conn.args);
                 options.port_forwards = conn.port_forwards;
                 break;
@@ -70,6 +70,7 @@ impl RemoteSettings {
             host: host.into(),
             port,
             username,
+            upload_binary_over_ssh: true,
             ..Default::default()
         };
         self.fill_connection_options_from_settings(&mut options);

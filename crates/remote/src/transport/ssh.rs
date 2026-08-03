@@ -135,7 +135,7 @@ impl From<settings::SshConnection> for SshConnectionOptions {
             password: None,
             args: Some(val.args),
             nickname: val.nickname,
-            upload_binary_over_ssh: val.upload_binary_over_ssh.unwrap_or_default(),
+            upload_binary_over_ssh: val.upload_binary_over_ssh.unwrap_or(true),
             port_forwards: val.port_forwards,
             connection_timeout: val.connection_timeout,
         }
@@ -1734,7 +1734,7 @@ impl SshConnectionOptions {
             args: Some(args),
             password: None,
             nickname: None,
-            upload_binary_over_ssh: false,
+            upload_binary_over_ssh: true,
             connection_timeout: None,
         })
     }

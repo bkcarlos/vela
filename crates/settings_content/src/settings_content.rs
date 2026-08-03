@@ -1289,10 +1289,9 @@ pub struct SshConnection {
     pub projects: collections::BTreeSet<RemoteProject>,
     /// Name to use for this server in UI.
     pub nickname: Option<String>,
-    // By default Vela will download the binary to the host directly.
-    // If this is set to true, Vela will download the binary to your local machine,
-    // and then upload it over the SSH connection. Useful if your SSH server has
-    // limited outbound internet access.
+    // By default Vela will download the binary to your local machine and then upload
+    // it over SSH. Set this to false if you want Vela to download the binary directly
+    // on the remote host.
     pub upload_binary_over_ssh: Option<bool>,
 
     pub port_forwards: Option<Vec<SshPortForwardOption>>,
