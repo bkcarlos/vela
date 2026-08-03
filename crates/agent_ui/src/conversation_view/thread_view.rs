@@ -6,7 +6,12 @@ use crate::{
     thread_metadata_store::{ThreadId, ThreadMetadataStore},
 };
 use agent_client_protocol::schema::v1 as acp;
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    fs::File,
+    io::{BufRead, BufReader},
+};
 
 use acp_thread::{
     Elicitation, ElicitationEntryId, ElicitationStatus, PlanEntry, SandboxAuthorizationDetails,
@@ -47,7 +52,7 @@ use ui::{
     SplitButtonStyle, Tab, ToggleState,
 };
 use util::markdown::{source_position_from_fragment, split_local_url_fragment};
-use workspace::{OpenOptions, SERIALIZATION_THROTTLE_TIME};
+use workspace::{OpenLog, OpenOptions, SERIALIZATION_THROTTLE_TIME};
 
 use super::elicitation::{
     ElicitationCard, ElicitationCardHandlers, ElicitationFormState, should_render_elicitation,
@@ -55,6 +60,8 @@ use super::elicitation::{
 use super::*;
 
 const DATA_RETENTION_LEARN_MORE_URL: &str = "https://support.claude.com/en/articles/15425996-data-retention-practices-for-mythos-class-models";
+const THREAD_ERROR_LOG_PREVIEW_LINES: usize = 120;
+const THREAD_ERROR_LOG_DISPLAY_LINES: usize = 30;
 
 fn permission_mode_color(mode: settings::AgentPermissionMode) -> Color {
     match mode {
@@ -601,6 +608,7 @@ pub struct ThreadView {
     pub thread_retry_status: Option<RetryStatus>,
     pub(super) thread_error: Option<ThreadError>,
     pub thread_error_markdown: Option<Entity<Markdown>>,
+    thread_error_log_excerpt: Option<SharedString>,
     pub token_limit_callout_dismissed: bool,
     pub last_token_limit_telemetry: Option<acp_thread::TokenUsageRatio>,
     thread_feedback: ThreadFeedbackState,
@@ -1017,6 +1025,7 @@ impl ThreadView {
             thread_retry_status: None,
             thread_error: None,
             thread_error_markdown: None,
+            thread_error_log_excerpt: None,
             token_limit_callout_dismissed: false,
             last_token_limit_telemetry: None,
             thread_feedback: Default::default(),
@@ -1860,7 +1869,69 @@ impl ThreadView {
         let error = error.into();
         self.emit_thread_error_telemetry(&error, cx);
         self.thread_error = Some(error);
+        self.thread_error_markdown = None;
+        self.thread_error_log_excerpt = Self::recent_thread_error_log_excerpt();
         cx.notify();
+    }
+
+    fn recent_thread_error_log_excerpt() -> Option<SharedString> {
+        let file = File::open(paths::log_file()).ok()?;
+        let mut lines = VecDeque::new();
+
+        for line in BufReader::new(file).lines() {
+            let line = match line {
+                Ok(line) => line,
+                Err(_) => continue,
+            };
+
+            if lines.len() == THREAD_ERROR_LOG_PREVIEW_LINES {
+                lines.pop_front();
+            }
+
+            lines.push_back(line);
+        }
+
+        let mut relevant_lines: Vec<String> = lines
+            .iter()
+            .filter(|line| {
+                line.contains("ERROR")
+                    || line.contains("Error")
+                    || line.contains("WARN")
+                    || line.contains("Failed")
+                    || line.contains("failed")
+            })
+            .cloned()
+            .collect();
+
+        if relevant_lines.is_empty() {
+            relevant_lines.extend(lines.into_iter());
+        }
+
+        if relevant_lines.is_empty() {
+            return None;
+        }
+
+        if relevant_lines.len() > THREAD_ERROR_LOG_DISPLAY_LINES {
+            let start = relevant_lines.len() - THREAD_ERROR_LOG_DISPLAY_LINES;
+            relevant_lines = relevant_lines.into_iter().skip(start).collect();
+        }
+
+        Some(relevant_lines.join("\n").into())
+    }
+
+    fn thread_error_description(&self, message: impl Into<SharedString>) -> SharedString {
+        let message = message.into();
+
+        let Some(log_excerpt) = self.thread_error_log_excerpt.as_ref() else {
+            return message;
+        };
+
+        let log_excerpt = log_excerpt.trim();
+        if log_excerpt.is_empty() {
+            return message;
+        }
+
+        format!("{message}\n\nRecent logs around this error:\n```text\n{log_excerpt}\n```").into()
     }
 
     fn emit_thread_error_telemetry(&self, error: &ThreadError, cx: &mut Context<Self>) {
@@ -2931,6 +3002,7 @@ impl ThreadView {
     pub fn clear_thread_error(&mut self, cx: &mut Context<Self>) {
         self.thread_error = None;
         self.thread_error_markdown = None;
+        self.thread_error_log_excerpt = None;
         self.token_limit_callout_dismissed = true;
         cx.notify();
     }
@@ -11133,13 +11205,19 @@ impl ThreadView {
             or safety guidelines, so rephrasing it can sometimes address the issue.",
             model_or_agent_name
         );
+        let description = self.thread_error_description(refusal_message.clone());
 
         Callout::new()
             .severity(Severity::Error)
             .title("Request Refused")
             .icon(IconName::XCircle)
-            .description(refusal_message.clone())
-            .actions_slot(self.create_copy_button(&refusal_message))
+            .description(description)
+            .actions_slot(
+                h_flex()
+                    .gap_0p5()
+                    .child(self.create_copy_button(refusal_message))
+                    .child(self.open_log_button(cx)),
+            )
             .dismiss_action(self.dismiss_error_button(cx))
     }
 
@@ -11148,16 +11226,19 @@ impl ThreadView {
         error: SharedString,
         cx: &mut Context<Self>,
     ) -> Callout {
+        let description = self.thread_error_description(error.clone());
+
         Callout::new()
             .severity(Severity::Error)
             .title("Authentication Required")
             .icon(IconName::XCircle)
-            .description(error.clone())
+            .description(description)
             .actions_slot(
                 h_flex()
                     .gap_0p5()
                     .child(self.authenticate_button(cx))
-                    .child(self.create_copy_button(error)),
+                    .child(self.create_copy_button(error.clone()))
+                    .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx))
     }
@@ -11165,17 +11246,20 @@ impl ThreadView {
     fn render_payment_required_error(&self, cx: &mut Context<Self>) -> Callout {
         const ERROR_MESSAGE: &str = "The selected provider rejected the request because its account usage limit was reached. Configure a BYOK or local provider to continue.";
 
+        let description = self.thread_error_description(ERROR_MESSAGE);
+
         Callout::new()
             .severity(Severity::Error)
             .icon(IconName::XCircle)
             .title("Provider Usage Limit")
-            .description(ERROR_MESSAGE)
+            .description(description)
             .actions_slot(
                 h_flex()
                     .gap_0p5()
                     .child(self.open_llm_providers_settings_button(cx))
                     .child(self.open_model_selector_button(cx))
-                    .child(self.create_copy_button(ERROR_MESSAGE)),
+                    .child(self.create_copy_button(ERROR_MESSAGE))
+                    .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx))
     }
@@ -11189,23 +11273,22 @@ impl ThreadView {
         cx: &mut Context<Self>,
     ) -> Callout {
         let can_resume = show_retry && self.thread.read(cx).can_retry(cx);
-        let show_actions = can_resume || show_copy;
+        let description = self.thread_error_description(message.clone());
 
         Callout::new()
             .severity(Severity::Error)
             .icon(IconName::XCircle)
             .title(title)
-            .description(message.clone())
-            .when(show_actions, |callout| {
-                callout.actions_slot(
-                    h_flex()
-                        .gap_0p5()
-                        .when(can_resume, |this| this.child(self.retry_button(cx)))
-                        .when(show_copy, |this| {
-                            this.child(self.create_copy_button(message.clone()))
-                        }),
-                )
-            })
+            .description(description)
+            .actions_slot(
+                h_flex()
+                    .gap_0p5()
+                    .when(can_resume, |this| this.child(self.retry_button(cx)))
+                    .when(show_copy, |this| {
+                        this.child(self.create_copy_button(message.clone()))
+                    })
+                    .child(self.open_log_button(cx)),
+            )
             .dismiss_action(self.dismiss_error_button(cx))
     }
 
@@ -11259,6 +11342,8 @@ impl ThreadView {
                 }
             };
 
+        let description = self.thread_error_description(description);
+
         let callout = Callout::new()
             .severity(Severity::Error)
             .icon(IconName::XCircle)
@@ -11270,7 +11355,8 @@ impl ThreadView {
                     .child(self.open_llm_providers_settings_button(cx))
                     .when(has_authenticated_provider, |this| {
                         this.child(self.open_model_selector_button(cx))
-                    }),
+                    })
+                    .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx));
 
@@ -11304,20 +11390,32 @@ impl ThreadView {
             }))
     }
 
+    fn open_log_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("open-thread-log", "Open Log")
+            .label_size(LabelSize::Small)
+            .style(ButtonStyle::Subtle)
+            .on_click(cx.listener(|_, _, window, cx| {
+                window.dispatch_action(Box::new(OpenLog), cx);
+            }))
+    }
+
     fn render_prompt_too_large_error(&self, cx: &mut Context<Self>) -> Callout {
         const MESSAGE: &str = "This conversation is too long for the model's context window. \
             Start a new thread or remove some attached files to continue.";
+
+        let description = self.thread_error_description(MESSAGE);
 
         Callout::new()
             .severity(Severity::Error)
             .icon(IconName::XCircle)
             .title("Context Too Large")
-            .description(MESSAGE)
+            .description(description)
             .actions_slot(
                 h_flex()
                     .gap_0p5()
                     .child(self.new_thread_button(cx))
-                    .child(self.create_copy_button(MESSAGE)),
+                    .child(self.create_copy_button(MESSAGE))
+                    .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx))
     }
@@ -11392,11 +11490,12 @@ impl ThreadView {
         cx: &mut Context<'_, Self>,
     ) -> Callout {
         let can_resume = self.thread.read(cx).can_retry(cx);
+        let message_with_logs = self.thread_error_description(error.clone());
 
         let markdown = if let Some(markdown) = &self.thread_error_markdown {
             markdown.clone()
         } else {
-            let markdown = cx.new(|cx| Markdown::new(error.clone(), None, None, cx));
+            let markdown = cx.new(|cx| Markdown::new(message_with_logs.clone(), None, None, cx));
             self.thread_error_markdown = Some(markdown.clone());
             markdown
         };
@@ -11425,7 +11524,8 @@ impl ThreadView {
                                 })),
                         )
                     })
-                    .child(self.create_copy_button(error.to_string())),
+                    .child(self.create_copy_button(error.to_string()))
+                    .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx))
     }

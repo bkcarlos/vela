@@ -496,31 +496,27 @@ impl ProjectDiagnosticsEditor {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        if let Some(existing) = workspace.item_of_type::<ProjectDiagnosticsEditor>(cx) {
-            let is_active = workspace
-                .active_item(cx)
-                .is_some_and(|item| item.item_id() == existing.item_id());
-
-            workspace.activate_item(&existing, true, !is_active, window, cx);
-        } else {
-            let workspace_handle = cx.entity().downgrade();
-
-            let include_warnings = match cx.try_global::<IncludeWarnings>() {
-                Some(include_warnings) => include_warnings.0,
-                None => ProjectSettings::get_global(cx).diagnostics.include_warnings,
-            };
-
-            let diagnostics = cx.new(|cx| {
-                ProjectDiagnosticsEditor::new(
-                    include_warnings,
-                    workspace.project().clone(),
-                    workspace_handle,
-                    window,
-                    cx,
-                )
-            });
-            workspace.add_item_to_active_pane(Box::new(diagnostics), None, true, window, cx);
+        if workspace.panel::<ProjectDiagnosticsPanel>(cx).is_some() {
+            workspace.toggle_panel_focus::<ProjectDiagnosticsPanel>(window, cx);
+            return;
         }
+
+        let workspace_handle = cx.entity().downgrade();
+        let include_warnings = match cx.try_global::<IncludeWarnings>() {
+            Some(include_warnings) => include_warnings.0,
+            None => ProjectSettings::get_global(cx).diagnostics.include_warnings,
+        };
+
+        let diagnostics = cx.new(|cx| {
+            ProjectDiagnosticsEditor::new(
+                include_warnings,
+                workspace.project().clone(),
+                workspace_handle,
+                window,
+                cx,
+            )
+        });
+        workspace.add_item_to_active_pane(Box::new(diagnostics), None, true, window, cx);
     }
 
     fn toggle_warnings(&mut self, _: &ToggleWarnings, _: &mut Window, cx: &mut Context<Self>) {

@@ -11,9 +11,9 @@ use editor::{
     multibuffer_context_lines,
 };
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
+    Action, AnyElement, App, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-    Task, TaskExt, WeakEntity, Window, actions, div,
+    Task, WeakEntity, Window, actions, div,
 };
 use language::{Buffer, Capability, DiagnosticEntry, DiagnosticEntryRef, Point};
 use project::{
@@ -31,6 +31,7 @@ use text::{Anchor, BufferSnapshot, OffsetRangeExt};
 use ui::{Button, ButtonStyle, Icon, IconName, Label, Tooltip, h_flex, prelude::*};
 use workspace::{
     ItemHandle, ItemNavHistory, Workspace,
+    dock::{DockPosition, Panel, PanelEvent},
     item::{Item, ItemEvent, TabContentParams},
 };
 
@@ -41,6 +42,80 @@ actions!(
         DeployCurrentFile,
     ]
 );
+
+pub struct BufferDiagnosticsPanel {
+    editor: Entity<BufferDiagnosticsEditor>,
+}
+
+impl BufferDiagnosticsPanel {
+    fn new(editor: Entity<BufferDiagnosticsEditor>) -> Self {
+        Self { editor }
+    }
+
+    fn replace_editor(&mut self, editor: Entity<BufferDiagnosticsEditor>) {
+        self.editor = editor;
+    }
+}
+
+impl Focusable for BufferDiagnosticsPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.editor.read(cx).focus_handle(cx)
+    }
+}
+
+impl EventEmitter<PanelEvent> for BufferDiagnosticsPanel {}
+
+impl Panel for BufferDiagnosticsPanel {
+    fn persistent_name() -> &'static str {
+        "BufferDiagnosticsPanel"
+    }
+
+    fn panel_key() -> &'static str {
+        "BufferDiagnosticsPanel"
+    }
+
+    fn position(&self, _window: &Window, _cx: &App) -> DockPosition {
+        DockPosition::Bottom
+    }
+
+    fn position_is_valid(&self, position: DockPosition) -> bool {
+        position == DockPosition::Bottom
+    }
+
+    fn set_position(
+        &mut self,
+        _position: DockPosition,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
+    fn default_size(&self, _window: &Window, _cx: &App) -> gpui::Pixels {
+        gpui::px(300.)
+    }
+
+    fn icon(&self, _window: &Window, _cx: &App) -> Option<IconName> {
+        Some(IconName::Warning)
+    }
+
+    fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {
+        Some("Current File Diagnostics")
+    }
+
+    fn toggle_action(&self) -> Box<dyn Action> {
+        Box::new(DeployCurrentFile)
+    }
+
+    fn activation_priority(&self) -> u32 {
+        6
+    }
+}
+
+impl Render for BufferDiagnosticsPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.editor.clone())
+    }
+}
 
 /// The `BufferDiagnosticsEditor` is meant to be used when dealing specifically
 /// with diagnostics for a single buffer, as only the excerpts of the buffer
@@ -217,38 +292,37 @@ impl BufferDiagnosticsEditor {
     ) {
         // Determine the currently opened path by finding the active editor and
         // finding the project path for the buffer.
-        // If there's no active editor with a project path, avoiding deploying
+        // If there's no active editor with a project path, avoid deploying
         // the buffer diagnostics view.
         if let Some(editor) = workspace.active_item_as::<Editor>(cx)
             && let Some(project_path) = editor.read(cx).active_project_path(cx)
         {
-            // Check if there's already a `BufferDiagnosticsEditor` tab for this
-            // same path, and if so, focus on that one instead of creating a new
-            // one.
-            let existing_editor = workspace
-                .items_of_type::<BufferDiagnosticsEditor>(cx)
-                .find(|editor| editor.read(cx).project_path == project_path);
+            let include_warnings = match cx.try_global::<IncludeWarnings>() {
+                Some(include_warnings) => include_warnings.0,
+                None => ProjectSettings::get_global(cx).diagnostics.include_warnings,
+            };
 
-            if let Some(editor) = existing_editor {
-                workspace.activate_item(&editor, true, true, window, cx);
+            let item = cx.new(|cx| {
+                Self::new(
+                    project_path.clone(),
+                    workspace.project().clone(),
+                    editor.read(cx).buffer().read(cx).as_singleton(),
+                    include_warnings,
+                    window,
+                    cx,
+                )
+            });
+
+            if let Some(panel) = workspace.panel::<BufferDiagnosticsPanel>(cx) {
+                panel.update(cx, |panel, _cx| panel.replace_editor(item));
             } else {
-                let include_warnings = match cx.try_global::<IncludeWarnings>() {
-                    Some(include_warnings) => include_warnings.0,
-                    None => ProjectSettings::get_global(cx).diagnostics.include_warnings,
-                };
+                let panel = cx.new(|_| BufferDiagnosticsPanel::new(item.clone()));
+                workspace.add_panel(panel, window, cx);
+            }
 
-                let item = cx.new(|cx| {
-                    Self::new(
-                        project_path,
-                        workspace.project().clone(),
-                        editor.read(cx).buffer().read(cx).as_singleton(),
-                        include_warnings,
-                        window,
-                        cx,
-                    )
-                });
-
-                workspace.add_item_to_active_pane(Box::new(item), None, true, window, cx);
+            workspace.reveal_panel::<BufferDiagnosticsPanel>(window, cx);
+            if let Some(panel) = workspace.panel::<BufferDiagnosticsPanel>(cx) {
+                panel.read(cx).focus_handle(cx).focus(window, cx);
             }
         }
     }
