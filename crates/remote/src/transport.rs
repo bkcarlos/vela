@@ -3,13 +3,14 @@ use crate::{
     json_log::LogRecord,
     protocol::{MESSAGE_LEN_SIZE, message_len_from_buffer, read_message_with_len, write_message},
 };
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use futures::{
     AsyncReadExt as _, FutureExt as _, StreamExt as _,
     channel::mpsc::{Sender, UnboundedReceiver, UnboundedSender},
 };
 use gpui::{AppContext as _, AsyncApp, Task};
 use rpc::proto::Envelope;
+use std::sync::{Arc, Mutex};
 use util::command::Child;
 
 pub mod docker;
@@ -138,6 +139,7 @@ fn handle_rpc_messages_over_child_process_stdio(
     let mut stdout_buffer = Vec::new();
     let mut stderr_buffer = Vec::new();
     let mut stderr_offset = 0;
+    let stderr_output = Arc::new(Mutex::new(String::new()));
 
     let stdin_task = cx.background_spawn(async move {
         while let Some(outgoing) = outgoing_rx.next().await {
@@ -171,42 +173,60 @@ fn handle_rpc_messages_over_child_process_stdio(
         }
     });
 
-    let stderr_task: Task<anyhow::Result<()>> = cx.background_spawn(async move {
-        loop {
-            stderr_buffer.resize(stderr_offset + 1024, 0);
+    let stderr_task: Task<anyhow::Result<()>> = cx.background_spawn({
+        let stderr_output = stderr_output.clone();
+        async move {
+            loop {
+                stderr_buffer.resize(stderr_offset + 1024, 0);
 
-            let len = child_stderr
-                .read(&mut stderr_buffer[stderr_offset..])
-                .await?;
-            if len == 0 {
-                if stderr_offset > 0 {
-                    log::warn!(
-                        "(remote) {}",
-                        String::from_utf8_lossy(&stderr_buffer[..stderr_offset])
-                    );
+                let len = child_stderr
+                    .read(&mut stderr_buffer[stderr_offset..])
+                    .await?;
+                if len == 0 {
+                    if stderr_offset > 0 {
+                        let content = String::from_utf8_lossy(&stderr_buffer[..stderr_offset]);
+                        if let Ok(mut output) = stderr_output.lock()
+                            && output.len() < 8 * 1024
+                        {
+                            if !output.is_empty() {
+                                output.push('\n');
+                            }
+                            output.push_str(&content);
+                        }
+                        log::warn!("(remote) {content}");
+                    }
+                    return anyhow::Ok(());
                 }
-                return anyhow::Ok(());
-            }
 
-            stderr_offset += len;
-            let mut start_ix = 0;
-            while let Some(ix) = stderr_buffer[start_ix..stderr_offset]
-                .iter()
-                .position(|b| b == &b'\n')
-            {
-                let line_ix = start_ix + ix;
-                let content = &stderr_buffer[start_ix..line_ix];
-                start_ix = line_ix + 1;
-                if let Ok(record) = serde_json::from_slice::<LogRecord>(content) {
-                    record.log(log::logger())
-                } else {
-                    log::warn!("(remote) {}", String::from_utf8_lossy(content));
+                stderr_offset += len;
+                let mut start_ix = 0;
+                while let Some(ix) = stderr_buffer[start_ix..stderr_offset]
+                    .iter()
+                    .position(|b| b == &b'\n')
+                {
+                    let line_ix = start_ix + ix;
+                    let content = &stderr_buffer[start_ix..line_ix];
+                    start_ix = line_ix + 1;
+                    if let Ok(record) = serde_json::from_slice::<LogRecord>(content) {
+                        record.log(log::logger())
+                    } else {
+                        let content = String::from_utf8_lossy(content);
+                        if let Ok(mut output) = stderr_output.lock()
+                            && output.len() < 8 * 1024
+                        {
+                            if !output.is_empty() {
+                                output.push('\n');
+                            }
+                            output.push_str(&content);
+                        }
+                        log::warn!("(remote) {content}");
+                    }
                 }
-            }
-            stderr_buffer.drain(0..start_ix);
-            stderr_offset -= start_ix;
+                stderr_buffer.drain(0..start_ix);
+                stderr_offset -= start_ix;
 
-            connection_activity_tx.try_send(()).ok();
+                connection_activity_tx.try_send(()).ok();
+            }
         }
     });
 
@@ -231,6 +251,18 @@ fn handle_rpc_messages_over_child_process_stdio(
             status
         });
         match result {
+            Ok(_) if status != 0 => {
+                let stderr = stderr_output
+                    .lock()
+                    .ok()
+                    .map(|output| output.trim().to_owned())
+                    .filter(|output| !output.is_empty());
+                if let Some(stderr) = stderr {
+                    Err(anyhow!("remote proxy exited with code {status}: {stderr}"))
+                } else {
+                    Ok(status)
+                }
+            }
             Ok(_) => Ok(status),
             Err(error) => Err(error),
         }
