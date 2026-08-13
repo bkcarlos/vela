@@ -789,13 +789,32 @@ impl ContextServerStore {
             return Task::ready(());
         };
         cx.spawn(async move |cx| {
-            let Some(www_authenticate) = shutdown.await else {
-                // Non-auth transport deaths leave the server state untouched,
-                // as they did before this watch existed.
+            let www_authenticate = shutdown.await;
+            if let Some(www_authenticate) = www_authenticate {
+                this.update(cx, |this, cx| {
+                    this.handle_auth_challenge(server, www_authenticate, cx);
+                })
+                .log_err();
                 return;
-            };
+            }
+
+            // A stdio process or HTTP transport can terminate without an
+            // authentication challenge. Keep the configured server available
+            // by replacing its dead client after a short backoff.
+            cx.background_executor().timer(Duration::from_secs(1)).await;
             this.update(cx, |this, cx| {
-                this.handle_auth_challenge(server, www_authenticate, cx);
+                let Some(ContextServerState::Running {
+                    server: current_server,
+                    configuration,
+                    ..
+                }) = this.servers.get(&server.id())
+                else {
+                    return;
+                };
+                if !Arc::ptr_eq(current_server, &server) {
+                    return;
+                }
+                this.run_server(server, configuration.clone(), cx);
             })
             .log_err();
         })

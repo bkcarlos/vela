@@ -1428,6 +1428,8 @@ mod tests {
         const EXCLUDED_TOOLS: &[&str] = &[
             // Read-only / low-risk tools that don't call decide_permission_from_settings
             "apply_code_action",
+            // Explicitly displays a user-choice dialog instead of a permission prompt.
+            "ask_user",
             "diagnostics",
             "find_path",
             "find_references",
