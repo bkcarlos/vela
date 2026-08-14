@@ -36,6 +36,7 @@ use crate::ui::{
 use crate::unicode_confusables;
 
 use db::kvp::KeyValueStore;
+use gpui::FontWeight;
 use gpui::List;
 use gpui::PromptLevel;
 use gpui::Stateful;
@@ -76,6 +77,15 @@ fn next_permission_mode(mode: settings::AgentPermissionMode) -> settings::AgentP
         settings::AgentPermissionMode::Manual => settings::AgentPermissionMode::Auto,
         settings::AgentPermissionMode::Auto => settings::AgentPermissionMode::FullAccess,
         settings::AgentPermissionMode::FullAccess => settings::AgentPermissionMode::Manual,
+    }
+}
+
+fn content_max_width(cx: &App) -> Option<Pixels> {
+    let settings = AgentSettings::get_global(cx);
+    if settings.dock == settings::DockPosition::Bottom {
+        None
+    } else {
+        settings.max_content_width
     }
 }
 
@@ -669,6 +679,8 @@ pub struct ThreadView {
     dismissed_skill_loading_issues: HashSet<SkillLoadingIssue>,
     pub(crate) thread_search_bar: Option<Entity<super::thread_search_bar::ThreadSearchBar>>,
     pub(crate) thread_search_visible: bool,
+    trajectory_visible: bool,
+    trajectory_selected_entry: Option<usize>,
 }
 impl Focusable for ThreadView {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
@@ -1071,6 +1083,8 @@ impl ThreadView {
             dismissed_skill_loading_issues: HashSet::default(),
             thread_search_bar: None,
             thread_search_visible: false,
+            trajectory_visible: false,
+            trajectory_selected_entry: None,
         };
 
         this.sync_generating_indicator(cx);
@@ -3150,7 +3164,7 @@ impl ThreadView {
         let edits_expanded = self.edits_expanded;
         let queue_expanded = self.queue_expanded;
 
-        let max_content_width = AgentSettings::get_global(cx).max_content_width;
+        let max_content_width = content_max_width(cx);
 
         h_flex()
             .w_full()
@@ -4263,7 +4277,7 @@ impl ThreadView {
         let is_done = thread.read(cx).status() == ThreadStatus::Idle;
         let is_canceled_or_failed = self.is_subagent_canceled_or_failed(cx);
 
-        let max_content_width = AgentSettings::get_global(cx).max_content_width;
+        let max_content_width = content_max_width(cx);
 
         Some(
             h_flex()
@@ -4355,7 +4369,7 @@ impl ThreadView {
             (IconName::Maximize, "Expand Message Editor")
         };
 
-        let max_content_width = AgentSettings::get_global(cx).max_content_width;
+        let max_content_width = content_max_width(cx);
         let has_messages = self.list_state.item_count() > 0;
         let fills_container = editor_expanded;
         let editor_is_focused = focus_handle.is_focused(window);
@@ -6252,9 +6266,319 @@ fn sandbox_network_rows(network: &SandboxNetPolicy) -> Vec<SandboxRow> {
     }
 }
 
+#[derive(Clone)]
+struct TrajectoryRecord {
+    entry_index: usize,
+    turn: usize,
+    step: usize,
+    kind: &'static str,
+    summary: SharedString,
+    detail: SharedString,
+    is_error: bool,
+}
+
+fn trajectory_text_preview(markdown: &str) -> SharedString {
+    const MAX_PREVIEW_CHARS: usize = 180;
+    let text = markdown
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("## "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut characters = text.chars();
+    let preview = characters
+        .by_ref()
+        .take(MAX_PREVIEW_CHARS)
+        .collect::<String>();
+    if characters.next().is_some() {
+        format!("{preview}…").into()
+    } else if preview.is_empty() {
+        "No content".into()
+    } else {
+        preview.into()
+    }
+}
+
 impl ThreadView {
+    pub(crate) fn set_trajectory_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
+        if self.trajectory_visible == visible {
+            return;
+        }
+        self.trajectory_visible = visible;
+        if visible && self.trajectory_selected_entry.is_none() {
+            self.trajectory_selected_entry = self.thread.read(cx).entries().len().checked_sub(1);
+        }
+        cx.notify();
+    }
+
+    fn trajectory_records(&self, cx: &App) -> Vec<TrajectoryRecord> {
+        let thread = self.thread.read(cx);
+        let mut turn = 0;
+        let mut step = 0;
+        thread
+            .entries()
+            .iter()
+            .enumerate()
+            .map(|(entry_index, entry)| {
+                if matches!(entry, AgentThreadEntry::UserMessage(_)) {
+                    turn += 1;
+                    step = 0;
+                } else if matches!(entry, AgentThreadEntry::AssistantMessage(_)) {
+                    step += 1;
+                }
+                let (kind, is_error) = match entry {
+                    AgentThreadEntry::UserMessage(_) => ("USER", false),
+                    AgentThreadEntry::AssistantMessage(_) => ("ASSISTANT", false),
+                    AgentThreadEntry::ToolCall(tool_call) => (
+                        "TOOL",
+                        matches!(
+                            tool_call.status,
+                            ToolCallStatus::Failed | ToolCallStatus::Rejected
+                        ),
+                    ),
+                    AgentThreadEntry::Elicitation(_) => ("INPUT", false),
+                    AgentThreadEntry::CompletedPlan(_) => ("PLAN", false),
+                    AgentThreadEntry::ContextCompaction(_) => ("COMPACTED", false),
+                };
+                let detail = entry.to_markdown(cx);
+                TrajectoryRecord {
+                    entry_index,
+                    turn,
+                    step,
+                    kind,
+                    summary: trajectory_text_preview(&detail),
+                    detail: detail.into(),
+                    is_error,
+                }
+            })
+            .collect()
+    }
+
+    fn render_trajectory(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let records = self.trajectory_records(cx);
+        let selected_index = self.trajectory_selected_entry;
+        let selected = selected_index.and_then(|index| {
+            records
+                .iter()
+                .find(|record| record.entry_index == index)
+                .cloned()
+        });
+        let has_selected_record = selected.is_some();
+        let usage = self.thread.read(cx).token_usage().cloned();
+        let record_count = records.len();
+        let turn_count = records.iter().map(|record| record.turn).max().unwrap_or(0);
+
+        let overview = h_flex()
+            .h(Tab::container_height(cx))
+            .px_2()
+            .gap_3()
+            .flex_none()
+            .border_b_1()
+            .border_color(cx.theme().colors().border_variant)
+            .bg(cx.theme().colors().tab_bar_background)
+            .child(Label::new("Overview").weight(FontWeight::MEDIUM))
+            .child(
+                Label::new(format!("{turn_count} turns · {record_count} records"))
+                    .size(LabelSize::Small)
+                    .color(Color::Muted),
+            )
+            .when_some(usage, |this, usage| {
+                this.child(
+                    Label::new(format!(
+                        "Input {} · Output {} · Context {}/{}",
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.used_tokens,
+                        usage.max_tokens
+                    ))
+                    .size(LabelSize::Small)
+                    .color(Color::Muted),
+                )
+            });
+
+        let header = h_flex()
+            .h_8()
+            .px_2()
+            .flex_none()
+            .border_b_1()
+            .border_color(cx.theme().colors().border_variant)
+            .text_xs()
+            .text_color(cx.theme().colors().text_muted)
+            .child(div().w_12().child("#"))
+            .child(div().w_24().child("Event"))
+            .child(div().flex_1().child("Content"));
+
+        let mut previous_turn = None;
+        let mut rows = Vec::new();
+        for (record_number, record) in records.into_iter().enumerate() {
+            if previous_turn != Some(record.turn) {
+                let turn_label = if record.turn == 0 {
+                    "Between turns".to_string()
+                } else {
+                    format!("Turn {}", record.turn)
+                };
+                rows.push(
+                    h_flex()
+                        .h_7()
+                        .px_2()
+                        .flex_none()
+                        .border_b_1()
+                        .border_color(cx.theme().colors().border_variant)
+                        .bg(cx.theme().colors().element_background)
+                        .child(
+                            Label::new(turn_label)
+                                .size(LabelSize::Small)
+                                .weight(FontWeight::MEDIUM),
+                        )
+                        .into_any_element(),
+                );
+                previous_turn = Some(record.turn);
+            }
+
+            let entry_index = record.entry_index;
+            let is_selected = selected_index == Some(entry_index);
+            let kind_color = if record.is_error {
+                Color::Error
+            } else if record.kind == "USER" {
+                Color::Accent
+            } else {
+                Color::Muted
+            };
+            rows.push(
+                h_flex()
+                    .id(("trajectory-record", entry_index))
+                    .min_h_9()
+                    .px_2()
+                    .py_1()
+                    .flex_none()
+                    .border_b_1()
+                    .border_color(cx.theme().colors().border_variant)
+                    .when(is_selected, |this| {
+                        this.bg(cx.theme().colors().element_selected)
+                    })
+                    .hover(|this| this.bg(cx.theme().colors().element_hover))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.trajectory_selected_entry = Some(entry_index);
+                        cx.notify();
+                    }))
+                    .child(
+                        div().w_12().child(
+                            Label::new(format!("#{}", record_number + 1))
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        ),
+                    )
+                    .child(
+                        div().w_24().child(
+                            h_flex()
+                                .gap_1()
+                                .child(
+                                    Label::new(record.kind)
+                                        .size(LabelSize::XSmall)
+                                        .color(kind_color),
+                                )
+                                .when(record.step > 0, |this| {
+                                    this.child(
+                                        Label::new(format!("S{}", record.step))
+                                            .size(LabelSize::XSmall)
+                                            .color(Color::Muted),
+                                    )
+                                }),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_1()
+                            .overflow_hidden()
+                            .child(Label::new(record.summary).size(LabelSize::Small).truncate()),
+                    )
+                    .into_any_element(),
+            );
+        }
+
+        let table = v_flex().size_full().min_w_0().child(header).child(
+            v_flex()
+                .id("trajectory-records")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .children(rows),
+        );
+
+        let details = v_flex()
+            .size_full()
+            .min_w_0()
+            .border_l_1()
+            .border_color(cx.theme().colors().border_variant)
+            .child(
+                h_flex()
+                    .h_8()
+                    .px_2()
+                    .flex_none()
+                    .border_b_1()
+                    .border_color(cx.theme().colors().border_variant)
+                    .child(
+                        Label::new("Details")
+                            .size(LabelSize::Small)
+                            .weight(FontWeight::MEDIUM),
+                    ),
+            )
+            .child(
+                div()
+                    .id("trajectory-details")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .p_3()
+                    .when_some(selected, |this, record| {
+                        this.child(
+                            v_flex()
+                                .gap_2()
+                                .child(
+                                    Label::new(format!(
+                                        "Turn {} · Step {} · {}",
+                                        record.turn, record.step, record.kind
+                                    ))
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                                )
+                                .child(div().text_sm().child(record.detail)),
+                        )
+                    })
+                    .when(!has_selected_record, |this| {
+                        this.child(
+                            Label::new("Select a record to inspect its full content.")
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                    }),
+            );
+
+        let is_bottom_dock = AgentSettings::get_global(cx).dock == settings::DockPosition::Bottom;
+        let body = if is_bottom_dock {
+            h_flex()
+                .size_full()
+                .child(div().w_3_5().h_full().child(table))
+                .child(div().flex_1().h_full().child(details))
+                .into_any_element()
+        } else {
+            v_flex()
+                .size_full()
+                .child(div().flex_1().min_h_0().child(table))
+                .child(div().h(px(240.)).flex_none().child(details))
+                .into_any_element()
+        };
+        v_flex()
+            .size_full()
+            .child(overview)
+            .child(div().flex_1().min_h_0().child(body))
+            .into_any_element()
+    }
+
     fn render_entries(&mut self, cx: &mut Context<Self>) -> List {
-        let max_content_width = AgentSettings::get_global(cx).max_content_width;
+        let max_content_width = content_max_width(cx);
         let centered_container = move |content: AnyElement| {
             h_flex().w_full().justify_center().child(
                 div()
@@ -12205,6 +12529,10 @@ impl ThreadView {
 
 impl Render for ThreadView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.trajectory_visible {
+            return self.render_trajectory(cx);
+        }
+
         // Keep the message editor's local slash commands in sync with the
         // current availability of feedback/sharing, which can change between
         // renders (settings, connection state, feature flags).
@@ -12567,6 +12895,7 @@ impl Render for ThreadView {
             .children(self.render_token_limit_callout(cx))
             .children(self.render_request_elicitations(cx))
             .child(self.render_message_editor(window, cx))
+            .into_any_element()
     }
 }
 
@@ -12763,6 +13092,19 @@ mod tests {
         assert_eq!(next_permission_mode(Auto), FullAccess);
         assert_eq!(next_permission_mode(FullAccess), Manual);
     }
+
+    #[test]
+    fn trajectory_preview_omits_headings_and_collapses_lines() {
+        assert_eq!(
+            trajectory_text_preview("## User\n\nFirst line\n  second line  "),
+            SharedString::from("First line second line")
+        );
+        assert_eq!(
+            trajectory_text_preview("## Assistant\n"),
+            SharedString::from("No content")
+        );
+    }
+
     use project::{FakeFs, Project};
     use serde_json::json;
     use std::path::Path;

@@ -29,6 +29,17 @@ pub enum PanelEvent {
     ZoomOut,
     Activate,
     Close,
+    HeaderChanged,
+}
+
+pub struct BottomDockTab {
+    pub label: SharedString,
+    pub selected: bool,
+}
+
+pub struct BottomDockButton {
+    pub icon: ui::IconName,
+    pub tooltip: SharedString,
 }
 
 pub use proto::PanelId;
@@ -65,6 +76,26 @@ pub trait Panel: Focusable + EventEmitter<PanelEvent> + Render + Sized {
     fn toggle_action(&self) -> Box<dyn Action>;
     fn icon_label(&self, _window: &Window, _: &App) -> Option<String> {
         None
+    }
+    fn bottom_dock_tabs(&self) -> Option<Vec<BottomDockTab>> {
+        None
+    }
+    fn activate_bottom_dock_tab(
+        &mut self,
+        _index: usize,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+    fn bottom_dock_buttons(&self) -> Vec<BottomDockButton> {
+        Vec::new()
+    }
+    fn activate_bottom_dock_button(
+        &mut self,
+        _index: usize,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
     }
     fn is_zoomed(&self, _window: &Window, _cx: &App) -> bool {
         false
@@ -118,6 +149,10 @@ pub trait PanelHandle: Send + Sync {
     fn icon_tooltip(&self, window: &Window, cx: &App) -> Option<&'static str>;
     fn toggle_action(&self, window: &Window, cx: &App) -> Box<dyn Action>;
     fn icon_label(&self, window: &Window, cx: &App) -> Option<String>;
+    fn bottom_dock_tabs(&self, cx: &App) -> Option<Vec<BottomDockTab>>;
+    fn activate_bottom_dock_tab(&self, index: usize, window: &mut Window, cx: &mut App);
+    fn bottom_dock_buttons(&self, cx: &App) -> Vec<BottomDockButton>;
+    fn activate_bottom_dock_button(&self, index: usize, window: &mut Window, cx: &mut App);
     fn panel_focus_handle(&self, cx: &App) -> FocusHandle;
     fn to_any(&self) -> AnyView;
     fn activation_priority(&self, cx: &App) -> u32;
@@ -231,6 +266,26 @@ where
 
     fn icon_label(&self, window: &Window, cx: &App) -> Option<String> {
         self.read(cx).icon_label(window, cx)
+    }
+
+    fn bottom_dock_tabs(&self, cx: &App) -> Option<Vec<BottomDockTab>> {
+        self.read(cx).bottom_dock_tabs()
+    }
+
+    fn activate_bottom_dock_tab(&self, index: usize, window: &mut Window, cx: &mut App) {
+        self.update(cx, |panel, cx| {
+            panel.activate_bottom_dock_tab(index, window, cx)
+        });
+    }
+
+    fn bottom_dock_buttons(&self, cx: &App) -> Vec<BottomDockButton> {
+        self.read(cx).bottom_dock_buttons()
+    }
+
+    fn activate_bottom_dock_button(&self, index: usize, window: &mut Window, cx: &mut App) {
+        self.update(cx, |panel, cx| {
+            panel.activate_bottom_dock_button(index, window, cx)
+        });
     }
 
     fn to_any(&self) -> AnyView {
@@ -726,6 +781,7 @@ impl Dock {
                             this.set_open(false, window, cx);
                         }
                     }
+                    PanelEvent::HeaderChanged => cx.notify(),
                 },
             ),
         ];
@@ -1117,46 +1173,98 @@ impl Render for Dock {
         if let Some(entry) = self.visible_entry() {
             let active_panel_index = self.active_panel_index;
             let panel_tabs = (self.position == DockPosition::Bottom).then(|| {
-                let tabs = self
-                    .panel_entries
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, entry)| {
-                        if !entry.panel.enabled(cx) {
-                            return None;
-                        }
-                        let tooltip = entry.panel.icon_tooltip(window, cx)?;
-                        let label = match tooltip {
-                            "Debug Panel" => "Debug Console",
-                            "Terminal Panel" => "Terminal",
-                            label => label,
-                        };
-                        let is_active = active_panel_index == Some(index);
-                        let action = entry.panel.toggle_action(window, cx);
-                        Some(
-                            Button::new(entry.panel.persistent_name(), label)
+                let mut tabs = Vec::new();
+                let mut trailing_buttons = Vec::new();
+                for (panel_index, entry) in self.panel_entries.iter().enumerate() {
+                    if !entry.panel.enabled(cx) {
+                        continue;
+                    }
+                    for (button_index, button) in
+                        entry.panel.bottom_dock_buttons(cx).into_iter().enumerate()
+                    {
+                        let panel = entry.panel.clone();
+                        trailing_buttons.push(
+                            IconButton::new(
+                                SharedString::from(format!(
+                                    "{}-bottom-dock-{button_index}",
+                                    entry.panel.persistent_name()
+                                )),
+                                button.icon,
+                            )
+                            .icon_size(IconSize::Small)
+                            .tooltip(Tooltip::text(button.tooltip))
+                            .on_click(cx.listener(
+                                move |dock, _, window, cx| {
+                                    panel.activate_bottom_dock_button(button_index, window, cx);
+                                    dock.set_open(true, window, cx);
+                                    dock.activate_panel(panel_index, window, cx);
+                                    window.focus(&panel.panel_focus_handle(cx), cx);
+                                    cx.notify();
+                                },
+                            )),
+                        );
+                    }
+                    let is_active_panel = active_panel_index == Some(panel_index);
+                    if let Some(panel_tabs) = entry.panel.bottom_dock_tabs(cx) {
+                        for (tab_index, panel_tab) in panel_tabs.into_iter().enumerate() {
+                            let panel = entry.panel.clone();
+                            tabs.push(
+                                Button::new(
+                                    (entry.panel.persistent_name(), tab_index),
+                                    panel_tab.label,
+                                )
                                 .style(ButtonStyle::Subtle)
                                 .label_size(LabelSize::Small)
                                 .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                                .toggle_state(is_active)
-                                .when(!is_active, |button| {
-                                    button.on_click(move |_, window, cx| {
-                                        window.dispatch_action(action.boxed_clone(), cx);
-                                    })
-                                }),
-                        )
-                    })
-                    .collect::<Vec<_>>();
+                                .toggle_state(is_active_panel && panel_tab.selected)
+                                .on_click(cx.listener(
+                                    move |dock, _, window, cx| {
+                                        panel.activate_bottom_dock_tab(tab_index, window, cx);
+                                        dock.set_open(true, window, cx);
+                                        dock.activate_panel(panel_index, window, cx);
+                                        window.focus(&panel.panel_focus_handle(cx), cx);
+                                        cx.notify();
+                                    },
+                                )),
+                            );
+                        }
+                        continue;
+                    }
+
+                    let Some(tooltip) = entry.panel.icon_tooltip(window, cx) else {
+                        continue;
+                    };
+                    let label = match tooltip {
+                        "Debug Panel" => "Debug Console",
+                        "Terminal Panel" => "Terminal",
+                        label => label,
+                    };
+                    let action = entry.panel.toggle_action(window, cx);
+                    tabs.push(
+                        Button::new(entry.panel.persistent_name(), label)
+                            .style(ButtonStyle::Subtle)
+                            .label_size(LabelSize::Small)
+                            .selected_style(ButtonStyle::Tinted(TintColor::Accent))
+                            .toggle_state(is_active_panel)
+                            .when(!is_active_panel, |button| {
+                                button.on_click(move |_, window, cx| {
+                                    window.dispatch_action(action.boxed_clone(), cx);
+                                })
+                            }),
+                    );
+                }
 
                 h_flex()
                     .h(Tab::container_height(cx))
                     .px_1()
                     .gap_1()
                     .flex_none()
+                    .justify_between()
                     .border_b_1()
                     .border_color(cx.theme().colors().border_variant)
                     .bg(cx.theme().colors().tab_bar_background)
-                    .children(tabs)
+                    .child(h_flex().gap_1().children(tabs))
+                    .child(h_flex().gap_0p5().children(trailing_buttons))
             });
             let position = self.position;
             let create_resize_handle = || {

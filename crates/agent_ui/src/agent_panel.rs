@@ -84,7 +84,7 @@ use util::ResultExt as _;
 use workspace::{
     CollaboratorId, DraggedSelection, DraggedTab, MultiWorkspace, PathList, SerializedPathList,
     ToggleZoom, ToolbarItemView, Workspace, WorkspaceId,
-    dock::{DockPosition, Panel, PanelEvent},
+    dock::{BottomDockButton, BottomDockTab, DockPosition, Panel, PanelEvent},
     item::{ItemEvent, ItemHandle},
 };
 
@@ -1127,6 +1127,7 @@ impl BaseView {
 enum AgentPanelSection {
     #[default]
     Agent,
+    Trajectory,
     Threads,
 }
 
@@ -1497,11 +1498,12 @@ impl AgentPanel {
             _window,
             |this, threads_view, event: &ThreadsArchiveViewEvent, window, cx| match event {
                 ThreadsArchiveViewEvent::Close => {
-                    this.active_section = AgentPanelSection::Agent;
+                    this.set_active_section(AgentPanelSection::Agent, cx);
+                    cx.emit(PanelEvent::HeaderChanged);
                     cx.notify();
                 }
                 ThreadsArchiveViewEvent::Activate { thread } => {
-                    this.active_section = AgentPanelSection::Agent;
+                    this.set_active_section(AgentPanelSection::Agent, cx);
                     this.load_agent_thread(
                         Agent::from(thread.agent_id.clone()),
                         thread.thread_id,
@@ -1515,6 +1517,7 @@ impl AgentPanel {
                     threads_view.update(cx, |view, cx| {
                         view.clear_restoring(&thread.thread_id, cx);
                     });
+                    cx.emit(PanelEvent::HeaderChanged);
                     cx.notify();
                 }
                 ThreadsArchiveViewEvent::CancelRestore { .. } => {}
@@ -1522,8 +1525,9 @@ impl AgentPanel {
                     window.dispatch_action(ImportThreadsFromOtherChannels.boxed_clone(), cx);
                 }
                 ThreadsArchiveViewEvent::NewThread => {
-                    this.active_section = AgentPanelSection::Agent;
+                    this.set_active_section(AgentPanelSection::Agent, cx);
                     this.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
+                    cx.emit(PanelEvent::HeaderChanged);
                     cx.notify();
                 }
             },
@@ -4230,6 +4234,14 @@ impl AgentPanel {
                 self.serialize(cx);
             }
         }
+        if let Some(conversation_view) = self.active_conversation_view()
+            && let Some(thread_view) = conversation_view.read(cx).root_thread_view()
+        {
+            let trajectory_visible = self.active_section == AgentPanelSection::Trajectory;
+            thread_view.update(cx, |thread_view, cx| {
+                thread_view.set_trajectory_visible(trajectory_visible, cx);
+            });
+        }
 
         self.refresh_base_view_subscriptions(window, cx);
 
@@ -4969,8 +4981,8 @@ impl Panel for AgentPanel {
         true
     }
 
-    fn position_is_valid(&self, position: DockPosition) -> bool {
-        position != DockPosition::Bottom
+    fn position_is_valid(&self, _position: DockPosition) -> bool {
+        true
     }
 
     fn set_position(&mut self, position: DockPosition, _: &mut Window, cx: &mut Context<Self>) {
@@ -5042,6 +5054,70 @@ impl Panel for AgentPanel {
         Box::new(ToggleFocus)
     }
 
+    fn bottom_dock_tabs(&self) -> Option<Vec<BottomDockTab>> {
+        Some(vec![
+            BottomDockTab {
+                label: "Agent".into(),
+                selected: self.active_section == AgentPanelSection::Agent,
+            },
+            BottomDockTab {
+                label: "Trajectory".into(),
+                selected: self.active_section == AgentPanelSection::Trajectory,
+            },
+            BottomDockTab {
+                label: "Conversations".into(),
+                selected: self.active_section == AgentPanelSection::Threads,
+            },
+        ])
+    }
+
+    fn activate_bottom_dock_tab(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match index {
+            0 => {
+                self.set_active_section(AgentPanelSection::Agent, cx);
+                self.focus_handle.focus(window, cx);
+            }
+            1 => {
+                self.set_active_section(AgentPanelSection::Trajectory, cx);
+                self.focus_handle.focus(window, cx);
+            }
+            2 => {
+                self.set_active_section(AgentPanelSection::Threads, cx);
+                self.threads_view.update(cx, |view, cx| {
+                    view.focus_filter_editor(window, cx);
+                });
+            }
+            _ => return,
+        }
+        cx.notify();
+    }
+
+    fn bottom_dock_buttons(&self) -> Vec<BottomDockButton> {
+        vec![BottomDockButton {
+            icon: IconName::Plus,
+            tooltip: "New Agent Thread".into(),
+        }]
+    }
+
+    fn activate_bottom_dock_button(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if index != 0 || !self.has_open_project(cx) {
+            return;
+        }
+        self.set_active_section(AgentPanelSection::Agent, cx);
+        self.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
+        cx.notify();
+    }
+
     fn activation_priority(&self) -> u32 {
         0
     }
@@ -5071,6 +5147,17 @@ impl Panel for AgentPanel {
 }
 
 impl AgentPanel {
+    fn set_active_section(&mut self, section: AgentPanelSection, cx: &mut Context<Self>) {
+        self.active_section = section;
+        if let Some(conversation_view) = self.active_conversation_view()
+            && let Some(thread_view) = conversation_view.read(cx).root_thread_view()
+        {
+            thread_view.update(cx, |thread_view, cx| {
+                thread_view.set_trajectory_visible(section == AgentPanelSection::Trajectory, cx);
+            });
+        }
+    }
+
     fn ensure_thread_initialized(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.base_view, BaseView::Uninitialized) {
             if self.pending_terminal_spawn.is_some() {
@@ -5913,6 +6000,52 @@ impl AgentPanel {
             .child(toolbar_content)
     }
 
+    fn render_section_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        h_flex()
+            .gap_1()
+            .child(
+                Button::new("agent-section-agent", "Agent")
+                    .style(ButtonStyle::Subtle)
+                    .label_size(LabelSize::Small)
+                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                    .toggle_state(self.active_section == AgentPanelSection::Agent)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_active_section(AgentPanelSection::Agent, cx);
+                        this.focus_handle.focus(window, cx);
+                        cx.emit(PanelEvent::HeaderChanged);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("agent-section-trajectory", "Trajectory")
+                    .style(ButtonStyle::Subtle)
+                    .label_size(LabelSize::Small)
+                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                    .toggle_state(self.active_section == AgentPanelSection::Trajectory)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_active_section(AgentPanelSection::Trajectory, cx);
+                        this.focus_handle.focus(window, cx);
+                        cx.emit(PanelEvent::HeaderChanged);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("agent-section-threads", "Conversations")
+                    .style(ButtonStyle::Subtle)
+                    .label_size(LabelSize::Small)
+                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                    .toggle_state(self.active_section == AgentPanelSection::Threads)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.set_active_section(AgentPanelSection::Threads, cx);
+                        this.threads_view.update(cx, |view, cx| {
+                            view.focus_filter_editor(window, cx);
+                        });
+                        cx.emit(PanelEvent::HeaderChanged);
+                        cx.notify();
+                    })),
+            )
+    }
+
     fn render_section_switcher(
         &self,
         window: &mut Window,
@@ -5927,8 +6060,9 @@ impl AgentPanel {
                 Tooltip::for_action_in("New Agent Thread", &NewThread, &focus_handle, cx)
             })
             .on_click(cx.listener(|this, _, window, cx| {
-                this.active_section = AgentPanelSection::Agent;
+                this.set_active_section(AgentPanelSection::Agent, cx);
                 this.activate_new_thread(true, AgentThreadSource::AgentPanel, window, cx);
+                cx.emit(PanelEvent::HeaderChanged);
             }));
 
         let is_full_screen = self.is_zoomed(window, cx);
@@ -5966,36 +6100,7 @@ impl AgentPanel {
                         this.max_w(max_width).mx_auto()
                     })
                     .justify_between()
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .child(
-                                Button::new("agent-section-agent", "Agent")
-                                    .style(ButtonStyle::Subtle)
-                                    .label_size(LabelSize::Small)
-                                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                                    .toggle_state(self.active_section == AgentPanelSection::Agent)
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.active_section = AgentPanelSection::Agent;
-                                        this.focus_handle.focus(window, cx);
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Button::new("agent-section-threads", "Conversations")
-                                    .style(ButtonStyle::Subtle)
-                                    .label_size(LabelSize::Small)
-                                    .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                                    .toggle_state(self.active_section == AgentPanelSection::Threads)
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.active_section = AgentPanelSection::Threads;
-                                        this.threads_view.update(cx, |view, cx| {
-                                            view.focus_filter_editor(window, cx);
-                                        });
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
+                    .child(self.render_section_buttons(cx))
                     .child(
                         h_flex()
                             .gap_0p5()
@@ -6178,6 +6283,7 @@ impl Render for AgentPanel {
         // - Font size works as expected and can be changed with cmd-+/cmd-
         // - Scrolling in all views works as expected
         // - Files can be dropped into the panel
+        let is_bottom_dock = agent_panel_dock_position(cx) == DockPosition::Bottom;
         let content = v_flex()
             .key_context(self.key_context())
             .relative()
@@ -6216,10 +6322,13 @@ impl Render for AgentPanel {
                     })
                 }
             }))
-            .child(self.render_section_switcher(window, cx))
-            .when(self.active_section == AgentPanelSection::Agent, |parent| {
-                parent.child(self.render_toolbar(window, cx))
+            .when(!is_bottom_dock, |parent| {
+                parent.child(self.render_section_switcher(window, cx))
             })
+            .when(
+                self.active_section == AgentPanelSection::Agent && !is_bottom_dock,
+                |parent| parent.child(self.render_toolbar(window, cx)),
+            )
             .map(|parent| {
                 if self.active_section == AgentPanelSection::Threads {
                     return parent.child(self.threads_view.clone());

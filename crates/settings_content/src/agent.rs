@@ -199,7 +199,8 @@ pub struct AgentSettingsContent {
     ///
     /// Default: true
     pub button: Option<bool>,
-    /// Where to dock the agent panel.
+    /// Where to dock the agent panel. The bottom dock shares the terminal area
+    /// and places the agent conversation in the center of the window.
     ///
     /// Default: left (Agentic layout), right (Classic layout)
     pub dock: Option<DockPosition>,
