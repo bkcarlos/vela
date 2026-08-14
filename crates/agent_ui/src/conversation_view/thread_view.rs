@@ -1904,7 +1904,7 @@ impl ThreadView {
             .collect();
 
         if relevant_lines.is_empty() {
-            relevant_lines.extend(lines.into_iter());
+            relevant_lines.extend(lines);
         }
 
         if relevant_lines.is_empty() {
@@ -11237,7 +11237,7 @@ impl ThreadView {
                 h_flex()
                     .gap_0p5()
                     .child(self.authenticate_button(cx))
-                    .child(self.create_copy_button(error.clone()))
+                    .child(self.create_copy_button(error))
                     .child(self.open_log_button(cx)),
             )
             .dismiss_action(self.dismiss_error_button(cx))
