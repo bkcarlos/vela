@@ -581,6 +581,83 @@ fn codeblock_tag(full_path: &Path, line_range: Option<&RangeInclusive<u32>>) -> 
     result
 }
 
+const MAX_TOOL_RESULT_CONTEXT_BYTES: usize = 32 * 1024;
+const TOOL_RESULT_TRUNCATION_MARKER: &str = "\n[Tool output truncated to fit the context budget.]";
+
+fn truncate_tool_result_for_request(
+    mut tool_result: LanguageModelToolResult,
+) -> LanguageModelToolResult {
+    let original_bytes: usize = tool_result
+        .content
+        .iter()
+        .map(|part| match part {
+            LanguageModelToolResultContent::Text(text) => text.len(),
+            LanguageModelToolResultContent::Image(image) => image.len(),
+        })
+        .sum();
+    if original_bytes <= MAX_TOOL_RESULT_CONTEXT_BYTES {
+        return tool_result;
+    }
+
+    let mut remaining = MAX_TOOL_RESULT_CONTEXT_BYTES;
+    let mut content = Vec::with_capacity(tool_result.content.len());
+    let mut truncated = false;
+    for part in tool_result.content {
+        match part {
+            LanguageModelToolResultContent::Text(text) => {
+                if remaining == 0 {
+                    truncated = true;
+                    continue;
+                }
+                let text = text.as_ref();
+                if text.len() <= remaining {
+                    remaining -= text.len();
+                    content.push(LanguageModelToolResultContent::Text(text.into()));
+                } else {
+                    let marker_len = TOOL_RESULT_TRUNCATION_MARKER.len();
+                    let text_budget = remaining.saturating_sub(marker_len);
+                    let prefix_budget = text_budget / 2;
+                    let suffix_budget = text_budget.saturating_sub(prefix_budget);
+                    let prefix_end = text.floor_char_boundary(prefix_budget.min(text.len()));
+                    let suffix_start = text.len().saturating_sub(suffix_budget);
+                    let suffix_start = (suffix_start..text.len())
+                        .find(|index| text.is_char_boundary(*index))
+                        .unwrap_or(text.len());
+                    let mut shortened = String::with_capacity(remaining);
+                    shortened.push_str(&text[..prefix_end]);
+                    if remaining >= marker_len {
+                        shortened.push_str(TOOL_RESULT_TRUNCATION_MARKER);
+                    }
+                    if suffix_start < text.len() {
+                        shortened.push_str(&text[suffix_start..]);
+                    }
+                    content.push(LanguageModelToolResultContent::Text(shortened.into()));
+                    remaining = 0;
+                    truncated = true;
+                }
+            }
+            LanguageModelToolResultContent::Image(image) => {
+                if image.len() <= remaining {
+                    remaining -= image.len();
+                    content.push(LanguageModelToolResultContent::Image(image));
+                } else {
+                    truncated = true;
+                }
+            }
+        }
+    }
+    if truncated
+        && remaining >= TOOL_RESULT_TRUNCATION_MARKER.len()
+        && !content.iter().any(|part| {
+            matches!(part, LanguageModelToolResultContent::Text(text) if text.contains(TOOL_RESULT_TRUNCATION_MARKER))
+        })
+    {
+        content.push(LanguageModelToolResultContent::Text(TOOL_RESULT_TRUNCATION_MARKER.into()));
+    }
+    tool_result.content = content;
+    tool_result
+}
+
 impl AgentMessage {
     pub fn to_markdown(&self) -> String {
         let mut markdown = String::new();
@@ -693,7 +770,7 @@ impl AgentMessage {
         };
 
         for tool_result in self.tool_results.values() {
-            let mut tool_result = tool_result.clone();
+            let mut tool_result = truncate_tool_result_for_request(tool_result.clone());
             // Surprisingly, the API fails if we return an empty string here.
             // It thinks we are sending a tool use without a tool result.
             if tool_result.is_content_empty() {
@@ -2451,7 +2528,7 @@ impl Thread {
             self.advance_prompt_id();
             let request = self.build_compaction_request(request_end_ix, &model, cx);
             self.current_request_token_usage = TokenUsage::default();
-            (model, request)
+            (model, request, request_end_ix)
         });
 
         if compaction.is_some() {
@@ -2467,14 +2544,17 @@ impl Thread {
         let task = cx.spawn({
             let event_stream = event_stream.clone();
             async move |this, cx| {
-                let result = if let Some((model, request)) = compaction {
+                let result = if let Some((model, request, request_end_ix)) = compaction {
                     Self::stream_compaction(
                         &this,
                         &event_stream,
                         cancellation_rx.clone(),
                         model,
                         request,
-                        CompactionInsertion::Manual { marker_id: id },
+                        CompactionInsertion::Manual {
+                            marker_id: id,
+                            insertion_ix: request_end_ix,
+                        },
                         cx,
                     )
                     .await
@@ -3132,12 +3212,19 @@ impl Thread {
                         this.messages.push(compaction);
                     }
                 }
-                CompactionInsertion::Manual { marker_id } => {
-                    this.messages.push(Arc::new(Message::User(UserMessage {
-                        id: marker_id,
-                        content: Arc::from([]),
-                    })));
-                    this.messages.push(compaction);
+                CompactionInsertion::Manual {
+                    marker_id,
+                    insertion_ix,
+                } => {
+                    let insertion_ix = insertion_ix.min(this.messages.len());
+                    this.messages.insert(
+                        insertion_ix,
+                        Arc::new(Message::User(UserMessage {
+                            id: marker_id,
+                            content: Arc::from([]),
+                        })),
+                    );
+                    this.messages.insert(insertion_ix + 1, compaction);
                 }
             }
             cx.notify();
@@ -3296,6 +3383,8 @@ impl Thread {
                     output_tokens = usage.output_tokens,
                     cache_creation_input_tokens = usage.cache_creation_input_tokens,
                     cache_read_input_tokens = usage.cache_read_input_tokens,
+                    context_input_tokens = usage.context_input_tokens(),
+                    billable_input_tokens = usage.billable_input_tokens(),
                 );
                 // A successful compaction defers its telemetry until the first
                 // completion that follows it, so `tokens_after` reflects the
@@ -3724,8 +3813,7 @@ impl Thread {
                         _ => continue,
                     };
 
-                    let mut lines = text.lines();
-                    summary.extend(lines.next());
+                    summary.push_str(&text);
                 }
 
                 log::debug!("Setting summary: {}", summary);
@@ -4279,7 +4367,7 @@ impl Thread {
             return None;
         }
 
-        let insertion_ix = match self.messages.last() {
+        let end_ix = match self.messages.last() {
             Some(message)
                 if matches!(
                     &**message,
@@ -4290,7 +4378,29 @@ impl Thread {
             }
             _ => self.messages.len(),
         };
+        let insertion_ix = self.compaction_cut_index(end_ix);
         Some(insertion_ix)
+    }
+
+    /// Selects a turn boundary that leaves the most recent work in the live
+    /// context. Keeping complete turns is important because tool results must
+    /// remain paired with their tool calls.
+    fn compaction_cut_index(&self, end_ix: usize) -> usize {
+        let end_ix = end_ix.min(self.messages.len());
+        let mut retained_bytes: usize = 0;
+        let mut cut_index = end_ix;
+
+        for index in (0..end_ix).rev() {
+            retained_bytes =
+                retained_bytes.saturating_add(self.messages[index].to_markdown().len());
+            if matches!(&*self.messages[index], Message::User(_))
+                && retained_bytes > COMPACTION_RETAINED_USER_MESSAGES_BYTE_BUDGET
+            {
+                cut_index = index;
+                break;
+            }
+        }
+        cut_index
     }
 
     /// Insertion point for a manually-triggered compaction.
@@ -4302,7 +4412,7 @@ impl Thread {
         ) {
             return None;
         }
-        Some(self.messages.len())
+        Some(self.compaction_cut_index(self.messages.len()))
     }
 
     fn build_compaction_request(
@@ -4452,10 +4562,7 @@ impl Thread {
 }
 
 fn total_input_tokens(usage: language_model::TokenUsage) -> u64 {
-    usage
-        .input_tokens
-        .saturating_add(usage.cache_creation_input_tokens)
-        .saturating_add(usage.cache_read_input_tokens)
+    usage.context_input_tokens()
 }
 
 fn auto_compact_threshold_token_count(
@@ -4605,7 +4712,10 @@ enum CompactionInsertion {
     /// (which may be before a trailing not-yet-answered user message).
     Auto { insertion_ix: usize },
     /// Manual `/compact` appends a zero-content user message followed by the summary.
-    Manual { marker_id: ClientUserMessageId },
+    Manual {
+        marker_id: ClientUserMessageId,
+        insertion_ix: usize,
+    },
 }
 
 struct RunningTurn {
@@ -6573,6 +6683,31 @@ mod tests {
         let mut settings = AgentSettings::get_global(cx).clone();
         settings.auto_compact = auto_compact;
         AgentSettings::override_global(settings, cx);
+    }
+
+    #[test]
+    fn test_tool_results_are_bounded_for_requests() {
+        let tool_result = LanguageModelToolResult {
+            tool_use_id: LanguageModelToolUseId::from("tool"),
+            tool_name: "terminal".into(),
+            is_error: false,
+            content: vec![LanguageModelToolResultContent::Text(
+                "x".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 2).into(),
+            )],
+            output: None,
+        };
+
+        let bounded = truncate_tool_result_for_request(tool_result);
+        let bytes: usize = bounded
+            .content
+            .iter()
+            .map(|part| match part {
+                LanguageModelToolResultContent::Text(text) => text.len(),
+                LanguageModelToolResultContent::Image(image) => image.len(),
+            })
+            .sum();
+        assert!(bytes <= MAX_TOOL_RESULT_CONTEXT_BYTES);
+        assert!(bounded.text_contents().contains("truncated"));
     }
 
     #[test]

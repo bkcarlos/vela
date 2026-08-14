@@ -34,8 +34,19 @@ pub struct AllLanguageModelSettingsContent {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
 pub struct AnthropicSettingsContent {
     pub api_url: Option<String>,
+    /// Authentication header format used for Anthropic requests.
+    /// Defaults to `x_api_key`, while some compatible gateways require `bearer`.
+    pub auth_mode: Option<AnthropicAuthMode>,
     pub available_models: Option<Vec<AnthropicAvailableModel>>,
     pub custom_headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
+#[serde(rename_all = "snake_case")]
+pub enum AnthropicAuthMode {
+    #[default]
+    XApiKey,
+    Bearer,
 }
 
 #[with_fallible_options]

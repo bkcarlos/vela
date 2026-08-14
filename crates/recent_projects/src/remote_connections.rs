@@ -215,17 +215,24 @@ pub async fn open_remote_project(
                 cx,
             )
             .contains(window);
-            let has_live_connection = window.read(cx).is_ok_and(|multi_workspace| {
-                multi_workspace
-                    .workspace()
-                    .read(cx)
-                    .project()
-                    .read(cx)
-                    .remote_client()
-                    .and_then(|client| client.read(cx).remote_connection())
-                    .is_some()
-            });
-            same_host && has_live_connection
+            let Some(multi_workspace) = window.read(cx).ok() else {
+                return false;
+            };
+            let workspace = multi_workspace.workspace();
+            let has_live_connection = workspace
+                .read(cx)
+                .project()
+                .read(cx)
+                .remote_client()
+                .and_then(|client| client.read(cx).remote_connection())
+                .is_some();
+            let path_is_in_existing_worktree = workspace
+                .read(cx)
+                .project()
+                .read(cx)
+                .visibility_for_paths(&paths, true, cx)
+                .is_some();
+            same_host && has_live_connection && !path_is_in_existing_worktree
         })
     });
     if open_options.requesting_window.is_some() && requesting_window.is_none() {

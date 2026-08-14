@@ -139,6 +139,7 @@ fn handle_rpc_messages_over_child_process_stdio(
     let mut stdout_buffer = Vec::new();
     let mut stderr_buffer = Vec::new();
     let mut stderr_offset = 0;
+    let mut logged_stderr_lines = 0usize;
     let stderr_output = Arc::new(Mutex::new(String::new()));
 
     let stdin_task = cx.background_spawn(async move {
@@ -193,7 +194,9 @@ fn handle_rpc_messages_over_child_process_stdio(
                             }
                             output.push_str(&content);
                         }
-                        log::warn!("(remote) {content}");
+                        if logged_stderr_lines < 100 {
+                            log::warn!("(remote) {content}");
+                        }
                     }
                     return anyhow::Ok(());
                 }
@@ -219,7 +222,10 @@ fn handle_rpc_messages_over_child_process_stdio(
                             }
                             output.push_str(&content);
                         }
-                        log::warn!("(remote) {content}");
+                        if logged_stderr_lines < 100 {
+                            log::warn!("(remote) {content}");
+                            logged_stderr_lines += 1;
+                        }
                     }
                 }
                 stderr_buffer.drain(0..start_ix);

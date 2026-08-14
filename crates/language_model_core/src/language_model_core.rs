@@ -301,11 +301,24 @@ pub struct TokenUsage {
 }
 
 impl TokenUsage {
-    pub fn total_tokens(&self) -> u64 {
+    /// Tokens occupying the model context window. Cache reads are included
+    /// because they are part of the prompt even though they are discounted.
+    pub fn context_input_tokens(&self) -> u64 {
         self.input_tokens
-            + self.output_tokens
-            + self.cache_read_input_tokens
-            + self.cache_creation_input_tokens
+            .saturating_add(self.cache_creation_input_tokens)
+            .saturating_add(self.cache_read_input_tokens)
+    }
+
+    /// Input tokens that are normally charged at the full or cache-write rate.
+    /// Cache reads are deliberately excluded from this value.
+    pub fn billable_input_tokens(&self) -> u64 {
+        self.input_tokens
+            .saturating_add(self.cache_creation_input_tokens)
+    }
+
+    pub fn total_tokens(&self) -> u64 {
+        self.context_input_tokens()
+            .saturating_add(self.output_tokens)
     }
 }
 

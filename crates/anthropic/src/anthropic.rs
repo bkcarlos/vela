@@ -19,6 +19,14 @@ pub mod batches;
 pub mod completion;
 
 pub const ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
+
+fn auth_header(api_key: &str) -> (&'static str, String) {
+    if let Some(key) = api_key.strip_prefix("bearer:") {
+        ("Authorization", format!("Bearer {}", key.trim()))
+    } else {
+        ("X-Api-Key", api_key.trim().to_string())
+    }
+}
 pub const FAST_MODE_BETA_HEADER: &str = "fast-mode-2026-02-01";
 
 pub fn supports_fast_mode(model_id: &str) -> bool {
@@ -277,7 +285,7 @@ pub async fn list_models(
         .method(Method::GET)
         .uri(uri)
         .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim())
+        .header(auth_header(api_key).0, auth_header(api_key).1)
         .header("Accept", "application/json")
         .extra_headers(extra_headers)
         .body(AsyncBody::default())
@@ -360,7 +368,7 @@ async fn send_request(
         .method(Method::POST)
         .uri(uri)
         .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim())
+        .header(auth_header(api_key).0, auth_header(api_key).1)
         .header("Content-Type", "application/json");
 
     if let Some(beta_headers) = beta_headers {

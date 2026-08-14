@@ -8,7 +8,7 @@ use language_model::{
 };
 
 use settings::{
-    AnthropicCompatibleAvailableModel, AnthropicCompatibleModelCapabilities,
+    AnthropicAuthMode, AnthropicCompatibleAvailableModel, AnthropicCompatibleModelCapabilities,
     AnthropicCompatibleSettingsContent, OpenAiCompatibleAvailableModel,
     OpenAiCompatibleModelCapabilities, OpenAiCompatibleSettingsContent, OpenAiReasoningEffort,
     SettingsStore,
@@ -171,7 +171,17 @@ fn render_provider_section(
 
     let body = match provider.settings_view(cx) {
         Some(ProviderSettingsView::ApiKey(config)) => {
-            render_api_key_providers_item(provider, provider_name.clone(), config, cx)
+            let api_key =
+                render_api_key_providers_item(provider, provider_name.clone(), config, cx);
+            if provider_id.0.as_ref() == "anthropic" {
+                v_flex()
+                    .gap_3()
+                    .child(api_key)
+                    .child(render_anthropic_auth_mode(window, cx))
+                    .into_any_element()
+            } else {
+                api_key
+            }
         }
         Some(ProviderSettingsView::SignInOrApiKey { sign_in, api_key }) => {
             let view = get_or_create_configuration_view(
@@ -1230,6 +1240,78 @@ fn render_capability_checkbox(
             }
             cx.notify();
         }))
+}
+
+fn render_anthropic_auth_mode(window: &mut Window, cx: &mut Context<SettingsWindow>) -> AnyElement {
+    let (_, selected) =
+        SettingsStore::global(cx).get_value_from_file(settings::SettingsFile::User, |settings| {
+            settings
+                .language_models
+                .as_ref()?
+                .anthropic
+                .as_ref()?
+                .auth_mode
+                .as_ref()
+        });
+    let selected = selected.copied().unwrap_or_default();
+    let settings_window = cx.entity().downgrade();
+    let menu = ContextMenu::build(window, cx, move |mut menu, _window, _cx| {
+        for mode in [AnthropicAuthMode::XApiKey, AnthropicAuthMode::Bearer] {
+            let label = match mode {
+                AnthropicAuthMode::XApiKey => "X-Api-Key",
+                AnthropicAuthMode::Bearer => "Authorization: Bearer",
+            };
+            let settings_window = settings_window.clone();
+            menu.push_item(
+                ui::ContextMenuEntry::new(label)
+                    .toggleable(IconPosition::End, mode == selected)
+                    .handler(move |_window, cx| {
+                        settings_window
+                            .update(cx, |_this, cx| {
+                                SettingsStore::global(cx).update_settings_file(
+                                    <dyn fs::Fs>::global(cx),
+                                    move |settings, _| {
+                                        settings
+                                            .language_models
+                                            .get_or_insert_default()
+                                            .anthropic
+                                            .get_or_insert_with(|| {
+                                                settings::AnthropicSettingsContent {
+                                                    api_url: None,
+                                                    auth_mode: None,
+                                                    available_models: None,
+                                                    custom_headers: None,
+                                                }
+                                            })
+                                            .auth_mode = Some(mode);
+                                    },
+                                );
+                            })
+                            .ok();
+                    }),
+            );
+        }
+        menu
+    });
+
+    v_flex()
+        .gap_1()
+        .child(Label::new("Authentication mode").size(LabelSize::Small))
+        .child(
+            DropdownMenu::new(
+                "anthropic-auth-mode",
+                match selected {
+                    AnthropicAuthMode::XApiKey => "X-Api-Key",
+                    AnthropicAuthMode::Bearer => "Authorization: Bearer",
+                },
+                menu,
+            )
+            .style(DropdownStyle::Outlined)
+            .trigger_size(ButtonSize::Compact)
+            .full_width(true)
+            .aria_label("Anthropic authentication mode"),
+        )
+        .into_any_element()
 }
 
 fn render_reasoning_effort_selector(
