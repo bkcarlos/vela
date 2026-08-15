@@ -8573,6 +8573,7 @@ impl ThreadView {
                     self.thread.read(cx).session_id().clone(),
                     is_first,
                     options,
+                    tool_call.tool_name.as_deref() == Some("ask_user"),
                     entry_ix,
                     tool_call.id.clone(),
                     focus_handle,
@@ -9004,6 +9005,7 @@ impl ThreadView {
                     self.thread.read(cx).session_id().clone(),
                     self.is_first_tool_call(active_session_id, &tool_call.id, cx),
                     options,
+                    tool_call.tool_name.as_deref() == Some("ask_user"),
                     entry_ix,
                     tool_call.id.clone(),
                     focus_handle,
@@ -9795,6 +9797,7 @@ impl ThreadView {
         session_id: acp::SessionId,
         is_first: bool,
         options: &PermissionOptions,
+        is_ask_user: bool,
         entry_ix: usize,
         tool_call_id: acp::ToolCallId,
         focus_handle: &FocusHandle,
@@ -9808,6 +9811,7 @@ impl ThreadView {
                 session_id,
                 is_first,
                 options,
+                is_ask_user,
                 entry_ix,
                 tool_call_id,
                 focus_handle,
@@ -10237,6 +10241,7 @@ impl ThreadView {
         session_id: acp::SessionId,
         is_first: bool,
         options: &[acp::PermissionOption],
+        is_ask_user: bool,
         entry_ix: usize,
         tool_call_id: acp::ToolCallId,
         focus_handle: &FocusHandle,
@@ -10246,107 +10251,130 @@ impl ThreadView {
         let mut seen_kinds: ArrayVec<acp::PermissionOptionKind, 3, u8> = ArrayVec::new();
 
         div()
-            .p_1()
             .border_t_1()
             .border_color(self.tool_card_border_color(cx))
             .w_full()
             .v_flex()
-            .gap_0p5()
-            .children(options.iter().map(move |option| {
-                let option_id = SharedString::from(option.option_id.0.clone());
-                Button::new((option_id, entry_ix), option.name.clone())
-                    .map(|this| {
-                        // The sandbox-fallback prompt offers a "Retry" option
-                        // that re-attempts creating the sandbox; it isn't an
-                        // allow/deny choice, so give it its own icon and no
-                        // keybinding.
-                        let is_retry = option.option_id.0.as_ref()
-                            == acp_thread::SANDBOX_FALLBACK_RETRY_OPTION_ID;
-                        let (icon, action) = if is_retry {
-                            (
-                                Icon::new(IconName::RotateCcw)
-                                    .size(IconSize::XSmall)
-                                    .color(Color::Muted),
-                                None,
+            .when(is_ask_user, |this| this.p_1p5().gap_1p5())
+            .when(!is_ask_user, |this| this.p_1().gap_0p5())
+            .children(
+                options
+                    .iter()
+                    .enumerate()
+                    .map(move |(option_index, option)| {
+                        let option_id = SharedString::from(option.option_id.0.clone());
+                        let button = if is_ask_user {
+                            Button::new(
+                                (option_id, entry_ix),
+                                format!("{}. {}", option_index + 1, option.name),
                             )
+                            .full_width()
+                            .size(ButtonSize::Medium)
+                            .style(ButtonStyle::Outlined)
                         } else {
-                            match option.kind {
-                                acp::PermissionOptionKind::AllowOnce => (
-                                    Icon::new(IconName::Check)
-                                        .size(IconSize::XSmall)
-                                        .color(Color::Success),
-                                    Some(&AllowOnce as &dyn Action),
-                                ),
-                                acp::PermissionOptionKind::AllowAlways => (
-                                    Icon::new(IconName::CheckDouble)
-                                        .size(IconSize::XSmall)
-                                        .color(Color::Success),
-                                    if option.option_id.0.as_ref()
-                                        == acp_thread::SandboxPermission::AllowThread.as_id()
-                                    {
-                                        None
-                                    } else {
-                                        Some(&AllowAlways as &dyn Action)
-                                    },
-                                ),
-                                acp::PermissionOptionKind::RejectOnce => (
-                                    Icon::new(IconName::Close)
-                                        .size(IconSize::XSmall)
-                                        .color(Color::Error),
-                                    Some(&RejectOnce as &dyn Action),
-                                ),
-                                acp::PermissionOptionKind::RejectAlways | _ => (
-                                    Icon::new(IconName::Close)
-                                        .size(IconSize::XSmall)
-                                        .color(Color::Error),
-                                    None,
-                                ),
-                            }
+                            Button::new((option_id, entry_ix), option.name.clone())
                         };
+                        button
+                            .map(|this| {
+                                if is_ask_user {
+                                    return this;
+                                }
+                                // The sandbox-fallback prompt offers a "Retry" option
+                                // that re-attempts creating the sandbox; it isn't an
+                                // allow/deny choice, so give it its own icon and no
+                                // keybinding.
+                                let is_retry = option.option_id.0.as_ref()
+                                    == acp_thread::SANDBOX_FALLBACK_RETRY_OPTION_ID;
+                                let (icon, action) = if is_retry {
+                                    (
+                                        Icon::new(IconName::RotateCcw)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Muted),
+                                        None,
+                                    )
+                                } else {
+                                    match option.kind {
+                                        acp::PermissionOptionKind::AllowOnce => (
+                                            Icon::new(IconName::Check)
+                                                .size(IconSize::XSmall)
+                                                .color(Color::Success),
+                                            Some(&AllowOnce as &dyn Action),
+                                        ),
+                                        acp::PermissionOptionKind::AllowAlways => (
+                                            Icon::new(IconName::CheckDouble)
+                                                .size(IconSize::XSmall)
+                                                .color(Color::Success),
+                                            if option.option_id.0.as_ref()
+                                                == acp_thread::SandboxPermission::AllowThread
+                                                    .as_id()
+                                            {
+                                                None
+                                            } else {
+                                                Some(&AllowAlways as &dyn Action)
+                                            },
+                                        ),
+                                        acp::PermissionOptionKind::RejectOnce => (
+                                            Icon::new(IconName::Close)
+                                                .size(IconSize::XSmall)
+                                                .color(Color::Error),
+                                            Some(&RejectOnce as &dyn Action),
+                                        ),
+                                        acp::PermissionOptionKind::RejectAlways | _ => (
+                                            Icon::new(IconName::Close)
+                                                .size(IconSize::XSmall)
+                                                .color(Color::Error),
+                                            None,
+                                        ),
+                                    }
+                                };
 
-                        // An "allow" choice is disabled while a surprising-Unicode
-                        // warning is unacknowledged; "deny"/"retry" stay enabled.
-                        let is_allow = matches!(
-                            option.kind,
-                            acp::PermissionOptionKind::AllowOnce
-                                | acp::PermissionOptionKind::AllowAlways
-                        ) && !is_retry;
-                        let disabled = allow_disabled && is_allow;
+                                // An "allow" choice is disabled while a surprising-Unicode
+                                // warning is unacknowledged; "deny"/"retry" stay enabled.
+                                let is_allow = matches!(
+                                    option.kind,
+                                    acp::PermissionOptionKind::AllowOnce
+                                        | acp::PermissionOptionKind::AllowAlways
+                                ) && !is_retry;
+                                let disabled = allow_disabled && is_allow;
 
-                        let this = this.start_icon(icon).disabled(disabled);
+                                let this = this.start_icon(icon).disabled(disabled);
 
-                        let Some(action) = action else {
-                            return this;
-                        };
+                                let Some(action) = action else {
+                                    return this;
+                                };
 
-                        if !is_first || disabled || seen_kinds.contains(&option.kind) {
-                            return this;
-                        }
+                                if !is_first || disabled || seen_kinds.contains(&option.kind) {
+                                    return this;
+                                }
 
-                        seen_kinds.push(option.kind).unwrap();
+                                seen_kinds.push(option.kind).unwrap();
 
-                        this.key_binding(
-                            KeyBinding::for_action_in(action, focus_handle, cx)
-                                .map(|kb| kb.size(rems_from_px(12.))),
-                        )
-                    })
-                    .label_size(LabelSize::Small)
-                    .on_click(cx.listener({
-                        let tool_call_id = tool_call_id.clone();
-                        let option_id = option.option_id.clone();
-                        let option_kind = option.kind;
-                        let session_id = session_id.clone();
-                        move |this, _, window, cx| {
-                            this.authorize_tool_call(
-                                session_id.clone(),
-                                tool_call_id.clone(),
-                                SelectedPermissionOutcome::new(option_id.clone(), option_kind),
-                                window,
-                                cx,
-                            );
-                        }
-                    }))
-            }))
+                                this.key_binding(
+                                    KeyBinding::for_action_in(action, focus_handle, cx)
+                                        .map(|kb| kb.size(rems_from_px(12.))),
+                                )
+                            })
+                            .label_size(LabelSize::Small)
+                            .on_click(cx.listener({
+                                let tool_call_id = tool_call_id.clone();
+                                let option_id = option.option_id.clone();
+                                let option_kind = option.kind;
+                                let session_id = session_id.clone();
+                                move |this, _, window, cx| {
+                                    this.authorize_tool_call(
+                                        session_id.clone(),
+                                        tool_call_id.clone(),
+                                        SelectedPermissionOutcome::new(
+                                            option_id.clone(),
+                                            option_kind,
+                                        ),
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }))
+                    }),
+            )
     }
 
     fn render_diff_loading(&self, cx: &Context<Self>) -> AnyElement {
