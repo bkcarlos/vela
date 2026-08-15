@@ -172,7 +172,7 @@ impl ThreadsArchiveView {
 
         let filter_editor = cx.new(|cx| {
             let mut editor = Editor::single_line(window, cx);
-            editor.set_placeholder_text("Search all threads…", window, cx);
+            editor.set_placeholder_text("Search all sessions…", window, cx);
             editor
         });
 
@@ -772,7 +772,7 @@ impl ThreadsArchiveView {
                             .tooltip({
                                 move |_window, cx| {
                                     Tooltip::for_action_in(
-                                        "Delete Thread",
+                                        "Delete Session",
                                         &RemoveSelectedThread,
                                         &focus_handle,
                                         cx,
@@ -810,7 +810,7 @@ impl ThreadsArchiveView {
                             .tooltip({
                                 move |_window, cx| {
                                     Tooltip::for_action_in(
-                                        "Archive Thread",
+                                        "Archive Session",
                                         &ArchiveSelectedThread,
                                         &focus_handle,
                                         cx,
@@ -1009,9 +1009,9 @@ impl ThreadsArchiveView {
         };
 
         let count_label = if entry_count == 1 {
-            "1 thread".to_string()
+            "1 session".to_string()
         } else {
-            format!("{} threads", entry_count)
+            format!("{} sessions", entry_count)
         };
 
         h_flex()
@@ -1033,7 +1033,7 @@ impl ThreadsArchiveView {
                     .child(
                         IconButton::new("new-thread", IconName::Plus)
                             .icon_size(IconSize::Small)
-                            .tooltip(Tooltip::text("Start New Agent Thread"))
+                            .tooltip(Tooltip::text("Start New Agent Session"))
                             .on_click(cx.listener(|_this, _, _, cx| {
                                 cx.emit(ThreadsArchiveViewEvent::NewThread);
                             })),
@@ -1041,7 +1041,7 @@ impl ThreadsArchiveView {
                     .child(
                         IconButton::new("thread-import", IconName::Download)
                             .icon_size(IconSize::Small)
-                            .tooltip(Tooltip::text("Import Threads"))
+                            .tooltip(Tooltip::text("Import Sessions"))
                             .on_click(cx.listener(|_this, _, _, cx| {
                                 cx.emit(ThreadsArchiveViewEvent::Import);
                             })),
@@ -1053,9 +1053,9 @@ impl ThreadsArchiveView {
                             .toggle_state(self.thread_filter == ThreadFilter::ArchivedOnly)
                             .tooltip(Tooltip::text(
                                 if self.thread_filter == ThreadFilter::ArchivedOnly {
-                                    "Show All Threads"
+                                    "Show All Sessions"
                                 } else {
-                                    "Show Only Archived Threads"
+                                    "Show Only Archived Sessions"
                                 },
                             ))
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -1108,9 +1108,9 @@ impl Render for ThreadsArchiveView {
 
         let content = if is_empty {
             let message = if has_query {
-                "No threads match your search."
+                "No sessions match your search."
             } else {
-                "No threads yet."
+                "No sessions yet."
             };
 
             v_flex()
@@ -1349,7 +1349,7 @@ impl PickerDelegate for ProjectPickerDelegate {
 
     fn placeholder_text(&self, _window: &mut Window, _cx: &mut App) -> Arc<str> {
         format!(
-            "Associate the \"{}\" thread with...",
+            "Associate the \"{}\" session with...",
             self.thread
                 .title
                 .as_ref()

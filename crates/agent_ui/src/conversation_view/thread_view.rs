@@ -276,6 +276,7 @@ impl RenderOnce for GeneratingSpinnerElement {
 
 pub enum AcpThreadViewEvent {
     Interacted,
+    InspectTrajectory { entry_index: usize },
 }
 
 impl EventEmitter<AcpThreadViewEvent> for ThreadView {}
@@ -681,6 +682,8 @@ pub struct ThreadView {
     pub(crate) thread_search_visible: bool,
     trajectory_visible: bool,
     trajectory_selected_entry: Option<usize>,
+    trajectory_scroll_to_entry: Option<usize>,
+    trajectory_scroll_handle: ScrollHandle,
 }
 impl Focusable for ThreadView {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
@@ -1085,6 +1088,8 @@ impl ThreadView {
             thread_search_visible: false,
             trajectory_visible: false,
             trajectory_selected_entry: None,
+            trajectory_scroll_to_entry: None,
+            trajectory_scroll_handle: ScrollHandle::new(),
         };
 
         this.sync_generating_indicator(cx);
@@ -6311,6 +6316,17 @@ impl ThreadView {
         cx.notify();
     }
 
+    fn inspect_trajectory_entry(&mut self, entry_index: usize, cx: &mut Context<Self>) {
+        if self.thread.read(cx).entries().get(entry_index).is_none() {
+            return;
+        }
+        self.trajectory_visible = true;
+        self.trajectory_selected_entry = Some(entry_index);
+        self.trajectory_scroll_to_entry = Some(entry_index);
+        cx.emit(AcpThreadViewEvent::InspectTrajectory { entry_index });
+        cx.notify();
+    }
+
     fn trajectory_records(&self, cx: &App) -> Vec<TrajectoryRecord> {
         let thread = self.thread.read(cx);
         let mut turn = 0;
@@ -6410,6 +6426,8 @@ impl ThreadView {
 
         let mut previous_turn = None;
         let mut rows = Vec::new();
+        let scroll_to_entry = self.trajectory_scroll_to_entry.take();
+        let trajectory_scroll_handle = self.trajectory_scroll_handle.clone();
         for (record_number, record) in records.into_iter().enumerate() {
             if previous_turn != Some(record.turn) {
                 let turn_label = if record.turn == 0 {
@@ -6496,6 +6514,9 @@ impl ThreadView {
                     )
                     .into_any_element(),
             );
+            if scroll_to_entry == Some(entry_index) {
+                trajectory_scroll_handle.scroll_to_item(rows.len().saturating_sub(1));
+            }
         }
 
         let table = v_flex().size_full().min_w_0().child(header).child(
@@ -6504,6 +6525,7 @@ impl ThreadView {
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .track_scroll(&trajectory_scroll_handle)
                 .children(rows),
         );
 
@@ -7087,6 +7109,33 @@ impl ThreadView {
                 .when_some(comments_editor, |this, editor| {
                     this.child(Self::render_feedback_feedback_editor(editor, cx))
                 })
+                .into_any_element()
+        } else {
+            primary
+        };
+
+        let primary = if !assistant_message_is_blank && self.parent_session_id.is_none() {
+            div()
+                .relative()
+                .w_full()
+                .child(primary)
+                .child(
+                    div()
+                        .absolute()
+                        .top_1()
+                        .right_2()
+                        .opacity(0.45)
+                        .hover(|this| this.opacity(1.0))
+                        .child(
+                            IconButton::new(("inspect-trajectory", entry_ix), IconName::ListTree)
+                                .icon_size(IconSize::Small)
+                                .icon_color(Color::Muted)
+                                .tooltip(Tooltip::text("Inspect in Trajectory"))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.inspect_trajectory_entry(entry_ix, cx);
+                                })),
+                        ),
+                )
                 .into_any_element()
         } else {
             primary

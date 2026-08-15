@@ -1142,6 +1142,7 @@ pub struct AgentPanel {
     connection_store: Entity<AgentConnectionStore>,
     threads_view: Entity<ThreadsArchiveView>,
     active_section: AgentPanelSection,
+    session_sections: HashMap<ThreadId, AgentPanelSection>,
     focus_handle: FocusHandle,
     base_view: BaseView,
     last_created_entry_kind: AgentPanelEntryKind,
@@ -1498,12 +1499,15 @@ impl AgentPanel {
             _window,
             |this, threads_view, event: &ThreadsArchiveViewEvent, window, cx| match event {
                 ThreadsArchiveViewEvent::Close => {
-                    this.set_active_section(AgentPanelSection::Agent, cx);
+                    let section = this
+                        .active_thread_id(cx)
+                        .and_then(|thread_id| this.session_sections.get(&thread_id).copied())
+                        .unwrap_or(AgentPanelSection::Agent);
+                    this.set_active_section(section, cx);
                     cx.emit(PanelEvent::HeaderChanged);
                     cx.notify();
                 }
                 ThreadsArchiveViewEvent::Activate { thread } => {
-                    this.set_active_section(AgentPanelSection::Agent, cx);
                     this.load_agent_thread(
                         Agent::from(thread.agent_id.clone()),
                         thread.thread_id,
@@ -1572,6 +1576,7 @@ impl AgentPanel {
             connection_store,
             threads_view,
             active_section: AgentPanelSection::Agent,
+            session_sections: HashMap::default(),
             focus_handle: cx.focus_handle(),
             draft_thread: None,
             retained_threads: HashMap::default(),
@@ -4234,6 +4239,13 @@ impl AgentPanel {
                 self.serialize(cx);
             }
         }
+        if let Some(thread_id) = self.active_thread_id(cx) {
+            self.active_section = self
+                .session_sections
+                .get(&thread_id)
+                .copied()
+                .unwrap_or(AgentPanelSection::Agent);
+        }
         if let Some(conversation_view) = self.active_conversation_view()
             && let Some(thread_view) = conversation_view.read(cx).root_thread_view()
         {
@@ -4348,6 +4360,15 @@ impl AgentPanel {
                         }
                         this.retained_threads.remove(&thread_id);
                         cx.emit(AgentPanelEvent::ThreadInteracted { thread_id });
+                    }
+                    AcpThreadViewEvent::InspectTrajectory { entry_index: _ } => {
+                        this.active_section = AgentPanelSection::Trajectory;
+                        if let Some(thread_id) = this.active_thread_id(cx) {
+                            this.session_sections
+                                .insert(thread_id, AgentPanelSection::Trajectory);
+                        }
+                        cx.emit(PanelEvent::HeaderChanged);
+                        cx.notify();
                     }
                 },
             )
@@ -5057,7 +5078,7 @@ impl Panel for AgentPanel {
     fn bottom_dock_tabs(&self) -> Option<Vec<BottomDockTab>> {
         Some(vec![
             BottomDockTab {
-                label: "Agent".into(),
+                label: "Chat".into(),
                 selected: self.active_section == AgentPanelSection::Agent,
             },
             BottomDockTab {
@@ -5065,7 +5086,7 @@ impl Panel for AgentPanel {
                 selected: self.active_section == AgentPanelSection::Trajectory,
             },
             BottomDockTab {
-                label: "Conversations".into(),
+                label: "Sessions".into(),
                 selected: self.active_section == AgentPanelSection::Threads,
             },
         ])
@@ -5100,7 +5121,7 @@ impl Panel for AgentPanel {
     fn bottom_dock_buttons(&self) -> Vec<BottomDockButton> {
         vec![BottomDockButton {
             icon: IconName::Plus,
-            tooltip: "New Agent Thread".into(),
+            tooltip: "New Agent Session".into(),
         }]
     }
 
@@ -5149,6 +5170,11 @@ impl Panel for AgentPanel {
 impl AgentPanel {
     fn set_active_section(&mut self, section: AgentPanelSection, cx: &mut Context<Self>) {
         self.active_section = section;
+        if section != AgentPanelSection::Threads
+            && let Some(thread_id) = self.active_thread_id(cx)
+        {
+            self.session_sections.insert(thread_id, section);
+        }
         if let Some(conversation_view) = self.active_conversation_view()
             && let Some(thread_view) = conversation_view.read(cx).root_thread_view()
         {
@@ -5582,7 +5608,7 @@ impl AgentPanel {
                             .child(
                                 IconButton::new("edit_tile", IconName::Pencil)
                                     .icon_size(IconSize::Small)
-                                    .tooltip(Tooltip::text("Edit Thread Title")),
+                                    .tooltip(Tooltip::text("Edit Session Title")),
                             ),
                     )
             })
@@ -5592,7 +5618,7 @@ impl AgentPanel {
     fn show_no_thread_summary_model_toast(workspace: Entity<Workspace>, cx: &mut App) {
         workspace.update(cx, |workspace, cx| {
             let toast = StatusToast::new(
-                "No model is configured for summarizing thread titles.",
+                "No model is configured for summarizing session titles.",
                 cx,
                 |this, _cx| {
                     this.icon(
@@ -5699,11 +5725,11 @@ impl AgentPanel {
                         menu = menu.context(menu_action_context.clone());
 
                         if has_thread_messages {
-                            menu = menu.header("Current Thread");
+                            menu = menu.header("Current Session");
 
                             if let Some(conversation_view) = conversation_view.as_ref() {
                                 if can_regenerate_thread_title {
-                                    menu = menu.entry("Regenerate Thread Title", None, {
+                                    menu = menu.entry("Regenerate Session Title", None, {
                                         let conversation_view = conversation_view.clone();
                                         let workspace = workspace.clone();
                                         move |_, cx| {
@@ -5720,7 +5746,7 @@ impl AgentPanel {
                                     conversation_view.read(cx).root_thread_view();
                                 if let Some(thread_view) = root_thread_view {
                                     let workspace = workspace.clone();
-                                    menu = menu.entry("Open Thread as Markdown", None, {
+                                    menu = menu.entry("Open Session as Markdown", None, {
                                         move |window, cx| {
                                             if let Some(workspace) = workspace.upgrade() {
                                                 thread_view.update(cx, |thread_view, cx| {
@@ -5948,7 +5974,7 @@ impl AgentPanel {
             .justify_between();
 
         let empty_thread_title = matches!(mode, ToolbarMode::EmptyThread).then(|| {
-            Label::new(format!("New {} Thread", selected_agent_label))
+            Label::new(format!("New {} Session", selected_agent_label))
                 .color(Color::Muted)
                 .truncate()
                 .into_any_element()
@@ -6004,7 +6030,7 @@ impl AgentPanel {
         h_flex()
             .gap_1()
             .child(
-                Button::new("agent-section-agent", "Agent")
+                Button::new("agent-section-agent", "Chat")
                     .style(ButtonStyle::Subtle)
                     .label_size(LabelSize::Small)
                     .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
@@ -6030,7 +6056,7 @@ impl AgentPanel {
                     })),
             )
             .child(
-                Button::new("agent-section-threads", "Conversations")
+                Button::new("agent-section-threads", "Sessions")
                     .style(ButtonStyle::Subtle)
                     .label_size(LabelSize::Small)
                     .selected_style(ButtonStyle::Tinted(ui::TintColor::Accent))
@@ -6057,7 +6083,7 @@ impl AgentPanel {
         let new_thread_button = IconButton::new("new-thread", IconName::Plus)
             .icon_size(IconSize::Small)
             .tooltip(move |_, cx| {
-                Tooltip::for_action_in("New Agent Thread", &NewThread, &focus_handle, cx)
+                Tooltip::for_action_in("New Agent Session", &NewThread, &focus_handle, cx)
             })
             .on_click(cx.listener(|this, _, window, cx| {
                 this.set_active_section(AgentPanelSection::Agent, cx);
