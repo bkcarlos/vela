@@ -398,10 +398,44 @@ pub enum AgentThreadEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ElicitationEntryId(pub Arc<str>);
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AskUserOption {
+    pub label: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AskUserQuestion {
+    pub question: String,
+    pub header: String,
+    pub options: Vec<AskUserOption>,
+    pub multi_select: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AskUserRequest {
+    pub questions: Vec<AskUserQuestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AskUserAnswer {
+    pub question: String,
+    pub answers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum AskUserResponse {
+    Submitted { answers: Vec<AskUserAnswer> },
+    Chat { message: String },
+    Skipped,
+}
+
 #[derive(Debug)]
 pub struct Elicitation {
     pub id: ElicitationEntryId,
     pub request: acp::CreateElicitationRequest,
+    pub ask_user_request: Option<AskUserRequest>,
     pub status: ElicitationStatus,
 }
 
@@ -447,6 +481,7 @@ impl ElicitationStore {
     fn insert_pending_elicitation(
         &mut self,
         request: acp::CreateElicitationRequest,
+        ask_user_request: Option<AskUserRequest>,
     ) -> (
         ElicitationEntryId,
         oneshot::Receiver<acp::CreateElicitationResponse>,
@@ -456,6 +491,7 @@ impl ElicitationStore {
         self.elicitations.push(Elicitation {
             id: id.clone(),
             request,
+            ask_user_request,
             status: ElicitationStatus::Pending { respond_tx },
         });
         (id, response_rx)
@@ -587,7 +623,7 @@ impl ElicitationStore {
         cx: &mut Context<Self>,
     ) -> Result<(ElicitationEntryId, Task<acp::CreateElicitationResponse>), acp::Error> {
         Self::validate_request(&request)?;
-        let (id, response_rx) = self.insert_pending_elicitation(request);
+        let (id, response_rx) = self.insert_pending_elicitation(request, None);
         cx.emit(ElicitationStoreEvent::ElicitationRequested(id.clone()));
         cx.notify();
 
@@ -3483,7 +3519,7 @@ impl AcpThread {
     ) -> Result<(ElicitationEntryId, Task<acp::CreateElicitationResponse>), acp::Error> {
         ElicitationStore::validate_request(&request)?;
 
-        let (id, response_rx) = self.elicitations.insert_pending_elicitation(request);
+        let (id, response_rx) = self.elicitations.insert_pending_elicitation(request, None);
         self.push_entry(AgentThreadEntry::Elicitation(id.clone()), cx);
         cx.emit(AcpThreadEvent::ElicitationRequested(id.clone()));
 
@@ -3493,6 +3529,124 @@ impl AcpThread {
             });
 
         Ok((id, task))
+    }
+
+    pub fn request_ask_user(
+        &mut self,
+        request: AskUserRequest,
+        cx: &mut Context<Self>,
+    ) -> Task<AskUserResponse> {
+        let mut schema = acp::ElicitationSchema::new();
+        for (index, question) in request.questions.iter().enumerate() {
+            let options = question
+                .options
+                .iter()
+                .map(|option| {
+                    acp::EnumOption::new(option.label.clone(), option.label.clone())
+                        .description(option.description.clone())
+                })
+                .collect::<Vec<_>>();
+            let answer_key = format!("answer-{index}");
+            if question.multi_select {
+                schema = schema.property(
+                    answer_key,
+                    acp::MultiSelectPropertySchema::titled(options)
+                        .title(question.header.clone())
+                        .description(question.question.clone()),
+                    false,
+                );
+            } else {
+                schema = schema.property(
+                    answer_key,
+                    acp::StringPropertySchema::new()
+                        .title(question.header.clone())
+                        .description(question.question.clone())
+                        .one_of(options),
+                    false,
+                );
+            }
+            schema = schema.property(
+                format!("other-{index}"),
+                acp::StringPropertySchema::new().title("Other"),
+                false,
+            );
+        }
+
+        schema = schema.property(
+            "chat",
+            acp::StringPropertySchema::new()
+                .title("Message")
+                .description("Ask the agent about these choices before deciding"),
+            false,
+        );
+
+        let elicitation_request = acp::CreateElicitationRequest::new(
+            acp::ElicitationFormMode::new(
+                acp::ElicitationSessionScope::new(self.session_id.clone()),
+                schema,
+            ),
+            "The agent needs your input",
+        );
+        let (id, response_rx) = self
+            .elicitations
+            .insert_pending_elicitation(elicitation_request, Some(request.clone()));
+        self.push_entry(AgentThreadEntry::Elicitation(id.clone()), cx);
+        cx.emit(AcpThreadEvent::ElicitationRequested(id.clone()));
+
+        let response_task =
+            ElicitationStore::response_task(id, response_rx, cx, |_thread, cx, id| {
+                cx.emit(AcpThreadEvent::ElicitationResponded(id))
+            });
+        cx.spawn(async move |_this, _cx| {
+            let response = response_task.await;
+            let acp::ElicitationAction::Accept(accepted) = response.action else {
+                return AskUserResponse::Skipped;
+            };
+            let content = accepted.content.unwrap_or_default();
+            if let Some(acp::ElicitationContentValue::String(message)) = content.get("chat")
+                && !message.trim().is_empty()
+            {
+                return AskUserResponse::Chat {
+                    message: message.clone(),
+                };
+            }
+            let answers = request
+                .questions
+                .iter()
+                .enumerate()
+                .map(|(index, question)| {
+                    let other =
+                        content
+                            .get(&format!("other-{index}"))
+                            .and_then(|value| match value {
+                                acp::ElicitationContentValue::String(value)
+                                    if !value.is_empty() =>
+                                {
+                                    Some(value.clone())
+                                }
+                                _ => None,
+                            });
+                    let answers = if let Some(other) = other {
+                        vec![other]
+                    } else {
+                        match content.get(&format!("answer-{index}")) {
+                            Some(acp::ElicitationContentValue::String(value)) => {
+                                vec![value.clone()]
+                            }
+                            Some(acp::ElicitationContentValue::StringArray(values)) => {
+                                values.clone()
+                            }
+                            _ => Vec::new(),
+                        }
+                    };
+                    AskUserAnswer {
+                        question: question.question.clone(),
+                        answers,
+                    }
+                })
+                .collect();
+            AskUserResponse::Submitted { answers }
+        })
     }
 
     pub fn respond_to_elicitation(
@@ -7789,6 +7943,143 @@ mod tests {
             };
             assert!(matches!(elicitation.status, ElicitationStatus::Canceled));
         });
+    }
+
+    #[gpui::test]
+    async fn test_ask_user_returns_choices_and_custom_answers(cx: &mut TestAppContext) {
+        init_test(cx);
+        let thread = new_test_thread(cx).await;
+        let response_task = thread.update(cx, |thread, cx| {
+            thread.request_ask_user(
+                AskUserRequest {
+                    questions: vec![
+                        AskUserQuestion {
+                            question: "Which platforms?".to_string(),
+                            header: "Platforms".to_string(),
+                            options: vec![
+                                AskUserOption {
+                                    label: "macOS".to_string(),
+                                    description: "Apple platforms".to_string(),
+                                },
+                                AskUserOption {
+                                    label: "Linux".to_string(),
+                                    description: "Linux platforms".to_string(),
+                                },
+                            ],
+                            multi_select: true,
+                        },
+                        AskUserQuestion {
+                            question: "Which channel?".to_string(),
+                            header: "Channel".to_string(),
+                            options: vec![
+                                AskUserOption {
+                                    label: "Stable".to_string(),
+                                    description: "Stable releases".to_string(),
+                                },
+                                AskUserOption {
+                                    label: "Preview".to_string(),
+                                    description: "Preview releases".to_string(),
+                                },
+                            ],
+                            multi_select: false,
+                        },
+                    ],
+                },
+                cx,
+            )
+        });
+
+        let elicitation_id = thread.read_with(cx, |thread, _| {
+            let (id, elicitation) = latest_thread_elicitation(thread);
+            assert!(elicitation.ask_user_request.is_some());
+            id
+        });
+        let mut content = std::collections::BTreeMap::new();
+        content.insert(
+            "answer-0".to_string(),
+            acp::ElicitationContentValue::StringArray(vec![
+                "macOS".to_string(),
+                "Linux".to_string(),
+            ]),
+        );
+        content.insert(
+            "answer-1".to_string(),
+            acp::ElicitationContentValue::String("Stable".to_string()),
+        );
+        content.insert(
+            "other-1".to_string(),
+            acp::ElicitationContentValue::String("Nightly".to_string()),
+        );
+        thread.update(cx, |thread, cx| {
+            thread.respond_to_elicitation(
+                &elicitation_id,
+                acp::CreateElicitationResponse::new(acp::ElicitationAction::Accept(
+                    acp::ElicitationAcceptAction::new().content(content),
+                )),
+                cx,
+            );
+        });
+
+        assert_eq!(
+            response_task.await,
+            AskUserResponse::Submitted {
+                answers: vec![
+                    AskUserAnswer {
+                        question: "Which platforms?".to_string(),
+                        answers: vec!["macOS".to_string(), "Linux".to_string()],
+                    },
+                    AskUserAnswer {
+                        question: "Which channel?".to_string(),
+                        answers: vec!["Nightly".to_string()],
+                    },
+                ],
+            }
+        );
+
+        let chat_task = thread.update(cx, |thread, cx| {
+            thread.request_ask_user(
+                AskUserRequest {
+                    questions: vec![AskUserQuestion {
+                        question: "Which channel?".to_string(),
+                        header: "Channel".to_string(),
+                        options: vec![
+                            AskUserOption {
+                                label: "Stable".to_string(),
+                                description: "Stable releases".to_string(),
+                            },
+                            AskUserOption {
+                                label: "Preview".to_string(),
+                                description: "Preview releases".to_string(),
+                            },
+                        ],
+                        multi_select: false,
+                    }],
+                },
+                cx,
+            )
+        });
+        let chat_elicitation_id =
+            thread.read_with(cx, |thread, _| latest_thread_elicitation(thread).0);
+        let mut chat_content = std::collections::BTreeMap::new();
+        chat_content.insert(
+            "chat".to_string(),
+            acp::ElicitationContentValue::String("Why do you recommend Stable?".to_string()),
+        );
+        thread.update(cx, |thread, cx| {
+            thread.respond_to_elicitation(
+                &chat_elicitation_id,
+                acp::CreateElicitationResponse::new(acp::ElicitationAction::Accept(
+                    acp::ElicitationAcceptAction::new().content(chat_content),
+                )),
+                cx,
+            );
+        });
+        assert_eq!(
+            chat_task.await,
+            AskUserResponse::Chat {
+                message: "Why do you recommend Stable?".to_string(),
+            }
+        );
     }
 
     #[gpui::test]

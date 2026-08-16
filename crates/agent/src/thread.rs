@@ -951,6 +951,7 @@ pub enum ThreadEvent {
     ToolCall(acp::ToolCall),
     ToolCallUpdate(acp_thread::ToolCallUpdate),
     ToolCallAuthorization(ToolCallAuthorization),
+    AskUser(AskUserPrompt),
     ToolCallAuthorizationResolved {
         tool_call_id: acp::ToolCallId,
         outcome: acp_thread::SelectedPermissionOutcome,
@@ -963,6 +964,11 @@ pub enum ThreadEvent {
 }
 
 #[derive(Debug)]
+pub struct AskUserPrompt {
+    pub request: acp_thread::AskUserRequest,
+    pub response: oneshot::Sender<acp_thread::AskUserResponse>,
+}
+
 pub struct NewTerminal {
     pub command: String,
     pub output_byte_limit: Option<u64>,
@@ -6167,6 +6173,27 @@ impl ToolCallEventStream {
                     .allow_sandbox_unsandboxed();
             });
         });
+    }
+
+    pub fn ask_user(
+        &self,
+        request: acp_thread::AskUserRequest,
+        cx: &mut App,
+    ) -> Task<Result<acp_thread::AskUserResponse>> {
+        let stream = self.stream.clone();
+        cx.spawn(async move |_cx| {
+            let (response_tx, response_rx) = oneshot::channel();
+            stream
+                .0
+                .unbounded_send(Ok(ThreadEvent::AskUser(AskUserPrompt {
+                    request,
+                    response: response_tx,
+                })))
+                .map_err(|error| anyhow!("Failed to send ask-user prompt: {error}"))?;
+            response_rx
+                .await
+                .map_err(|_| anyhow!("ask-user response channel closed"))
+        })
     }
 
     /// Prompts the user to choose between an explicit set of actions and

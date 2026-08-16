@@ -2369,6 +2369,7 @@ impl ConversationView {
                     .log_err();
                 }
             },
+            |_, _, _| {},
             {
                 let view = view.clone();
                 move |elicitation_id, window, cx| {

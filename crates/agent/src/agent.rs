@@ -2221,6 +2221,18 @@ impl NativeAgentConnection {
                                 })
                                 .detach();
                             }
+                            ThreadEvent::AskUser(ask_user) => {
+                                let response_task = acp_thread.update(cx, |thread, cx| {
+                                    thread.request_ask_user(ask_user.request, cx)
+                                })?;
+                                cx.background_spawn(async move {
+                                    let response = response_task.await;
+                                    if ask_user.response.send(response).is_err() {
+                                        log::error!("ask-user response receiver was dropped");
+                                    }
+                                })
+                                .detach();
+                            }
                             ThreadEvent::ToolCallAuthorizationResolved {
                                 tool_call_id,
                                 outcome,

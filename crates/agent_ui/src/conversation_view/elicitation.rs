@@ -247,6 +247,66 @@ impl ElicitationFormState {
         }
     }
 
+    pub(crate) fn collect_ask_user_chat(
+        &self,
+        schema: &acp::ElicitationSchema,
+        cx: &App,
+    ) -> Result<BTreeMap<String, acp::ElicitationContentValue>, HashMap<String, SharedString>> {
+        let content = self.collect(schema, cx)?;
+        if content.get("chat").is_some_and(|value| {
+            matches!(value, acp::ElicitationContentValue::String(message) if !message.trim().is_empty())
+        }) {
+            Ok(content)
+        } else {
+            Err(HashMap::from_iter([(
+                "chat".to_string(),
+                SharedString::from("Enter a message to chat about these choices"),
+            )]))
+        }
+    }
+
+    pub(crate) fn validate_ask_user(
+        &self,
+        request: &acp_thread::AskUserRequest,
+        cx: &App,
+    ) -> Result<(), HashMap<String, SharedString>> {
+        let mut errors = HashMap::default();
+        for (index, question) in request.questions.iter().enumerate() {
+            let answer_key = format!("answer-{index}");
+            let other_key = format!("other-{index}");
+            let has_other = self
+                .fields
+                .get(&other_key)
+                .and_then(|field| match field {
+                    ElicitationFieldState::Text(editor) => {
+                        Some(!editor.read(cx).text(cx).trim().is_empty())
+                    }
+                    _ => None,
+                })
+                .unwrap_or(false);
+            let has_selection = self
+                .fields
+                .get(&answer_key)
+                .map(|field| match field {
+                    ElicitationFieldState::SingleSelect { value } => value.is_some(),
+                    ElicitationFieldState::MultiSelect(values) => !values.is_empty(),
+                    _ => false,
+                })
+                .unwrap_or(false);
+            if !has_other && !has_selection {
+                errors.insert(
+                    answer_key,
+                    format!("Please answer {} or choose Skip", question.header).into(),
+                );
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     pub(crate) fn set_errors(&mut self, errors: HashMap<String, SharedString>) {
         self.field_errors = errors;
     }
@@ -351,6 +411,7 @@ mod tests {
                 ),
                 "Review this request.",
             ),
+            ask_user_request: None,
             status: pending_status(),
         };
         assert!(should_render_elicitation(&pending));
@@ -365,6 +426,7 @@ mod tests {
                 ),
                 "Authorize Vela in your browser.",
             ),
+            ask_user_request: None,
             status: ElicitationStatus::Accepted,
         };
         assert!(should_render_elicitation(&accepted_url));
@@ -378,6 +440,7 @@ mod tests {
                 ),
                 "Review this request.",
             ),
+            ask_user_request: None,
             status: ElicitationStatus::Accepted,
         };
         assert!(!should_render_elicitation(&accepted_form));
@@ -474,6 +537,67 @@ mod tests {
                 .map(|description| description.to_string()),
             Some("Read and update repositories".to_string())
         );
+    }
+
+    #[gpui::test]
+    fn ask_user_requires_an_answer_unless_skipped(cx: &mut TestAppContext) {
+        crate::conversation_view::tests::init_test(cx);
+
+        cx.add_window(|window, cx| {
+            let schema = acp::ElicitationSchema::new()
+                .property(
+                    "answer-0",
+                    acp::StringPropertySchema::new().one_of(vec![
+                        acp::EnumOption::new("Stable", "Stable"),
+                        acp::EnumOption::new("Preview", "Preview"),
+                    ]),
+                    false,
+                )
+                .string("other-0", false)
+                .string("chat", false);
+            let request = acp_thread::AskUserRequest {
+                questions: vec![acp_thread::AskUserQuestion {
+                    question: "Which channel?".to_string(),
+                    header: "Channel".to_string(),
+                    options: vec![
+                        acp_thread::AskUserOption {
+                            label: "Stable".to_string(),
+                            description: "Stable releases".to_string(),
+                        },
+                        acp_thread::AskUserOption {
+                            label: "Preview".to_string(),
+                            description: "Preview releases".to_string(),
+                        },
+                    ],
+                    multi_select: false,
+                }],
+            };
+            let mut form_state = ElicitationFormState::new(&schema, window, cx);
+            assert!(form_state.validate_ask_user(&request, cx).is_err());
+
+            form_state.set_single_select("answer-0", "Stable".to_string());
+            assert_eq!(form_state.validate_ask_user(&request, cx), Ok(()));
+            assert!(form_state.collect_ask_user_chat(&schema, cx).is_err());
+
+            let Some(ElicitationFieldState::Text(chat_editor)) = form_state.fields.get("chat")
+            else {
+                panic!("chat field should be a text editor");
+            };
+            chat_editor.update(cx, |editor, cx| {
+                editor.set_text("Why do you recommend Stable?", window, cx)
+            });
+            let chat_content = form_state
+                .collect_ask_user_chat(&schema, cx)
+                .expect("chat message should be accepted");
+            assert_eq!(
+                chat_content.get("chat"),
+                Some(&acp::ElicitationContentValue::String(
+                    "Why do you recommend Stable?".to_string()
+                ))
+            );
+
+            Editor::single_line(window, cx)
+        });
     }
 
     #[gpui::test]
@@ -777,6 +901,7 @@ fn render_preview_card(
     let elicitation = Elicitation {
         id: ElicitationEntryId(format!("preview-elicitation-{entry_ix}").into()),
         request,
+        ask_user_request: None,
         status,
     };
 
@@ -1106,6 +1231,7 @@ type MultiSelectHandler = Rc<dyn Fn(ElicitationEntryId, String, String, bool, &m
 #[derive(Clone)]
 pub(crate) struct ElicitationCardHandlers {
     on_submit: RespondHandler,
+    on_chat: RespondHandler,
     on_decline: RespondHandler,
     on_cancel: RespondHandler,
     on_open_url: OpenUrlHandler,
@@ -1117,6 +1243,7 @@ pub(crate) struct ElicitationCardHandlers {
 impl ElicitationCardHandlers {
     pub(crate) fn new(
         on_submit: impl Fn(ElicitationEntryId, &mut Window, &mut App) + 'static,
+        on_chat: impl Fn(ElicitationEntryId, &mut Window, &mut App) + 'static,
         on_decline: impl Fn(ElicitationEntryId, &mut Window, &mut App) + 'static,
         on_cancel: impl Fn(ElicitationEntryId, &mut Window, &mut App) + 'static,
         on_open_url: impl Fn(ElicitationEntryId, String, &mut Window, &mut App) + 'static,
@@ -1126,6 +1253,7 @@ impl ElicitationCardHandlers {
     ) -> Self {
         Self {
             on_submit: Rc::new(on_submit),
+            on_chat: Rc::new(on_chat),
             on_decline: Rc::new(on_decline),
             on_cancel: Rc::new(on_cancel),
             on_open_url: Rc::new(on_open_url),
@@ -1137,6 +1265,7 @@ impl ElicitationCardHandlers {
 
     pub(crate) fn noop() -> Self {
         Self::new(
+            |_, _, _| {},
             |_, _, _| {},
             |_, _, _| {},
             |_, _, _| {},
@@ -1236,11 +1365,14 @@ impl<'a> ElicitationCard<'a> {
             ElicitationStatus::Completed => ("Completed", IconName::Check, Color::Success),
         };
 
-        let body = v_flex()
-            .gap_2()
-            .p_3()
-            .child(Label::new(self.elicitation.request.message.clone()).size(LabelSize::Small));
+        let is_ask_user = self.elicitation.ask_user_request.is_some();
+        let body = v_flex().gap_2().p_3().when(!is_ask_user, |this| {
+            this.child(Label::new(self.elicitation.request.message.clone()).size(LabelSize::Small))
+        });
         let body = match &self.elicitation.request.mode {
+            acp::ElicitationMode::Form(mode) if is_pending && is_ask_user => {
+                body.child(self.render_ask_user(mode, cx))
+            }
             acp::ElicitationMode::Form(mode) if is_pending => {
                 body.child(self.render_form(mode, cx))
             }
@@ -1275,9 +1407,13 @@ impl<'a> ElicitationCard<'a> {
                                     .color(status_color),
                             )
                             .child(
-                                Label::new("Input Requested")
-                                    .size(LabelSize::Custom(tool_name_font_size))
-                                    .truncate(),
+                                Label::new(if is_ask_user {
+                                    "Ask User Question"
+                                } else {
+                                    "Input Requested"
+                                })
+                                .size(LabelSize::Custom(tool_name_font_size))
+                                .truncate(),
                             ),
                     )
                     .child(
@@ -1288,6 +1424,66 @@ impl<'a> ElicitationCard<'a> {
             )
             .child(body)
             .when(is_pending, |this| this.child(self.render_actions(cx)))
+    }
+
+    fn render_ask_user(&self, mode: &acp::ElicitationFormMode, cx: &App) -> AnyElement {
+        let Some(state) = self.form_state else {
+            return Empty.into_any_element();
+        };
+        let Some(request) = self.elicitation.ask_user_request.as_ref() else {
+            return Empty.into_any_element();
+        };
+
+        v_flex()
+            .gap_3()
+            .children(request.questions.iter().enumerate().map(|(index, _)| {
+                let answer_key = format!("answer-{index}");
+                let other_key = format!("other-{index}");
+                v_flex()
+                    .gap_2()
+                    .when(index > 0, |this| {
+                        this.pt_3()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border.opacity(0.8))
+                    })
+                    .children(
+                        [answer_key, other_key]
+                            .into_iter()
+                            .filter_map(|field_name| {
+                                let property = mode.requested_schema.properties.get(&field_name)?;
+                                let field = state.fields.get(&field_name)?;
+                                Some(self.render_field(
+                                    &field_name,
+                                    property,
+                                    field,
+                                    state.field_errors.get(&field_name),
+                                    cx,
+                                ))
+                            }),
+                    )
+            }))
+            .when_some(
+                mode.requested_schema
+                    .properties
+                    .get("chat")
+                    .zip(state.fields.get("chat")),
+                |this, (property, field)| {
+                    this.child(
+                        v_flex()
+                            .pt_3()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border.opacity(0.8))
+                            .child(self.render_field(
+                                "chat",
+                                property,
+                                field,
+                                state.field_errors.get("chat"),
+                                cx,
+                            )),
+                    )
+                },
+            )
+            .into_any_element()
     }
 
     fn render_form(&self, mode: &acp::ElicitationFormMode, cx: &App) -> AnyElement {
@@ -1655,6 +1851,7 @@ impl<'a> ElicitationCard<'a> {
             acp::ElicitationMode::Url(mode) => Some(mode.url.clone()),
             _ => None,
         };
+        let is_ask_user = self.elicitation.ask_user_request.is_some();
         let (accept_label, accept_icon, accept_icon_color) = if open_url.is_some() {
             ("Open", IconName::ArrowUpRight, Color::Muted)
         } else {
@@ -1662,10 +1859,12 @@ impl<'a> ElicitationCard<'a> {
         };
         let border_color = cx.theme().colors().border.opacity(0.8);
         let on_submit = self.handlers.on_submit.clone();
+        let on_chat = self.handlers.on_chat.clone();
         let on_open_url = self.handlers.on_open_url.clone();
         let on_decline = self.handlers.on_decline.clone();
         let on_cancel = self.handlers.on_cancel.clone();
         let submit_id = self.elicitation.id.clone();
+        let chat_id = self.elicitation.id.clone();
         let decline_id = self.elicitation.id.clone();
         let cancel_id = self.elicitation.id.clone();
 
@@ -1692,25 +1891,39 @@ impl<'a> ElicitationCard<'a> {
                         }
                     }),
             )
+            .when(is_ask_user, |this| {
+                this.child(
+                    Button::new(("elicitation-chat", self.entry_ix), "Chat about this")
+                        .label_size(LabelSize::Small)
+                        .on_click(move |_, window, cx| {
+                            on_chat(chat_id.clone(), window, cx);
+                        }),
+                )
+            })
             .child(
-                Button::new(("elicitation-decline", self.entry_ix), "Decline")
-                    .start_icon(
-                        Icon::new(IconName::Close)
-                            .size(IconSize::XSmall)
-                            .color(Color::Error),
-                    )
-                    .label_size(LabelSize::Small)
-                    .on_click(move |_, window, cx| {
-                        on_decline(decline_id.clone(), window, cx);
-                    }),
+                Button::new(
+                    ("elicitation-decline", self.entry_ix),
+                    if is_ask_user { "Skip" } else { "Decline" },
+                )
+                .start_icon(
+                    Icon::new(IconName::Close)
+                        .size(IconSize::XSmall)
+                        .color(Color::Error),
+                )
+                .label_size(LabelSize::Small)
+                .on_click(move |_, window, cx| {
+                    on_decline(decline_id.clone(), window, cx);
+                }),
             )
-            .child(
-                Button::new(("elicitation-cancel", self.entry_ix), "Cancel")
-                    .label_size(LabelSize::Small)
-                    .on_click(move |_, window, cx| {
-                        on_cancel(cancel_id.clone(), window, cx);
-                    }),
-            )
+            .when(!is_ask_user, |this| {
+                this.child(
+                    Button::new(("elicitation-cancel", self.entry_ix), "Cancel")
+                        .label_size(LabelSize::Small)
+                        .on_click(move |_, window, cx| {
+                            on_cancel(cancel_id.clone(), window, cx);
+                        }),
+                )
+            })
             .into_any_element()
     }
 }

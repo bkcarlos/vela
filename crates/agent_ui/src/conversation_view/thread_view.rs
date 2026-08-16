@@ -2728,13 +2728,18 @@ impl ThreadView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mode = self
-            .thread
-            .read(cx)
-            .elicitation(&elicitation_id)
-            .map(|(_, elicitation)| elicitation.request.mode.clone());
+        let elicitation =
+            self.thread
+                .read(cx)
+                .elicitation(&elicitation_id)
+                .map(|(_, elicitation)| {
+                    (
+                        elicitation.request.mode.clone(),
+                        elicitation.ask_user_request.clone(),
+                    )
+                });
 
-        let Some(mode) = mode else {
+        let Some((mode, ask_user_request)) = elicitation else {
             return;
         };
 
@@ -2743,6 +2748,15 @@ impl ThreadView {
                 let Some(state) = self.elicitation_form_states.get(&elicitation_id) else {
                     return;
                 };
+                if let Some(request) = ask_user_request.as_ref()
+                    && let Err(errors) = state.validate_ask_user(request, cx)
+                {
+                    if let Some(state) = self.elicitation_form_states.get_mut(&elicitation_id) {
+                        state.set_errors(errors);
+                    }
+                    cx.notify();
+                    return;
+                }
                 match state.collect(&mode.requested_schema, cx) {
                     Ok(content) => {
                         acp::CreateElicitationResponse::new(acp::ElicitationAction::Accept(
@@ -2765,6 +2779,45 @@ impl ThreadView {
         };
 
         self.respond_to_elicitation(elicitation_id, response, cx);
+    }
+
+    fn chat_about_elicitation(
+        &mut self,
+        elicitation_id: ElicitationEntryId,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let schema =
+            self.thread
+                .read(cx)
+                .elicitation(&elicitation_id)
+                .and_then(|(_, elicitation)| match &elicitation.request.mode {
+                    acp::ElicitationMode::Form(mode) => Some(mode.requested_schema.clone()),
+                    _ => None,
+                });
+        let Some(schema) = schema else {
+            return;
+        };
+        let Some(state) = self.elicitation_form_states.get(&elicitation_id) else {
+            return;
+        };
+        let content = match state.collect_ask_user_chat(&schema, cx) {
+            Ok(content) => content,
+            Err(errors) => {
+                if let Some(state) = self.elicitation_form_states.get_mut(&elicitation_id) {
+                    state.set_errors(errors);
+                }
+                cx.notify();
+                return;
+            }
+        };
+        self.respond_to_elicitation(
+            elicitation_id,
+            acp::CreateElicitationResponse::new(acp::ElicitationAction::Accept(
+                acp::ElicitationAcceptAction::new().content(content),
+            )),
+            cx,
+        );
     }
 
     fn decline_elicitation(
@@ -7191,6 +7244,15 @@ impl ThreadView {
                 move |elicitation_id, window, cx| {
                     view.update(cx, |this, cx| {
                         this.submit_elicitation(elicitation_id, window, cx);
+                    })
+                    .log_err();
+                }
+            },
+            {
+                let view = view.clone();
+                move |elicitation_id, window, cx| {
+                    view.update(cx, |this, cx| {
+                        this.chat_about_elicitation(elicitation_id, window, cx);
                     })
                     .log_err();
                 }
