@@ -814,6 +814,8 @@ impl LocalLspStore {
                 }
             }
 
+            let additional_arguments = adapter.adapter.prepare_to_start(&delegate, cx).await?;
+
             let (existing_binary, maybe_download_binary) = adapter
                 .clone()
                 .get_language_server_command(delegate.clone(), toolchain, lsp_binary_options, cx)
@@ -856,6 +858,7 @@ impl LocalLspStore {
                     shell_env.extend(env.iter().map(|(k, v)| (k.clone(), v.clone())));
                 }
             }
+            binary.arguments.extend(additional_arguments);
 
             binary.env = Some(shell_env);
             Ok(binary)
@@ -15168,6 +15171,47 @@ impl LspAdapterDelegate for LocalLspAdapterDelegate {
                 cx.emit(LspStoreEvent::Notification(message.to_owned()))
             })
             .ok();
+    }
+
+    fn request_confirmation(
+        &self,
+        language_server: LanguageServerName,
+        message: String,
+        cx: &mut App,
+    ) -> Task<bool> {
+        let (response_channel, response_receiver) = async_channel::bounded(1);
+        let request = LanguageServerPromptRequest::new(
+            PromptLevel::Warning,
+            message,
+            vec![
+                MessageActionItem {
+                    title: "Generate".to_owned(),
+                    properties: Default::default(),
+                },
+                MessageActionItem {
+                    title: "Not Now".to_owned(),
+                    properties: Default::default(),
+                },
+            ],
+            language_server.to_string(),
+            response_channel,
+        );
+        if self
+            .lsp_store
+            .update(cx, |_, cx| {
+                cx.emit(LspStoreEvent::LanguageServerPrompt(request));
+            })
+            .is_err()
+        {
+            return Task::ready(false);
+        }
+
+        cx.spawn(async move |_| {
+            response_receiver
+                .recv()
+                .await
+                .is_ok_and(|response| response.title == "Generate")
+        })
     }
 
     fn http_client(&self) -> Arc<dyn HttpClient> {

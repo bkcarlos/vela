@@ -9,13 +9,25 @@ use lsp::{InitializeParams, LanguageServerBinary, LanguageServerName};
 use project::lsp_store::clangd_ext;
 use serde_json::json;
 use smol::fs;
-use std::{env::consts, future::Future, path::PathBuf, sync::Arc};
+use std::{
+    env::consts,
+    ffi::{OsStr, OsString},
+    future::Future,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use util::{ResultExt, fs::remove_matching, maybe, merge_json_value_into};
 
 pub struct CLspAdapter;
 
 impl CLspAdapter {
     const SERVER_NAME: LanguageServerName = LanguageServerName::new_static("clangd");
+}
+
+struct CompilationDatabaseGenerator {
+    build_system: &'static str,
+    command: LanguageServerBinary,
+    output_directory: PathBuf,
 }
 
 impl LspInstaller for CLspAdapter {
@@ -159,6 +171,131 @@ impl LspInstaller for CLspAdapter {
     }
 }
 
+async fn find_compilation_database(root: &Path) -> Option<PathBuf> {
+    for directory in [root.to_path_buf(), root.join("build"), root.join("out")] {
+        if fs::metadata(directory.join("compile_commands.json"))
+            .await
+            .is_ok()
+        {
+            return Some(directory);
+        }
+    }
+
+    let mut entries = fs::read_dir(root).await.ok()?;
+    while let Some(entry) = entries.next().await {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with("cmake-build-")
+            && fs::metadata(entry.path().join("compile_commands.json"))
+                .await
+                .is_ok()
+        {
+            return Some(entry.path());
+        }
+    }
+    None
+}
+
+async fn detect_compilation_database_generator(
+    root: &Path,
+    delegate: &Arc<dyn LspAdapterDelegate>,
+) -> Option<CompilationDatabaseGenerator> {
+    if fs::metadata(root.join("CMakeLists.txt")).await.is_ok() {
+        let cmake = delegate.which(OsStr::new("cmake")).await?;
+        let output_directory = root.join("build");
+        return Some(CompilationDatabaseGenerator {
+            build_system: "CMake",
+            command: LanguageServerBinary {
+                path: cmake,
+                arguments: vec![
+                    "-S".into(),
+                    root.as_os_str().to_owned(),
+                    "-B".into(),
+                    output_directory.as_os_str().to_owned(),
+                    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON".into(),
+                ],
+                env: None,
+            },
+            output_directory,
+        });
+    }
+
+    if bazel_uses_hedron_compile_commands(root).await {
+        let bazel = delegate.which(OsStr::new("bazel")).await?;
+        return Some(CompilationDatabaseGenerator {
+            build_system: "Bazel",
+            command: LanguageServerBinary {
+                path: bazel,
+                arguments: vec![
+                    "run".into(),
+                    "@hedron_compile_commands//:refresh_all".into(),
+                ],
+                env: None,
+            },
+            output_directory: root.to_path_buf(),
+        });
+    }
+
+    if fs::metadata(root.join("Makefile")).await.is_ok()
+        || fs::metadata(root.join("makefile")).await.is_ok()
+    {
+        let bear = delegate.which(OsStr::new("bear")).await?;
+        let make = delegate.which(OsStr::new("make")).await?;
+        return Some(CompilationDatabaseGenerator {
+            build_system: "Make",
+            command: LanguageServerBinary {
+                path: bear,
+                arguments: vec![
+                    "--output".into(),
+                    root.join("compile_commands.json").into_os_string(),
+                    "--".into(),
+                    make.into_os_string(),
+                ],
+                env: None,
+            },
+            output_directory: root.to_path_buf(),
+        });
+    }
+
+    None
+}
+
+async fn bazel_uses_hedron_compile_commands(root: &Path) -> bool {
+    for file_name in ["MODULE.bazel", "WORKSPACE.bazel", "WORKSPACE"] {
+        let Ok(contents) = fs::read_to_string(root.join(file_name)).await else {
+            continue;
+        };
+        if contents.contains("hedron_compile_commands") {
+            return true;
+        }
+    }
+    false
+}
+
+fn compile_commands_argument(directory: &Path) -> OsString {
+    OsString::from(format!(
+        "--compile-commands-dir={}",
+        directory.to_string_lossy()
+    ))
+}
+
+fn format_command(command: &LanguageServerBinary) -> String {
+    std::iter::once(command.path.as_os_str())
+        .chain(command.arguments.iter().map(OsString::as_os_str))
+        .map(|argument| {
+            let argument = argument.to_string_lossy();
+            if argument.contains(char::is_whitespace) {
+                format!("\"{argument}\"")
+            } else {
+                argument.into_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn ensure_arch_compatibility() -> Result<()> {
     let arch = consts::ARCH;
     if consts::OS == "linux" && !["x86_64", "x86"].contains(&arch) {
@@ -173,6 +310,53 @@ fn ensure_arch_compatibility() -> Result<()> {
 impl super::LspAdapter for CLspAdapter {
     fn name(&self) -> LanguageServerName {
         Self::SERVER_NAME
+    }
+
+    async fn prepare_to_start(
+        &self,
+        delegate: &Arc<dyn LspAdapterDelegate>,
+        cx: &mut AsyncApp,
+    ) -> Result<Vec<OsString>> {
+        let root = delegate.worktree_root_path();
+        if let Some(directory) = find_compilation_database(root).await {
+            return Ok(vec![compile_commands_argument(&directory)]);
+        }
+
+        let Some(generator) = detect_compilation_database_generator(root, delegate).await else {
+            return Ok(Vec::new());
+        };
+        let command = format_command(&generator.command);
+        let message = format!(
+            "Vela detected a {} project, but no compile_commands.json file. Run `{command}` before starting clangd? This command may execute project build scripts.",
+            generator.build_system
+        );
+        let confirmation =
+            cx.update(|cx| delegate.request_confirmation(Self::SERVER_NAME, message, cx));
+        if !confirmation.await {
+            return Ok(Vec::new());
+        }
+
+        if let Err(error) = delegate.try_exec(generator.command).await {
+            let message = format!(
+                "Failed to generate compile_commands.json for {}: {error:#}. Starting clangd without it.",
+                generator.build_system
+            );
+            cx.update(|cx| delegate.show_notification(&message, cx));
+            return Ok(Vec::new());
+        }
+
+        let compilation_database = generator.output_directory.join("compile_commands.json");
+        if fs::metadata(&compilation_database).await.is_err() {
+            let message = format!(
+                "The {0} command completed but did not create {1}. Starting clangd without it.",
+                generator.build_system,
+                compilation_database.display()
+            );
+            cx.update(|cx| delegate.show_notification(&message, cx));
+            return Ok(Vec::new());
+        }
+
+        Ok(vec![compile_commands_argument(&generator.output_directory)])
     }
 
     async fn label_for_completion(
@@ -418,8 +602,37 @@ mod tests {
     use gpui::{AppContext as _, BorrowAppContext, TestAppContext};
     use language::{AutoindentMode, Buffer};
     use settings::SettingsStore;
-    use std::num::NonZeroU32;
+    use std::{fs, num::NonZeroU32};
     use unindent::Unindent;
+
+    #[test]
+    fn test_finds_compilation_database_in_build_directory() -> anyhow::Result<()> {
+        smol::block_on(async {
+            let root = tempfile::tempdir()?;
+            fs::create_dir(root.path().join("build"))?;
+            fs::write(root.path().join("build/compile_commands.json"), "[]")?;
+
+            assert_eq!(
+                super::find_compilation_database(root.path()).await,
+                Some(root.path().join("build"))
+            );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_detects_hedron_bazel_configuration() -> anyhow::Result<()> {
+        smol::block_on(async {
+            let root = tempfile::tempdir()?;
+            fs::write(
+                root.path().join("MODULE.bazel"),
+                "bazel_dep(name = \"hedron_compile_commands\")",
+            )?;
+
+            assert!(super::bazel_uses_hedron_compile_commands(root.path()).await);
+            Ok(())
+        })
+    }
 
     #[gpui::test]
     async fn test_c_autoindent_basic(cx: &mut TestAppContext) {

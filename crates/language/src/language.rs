@@ -36,7 +36,7 @@ use collections::{HashMap, HashSet};
 use futures::Future;
 use futures::future::LocalBoxFuture;
 use futures::lock::OwnedMutexGuard;
-use gpui::{App, AsyncApp, Entity};
+use gpui::{App, AsyncApp, Entity, Task};
 use http_client::HttpClient;
 
 pub use language_core::{
@@ -71,7 +71,7 @@ use semver::Version;
 use serde_json::Value;
 use settings::WorktreeId;
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fmt::Debug,
     hash::Hash,
     mem,
@@ -479,6 +479,12 @@ impl CachedLspAdapter {
 #[async_trait]
 pub trait LspAdapterDelegate: Send + Sync {
     fn show_notification(&self, message: &str, cx: &mut App);
+    fn request_confirmation(
+        &self,
+        language_server: LanguageServerName,
+        message: String,
+        cx: &mut App,
+    ) -> Task<bool>;
     fn http_client(&self) -> Arc<dyn HttpClient>;
     fn worktree_id(&self) -> WorktreeId;
     fn worktree_root_path(&self) -> &Path;
@@ -682,6 +688,14 @@ pub trait LspAdapter: 'static + Send + Sync + DynLspInstaller {
     /// This allows adapters to intercept preference selections (like "Always" or "Never")
     /// for settings that should be persisted to Vela's settings file.
     fn process_prompt_response(&self, _context: &PromptResponseContext, _cx: &mut AsyncApp) {}
+
+    async fn prepare_to_start(
+        &self,
+        _delegate: &Arc<dyn LspAdapterDelegate>,
+        _cx: &mut AsyncApp,
+    ) -> Result<Vec<OsString>> {
+        Ok(Vec::new())
+    }
 }
 
 pub trait LspInstaller {

@@ -62,6 +62,8 @@ Configure formatting in Settings ({#kb vela::OpenSettings}) under Languages > C,
 
 For some projects Clangd requires a `compile_commands.json` file to properly analyze your project. This file contains the compilation database that tells clangd how your project should be built.
 
+Before starting clangd, Vela looks for the database in the project root and common `build`, `out`, and `cmake-build-*` directories. If none exists, Vela can detect CMake, Make with Bear, and Bazel projects using the Hedron compilation database extractor. Vela always asks for confirmation before running a generation command. If generation fails, clangd still starts without a database.
+
 ### CMake Compile Commands
 
 With CMake, you can generate `compile_commands.json` automatically by adding the following line to your `CMakeLists.txt`:
