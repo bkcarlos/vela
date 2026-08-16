@@ -1,11 +1,12 @@
 use crate::{
-    ApplyCodeActionTool, AskUserTool, CodeActionStore, ContextServerRegistry, CopyPathTool,
-    CreateDirectoryTool, CreateThreadTool, DbLanguageModel, DbThread, DeletePathTool,
-    DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, FindReferencesTool, GetCodeActionsTool,
-    GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool, ListDirectoryTool, MovePathTool,
-    ProjectSnapshot, ReadFileTool, RenameTool, SandboxedTerminalTool, SpawnAgentTool,
-    SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
-    WriteFileTool, decide_permission_from_settings,
+    ApplyCodeActionTool, AskUserTool, CodeActionStore, CompleteTaskTool, CompletedTaskCheckpoint,
+    ContextServerRegistry, CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel,
+    DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool, FindPathTool,
+    FindReferencesTool, GetCodeActionsTool, GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool,
+    ListDirectoryTool, MovePathTool, ProjectSnapshot, ReadFileTool, ReadSessionTool, RenameTool,
+    SandboxedTerminalTool, SearchSessionsTool, SessionSearchResult, SessionTranscript,
+    SpawnAgentTool, SystemPromptTemplate, Template, Templates, TerminalTool,
+    ToolPermissionDecision, WebSearchTool, WriteFileTool, decide_permission_from_settings,
 };
 use acp_thread::{ClientUserMessageId, MentionUri};
 use action_log::ActionLog;
@@ -190,6 +191,12 @@ pub enum Message {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum CompactionInfo {
     Summary(SharedString),
+    CompletedTask {
+        checkpoint: CompletedTaskCheckpoint,
+        session_id: acp::SessionId,
+        source_start: usize,
+        source_end: usize,
+    },
     ProviderNative {
         provider: LanguageModelProviderId,
         items: Vec<serde_json::Value>,
@@ -209,9 +216,61 @@ impl CompactionInfo {
                 cache: false,
                 reasoning_details: None,
             }],
+            Self::CompletedTask {
+                checkpoint,
+                session_id,
+                source_start,
+                source_end,
+            } => vec![LanguageModelRequestMessage {
+                role: Role::User,
+                content: vec![format!(
+                    "A previous task was completed and archived. Start a new active task unless the user reopens it. If details are needed, call read_session with the recorded session and message range.\n\n{}",
+                    completed_task_checkpoint_markdown(
+                        checkpoint,
+                        session_id,
+                        *source_start,
+                        *source_end,
+                    )
+                )
+                .into()],
+                cache: false,
+                reasoning_details: None,
+            }],
             Self::ProviderNative { .. } => Vec::new(),
         }
     }
+}
+
+fn completed_task_checkpoint_markdown(
+    checkpoint: &CompletedTaskCheckpoint,
+    session_id: &acp::SessionId,
+    source_start: usize,
+    source_end: usize,
+) -> String {
+    let mut markdown = format!(
+        "# Completed Task\n\n- Task ID: {}\n- Title: {}\n- Outcome: {}\n- Session: {}\n- Source messages: {}..{}\n",
+        checkpoint.task_id,
+        checkpoint.title,
+        checkpoint.outcome,
+        session_id,
+        source_start,
+        source_end,
+    );
+    for (title, values) in [
+        ("Retained context", &checkpoint.retained_context),
+        ("Changed files", &checkpoint.changed_files),
+        ("Verification", &checkpoint.verification),
+        ("Artifacts", &checkpoint.artifacts),
+    ] {
+        if !values.is_empty() {
+            markdown.push_str(&format!("\n## {title}\n"));
+            for value in values {
+                markdown.push_str(&format!("\n- {value}"));
+            }
+            markdown.push('\n');
+        }
+    }
+    markdown
 }
 
 impl Message {
@@ -247,7 +306,21 @@ impl Message {
             Message::User(message) => message.to_markdown(),
             Message::Agent(message) => message.to_markdown(),
             Message::Resume => "[resume]\n".into(),
-            Message::Compaction(_) => "--- Context Compacted ---\n".into(),
+            Message::Compaction(CompactionInfo::Summary(_)) => "--- Context Compacted ---\n".into(),
+            Message::Compaction(CompactionInfo::CompletedTask {
+                checkpoint,
+                session_id,
+                source_start,
+                source_end,
+            }) => completed_task_checkpoint_markdown(
+                checkpoint,
+                session_id,
+                *source_start,
+                *source_end,
+            ),
+            Message::Compaction(CompactionInfo::ProviderNative { .. }) => {
+                "--- Context Compacted By Provider ---\n".into()
+            }
         }
     }
 
@@ -873,6 +946,36 @@ pub trait ThreadEnvironment {
             "Listing available agents is not supported in this environment"
         ))
     }
+
+    fn search_sessions(
+        &self,
+        query: String,
+        cx: &mut App,
+    ) -> Task<Result<Vec<SessionSearchResult>>> {
+        let _ = query;
+        let _ = cx;
+        Task::ready(Err(anyhow::anyhow!(
+            "Searching sessions is not supported in this environment"
+        )))
+    }
+
+    fn read_session(
+        &self,
+        session_id: String,
+        start_message: usize,
+        end_message: Option<usize>,
+        max_characters: usize,
+        cx: &mut App,
+    ) -> Task<Result<SessionTranscript>> {
+        let _ = session_id;
+        let _ = start_message;
+        let _ = end_message;
+        let _ = max_characters;
+        let _ = cx;
+        Task::ready(Err(anyhow::anyhow!(
+            "Reading sessions is not supported in this environment"
+        )))
+    }
 }
 
 /// A request to create a new sibling thread.
@@ -1330,6 +1433,7 @@ pub struct Thread {
     /// the start of each request.
     current_request_token_usage: TokenUsage,
     pending_compaction_telemetry: Option<CompactionTelemetry>,
+    pending_completed_task: Option<CompletedTaskCheckpoint>,
     #[allow(unused)]
     initial_project_snapshot: Shared<Task<Option<Arc<ProjectSnapshot>>>>,
     pub(crate) context_server_registry: Entity<ContextServerRegistry>,
@@ -1467,6 +1571,7 @@ impl Thread {
             cumulative_token_usage: TokenUsage::default(),
             current_request_token_usage: TokenUsage::default(),
             pending_compaction_telemetry: None,
+            pending_completed_task: None,
             initial_project_snapshot: {
                 let project_snapshot = Self::project_snapshot(project.clone(), cx);
                 cx.foreground_executor()
@@ -1604,6 +1709,26 @@ impl Thread {
                                 acp_thread::ContextCompactionStatus::Completed,
                             );
                             stream.send_context_compaction_update(compaction_id.clone(), summary);
+                        }
+                        CompactionInfo::CompletedTask {
+                            checkpoint,
+                            session_id,
+                            source_start,
+                            source_end,
+                        } => {
+                            stream.send_context_compaction(
+                                compaction_id.clone(),
+                                acp_thread::ContextCompactionStatus::Completed,
+                            );
+                            stream.send_context_compaction_update(
+                                compaction_id,
+                                &completed_task_checkpoint_markdown(
+                                    checkpoint,
+                                    session_id,
+                                    *source_start,
+                                    *source_end,
+                                ),
+                            );
                         }
                         CompactionInfo::ProviderNative { .. } => {
                             stream.send_context_compaction(
@@ -1838,6 +1963,7 @@ impl Thread {
             cumulative_token_usage: db_thread.cumulative_token_usage,
             current_request_token_usage: TokenUsage::default(),
             pending_compaction_telemetry: None,
+            pending_completed_task: None,
             initial_project_snapshot: Task::ready(db_thread.initial_project_snapshot).shared(),
             context_server_registry,
             profile_id,
@@ -2178,6 +2304,9 @@ impl Thread {
 
         let language_registry = self.project.read(cx).languages().clone();
         self.add_tool(AskUserTool);
+        self.add_tool(CompleteTaskTool);
+        self.add_tool(SearchSessionsTool::new(environment.clone()));
+        self.add_tool(ReadSessionTool::new(environment.clone()));
         self.add_tool(CopyPathTool::new(self.project.clone()));
         self.add_tool(CreateDirectoryTool::new(self.project.clone()));
         self.add_tool(DeletePathTool::new(
@@ -3012,6 +3141,9 @@ impl Thread {
 
             this.update(cx, |this, cx| {
                 this.flush_pending_message(cx);
+                if this.pending_completed_task.is_some() {
+                    this.archive_completed_task(cx);
+                }
                 if this.title.is_none() {
                     this.generate_title(cx);
                 }
@@ -3259,6 +3391,14 @@ impl Thread {
             None,
         );
         this.update(cx, |this, _cx| {
+            if !tool_result.is_error
+                && tool_result.tool_name.as_ref() == CompleteTaskTool::NAME
+                && let Some(output) = tool_result.output.as_ref()
+                && let Ok(output) =
+                    serde_json::from_value::<crate::CompleteTaskToolOutput>(output.clone())
+            {
+                this.pending_completed_task = Some(output.task_completed);
+            }
             this.pending_message()
                 .tool_results
                 .insert(tool_result.tool_use_id.clone(), tool_result)
@@ -3929,6 +4069,26 @@ impl Thread {
         self.pending_summary_generation = None;
     }
 
+    fn archive_completed_task(&mut self, cx: &mut Context<Self>) {
+        let Some(checkpoint) = self.pending_completed_task.take() else {
+            return;
+        };
+        let source_start = latest_compaction_message_ix_before(&self.messages, self.messages.len())
+            .map_or(0, |index| index.saturating_add(1));
+        let source_end = self.messages.len();
+        self.messages.push(Arc::new(Message::Compaction(
+            CompactionInfo::CompletedTask {
+                checkpoint,
+                session_id: self.id.clone(),
+                source_start,
+                source_end,
+            },
+        )));
+        self.updated_at = Utc::now();
+        self.clear_summary();
+        cx.notify();
+    }
+
     fn last_user_message(&self) -> Option<&UserMessage> {
         self.messages
             .iter()
@@ -4446,6 +4606,21 @@ impl Thread {
         request
     }
 
+    pub fn session_transcript(
+        &self,
+        start_message: usize,
+        end_message: Option<usize>,
+        max_characters: usize,
+    ) -> SessionTranscript {
+        session_transcript(
+            &self.id,
+            &self.messages,
+            start_message,
+            end_message,
+            max_characters,
+        )
+    }
+
     pub fn to_markdown(&self) -> String {
         let mut markdown = messages_to_markdown(&self.messages);
 
@@ -4767,6 +4942,31 @@ impl RunningTurn {
     }
 }
 
+pub(crate) fn session_transcript(
+    session_id: &acp::SessionId,
+    messages: &[Arc<Message>],
+    start_message: usize,
+    end_message: Option<usize>,
+    max_characters: usize,
+) -> SessionTranscript {
+    let total_messages = messages.len();
+    let start_message = start_message.min(total_messages);
+    let end_message = end_message.unwrap_or(total_messages).min(total_messages);
+    let end_message = end_message.max(start_message);
+    let content = messages_to_markdown(&messages[start_message..end_message]);
+    let mut characters = content.chars();
+    let bounded_content = characters.by_ref().take(max_characters).collect::<String>();
+    let truncated = characters.next().is_some();
+    SessionTranscript {
+        session_id: session_id.to_string(),
+        start_message,
+        end_message,
+        total_messages,
+        content: bounded_content,
+        truncated,
+    }
+}
+
 pub(crate) fn messages_to_markdown(messages: &[Arc<Message>]) -> String {
     let mut markdown = String::new();
     for (ix, message) in messages.iter().enumerate() {
@@ -4804,6 +5004,29 @@ fn extend_request_history_until(
             messages,
             compaction_ix,
         ));
+    } else if matches!(
+        &*messages[compaction_ix],
+        Message::Compaction(CompactionInfo::CompletedTask { .. })
+    ) {
+        let checkpoint_start = messages[..compaction_ix]
+            .iter()
+            .rposition(|message| {
+                matches!(
+                    &**message,
+                    Message::Compaction(
+                        CompactionInfo::Summary(_) | CompactionInfo::ProviderNative { .. }
+                    )
+                )
+            })
+            .map_or(0, |index| index.saturating_add(1));
+        for message in &messages[checkpoint_start..compaction_ix] {
+            if matches!(
+                &**message,
+                Message::Compaction(CompactionInfo::CompletedTask { .. })
+            ) {
+                request_messages.extend(message.to_request());
+            }
+        }
     }
 
     for message in &messages[compaction_ix..end_ix] {
@@ -6775,6 +6998,84 @@ mod tests {
 
     fn summary_compaction(summary: &str) -> Arc<Message> {
         Arc::new(Message::Compaction(CompactionInfo::Summary(summary.into())))
+    }
+
+    #[gpui::test]
+    async fn test_completed_task_archives_raw_messages_behind_checkpoint(cx: &mut TestAppContext) {
+        let (thread, _) = setup_thread_for_test(cx).await;
+        let session_id = thread.read_with(cx, |thread, _| thread.id.clone());
+        thread.update(cx, |thread, cx| {
+            thread.messages.push(user_text_message(
+                ClientUserMessageId::new(),
+                "Implement the feature",
+            ));
+            thread
+                .messages
+                .push(agent_text_message("Implemented and verified"));
+            thread.pending_completed_task = Some(CompletedTaskCheckpoint {
+                task_id: "task-1".to_string(),
+                title: "Implement feature".to_string(),
+                outcome: "Feature implemented".to_string(),
+                retained_context: vec!["Keep compatibility".to_string()],
+                changed_files: vec!["src/feature.rs".to_string()],
+                verification: vec!["Tests passed".to_string()],
+                artifacts: vec!["commit abc123".to_string()],
+            });
+            thread.archive_completed_task(cx);
+        });
+
+        thread.read_with(cx, |thread, _| {
+            let Some(Message::Compaction(CompactionInfo::CompletedTask {
+                checkpoint,
+                session_id: checkpoint_session_id,
+                source_start,
+                source_end,
+            })) = thread.last_message()
+            else {
+                panic!("expected completed-task checkpoint");
+            };
+            assert_eq!(checkpoint.task_id, "task-1");
+            assert_eq!(checkpoint_session_id, &session_id);
+            assert_eq!((*source_start, *source_end), (0, 2));
+
+            let mut request = Vec::new();
+            extend_request_history_until(&thread.messages, &mut request, thread.messages.len());
+            assert_eq!(request.len(), 1);
+            let text = request[0].string_contents();
+            assert!(text.contains("Feature implemented"));
+            assert!(text.contains("Source messages: 0..2"));
+            assert!(!text.contains("Implement the feature"));
+
+            let transcript = thread.session_transcript(0, Some(2), 10_000);
+            assert!(transcript.content.contains("Implement the feature"));
+            assert!(transcript.content.contains("Implemented and verified"));
+        });
+
+        thread.update(cx, |thread, cx| {
+            thread.messages.push(user_text_message(
+                ClientUserMessageId::new(),
+                "Publish the feature",
+            ));
+            thread.messages.push(agent_text_message("Published"));
+            thread.pending_completed_task = Some(CompletedTaskCheckpoint {
+                task_id: "task-2".to_string(),
+                title: "Publish feature".to_string(),
+                outcome: "Feature published".to_string(),
+                retained_context: Vec::new(),
+                changed_files: Vec::new(),
+                verification: Vec::new(),
+                artifacts: vec!["release v1".to_string()],
+            });
+            thread.archive_completed_task(cx);
+        });
+        thread.read_with(cx, |thread, _| {
+            let mut request = Vec::new();
+            extend_request_history_until(&thread.messages, &mut request, thread.messages.len());
+            assert_eq!(request.len(), 2);
+            assert!(request[0].string_contents().contains("Feature implemented"));
+            assert!(request[1].string_contents().contains("Feature published"));
+            assert!(!request[1].string_contents().contains("Publish the feature"));
+        });
     }
 
     fn summary_request_text(summary: &str) -> String {

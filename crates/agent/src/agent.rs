@@ -3291,6 +3291,79 @@ impl ThreadEnvironment for NativeThreadEnvironment {
             })?;
         host.list_available_agents(cx)
     }
+
+    fn search_sessions(
+        &self,
+        query: String,
+        cx: &mut App,
+    ) -> Task<Result<Vec<SessionSearchResult>>> {
+        let Some(agent) = self.agent.upgrade() else {
+            return Task::ready(Err(anyhow!("Agent session no longer exists")));
+        };
+        let thread_store = agent.read(cx).thread_store.clone();
+        let reload_task = thread_store.read(cx).reload_task();
+        cx.spawn(async move |cx| {
+            reload_task.await;
+            let normalized_query = query.to_lowercase();
+            thread_store.read_with(cx, |store, _| {
+                Ok(store
+                    .entries()
+                    .filter(|thread| {
+                        normalized_query.is_empty()
+                            || thread.title.to_lowercase().contains(&normalized_query)
+                    })
+                    .take(20)
+                    .map(|thread| SessionSearchResult {
+                        session_id: thread.id.to_string(),
+                        title: thread.title.to_string(),
+                        updated_at: thread.updated_at.to_rfc3339(),
+                    })
+                    .collect())
+            })
+        })
+    }
+
+    fn read_session(
+        &self,
+        session_id: String,
+        start_message: usize,
+        end_message: Option<usize>,
+        max_characters: usize,
+        cx: &mut App,
+    ) -> Task<Result<SessionTranscript>> {
+        let session_id = acp::SessionId::new(session_id);
+        let Some(agent) = self.agent.upgrade() else {
+            return Task::ready(Err(anyhow!("Agent session no longer exists")));
+        };
+        if let Some(thread) = agent
+            .read(cx)
+            .sessions
+            .get(&session_id)
+            .map(|session| session.thread.clone())
+        {
+            return Task::ready(Ok(thread.read(cx).session_transcript(
+                start_message,
+                end_message,
+                max_characters,
+            )));
+        }
+
+        let thread_store = agent.read(cx).thread_store.clone();
+        let load_task =
+            thread_store.update(cx, |store, cx| store.load_thread(session_id.clone(), cx));
+        cx.spawn(async move |_cx| {
+            let thread = load_task
+                .await?
+                .ok_or_else(|| anyhow!("Session {session_id} was not found"))?;
+            Ok(crate::thread::session_transcript(
+                &session_id,
+                &thread.messages,
+                start_message,
+                end_message,
+                max_characters,
+            ))
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
