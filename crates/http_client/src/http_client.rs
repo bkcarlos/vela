@@ -537,6 +537,10 @@ fn read_gnome_proxy(kind: &str, scheme: &str) -> Option<Url> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "Linux system proxy discovery is synchronous and must complete before constructing the HTTP client"
+)]
 fn command_output(command: &str, arguments: &[&str]) -> Option<String> {
     let output = std::process::Command::new(command)
         .args(arguments)
