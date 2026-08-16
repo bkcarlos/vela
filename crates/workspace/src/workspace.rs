@@ -14371,6 +14371,67 @@ mod tests {
     }
 
     #[gpui::test]
+    async fn test_bottom_dock_keeps_height_when_switching_panels(cx: &mut TestAppContext) {
+        init_test(cx);
+        let fs = FakeFs::new(cx.executor());
+        let project = Project::test(fs, [], cx).await;
+        let (workspace, cx) =
+            cx.add_window_view(|window, cx| Workspace::test_new(project, window, cx));
+
+        workspace.update_in(cx, |workspace, window, cx| {
+            let first_panel = cx.new(|cx| {
+                let mut panel = TestPanel::new(DockPosition::Bottom, 100, cx);
+                panel.default_size = px(200.);
+                panel
+            });
+            let second_panel = cx.new(|cx| {
+                let mut panel = TestPanel::new(DockPosition::Bottom, 101, cx);
+                panel.default_size = px(400.);
+                panel
+            });
+            workspace.add_panel(first_panel.clone(), window, cx);
+            workspace.add_panel(second_panel.clone(), window, cx);
+
+            let bottom_dock = workspace.bottom_dock().clone();
+            bottom_dock.update(cx, |dock, cx| {
+                dock.activate_panel(0, window, cx);
+                dock.set_open(true, window, cx);
+            });
+            assert_eq!(
+                workspace.dock_size(&bottom_dock.read(cx), window, cx),
+                Some(px(200.))
+            );
+
+            bottom_dock.update(cx, |dock, cx| dock.activate_panel(1, window, cx));
+            assert_eq!(
+                bottom_dock
+                    .read(cx)
+                    .active_panel()
+                    .map(|panel| panel.panel_id()),
+                Some(second_panel.entity_id())
+            );
+            assert_eq!(
+                workspace.dock_size(&bottom_dock.read(cx), window, cx),
+                Some(px(200.))
+            );
+
+            workspace.resize_bottom_dock(px(350.), window, cx);
+            bottom_dock.update(cx, |dock, cx| dock.activate_panel(0, window, cx));
+            assert_eq!(
+                bottom_dock
+                    .read(cx)
+                    .active_panel()
+                    .map(|panel| panel.panel_id()),
+                Some(first_panel.entity_id())
+            );
+            assert_eq!(
+                workspace.dock_size(&bottom_dock.read(cx), window, cx),
+                Some(px(350.))
+            );
+        });
+    }
+
+    #[gpui::test]
     async fn test_clamp_panel_size_only_skips_flexible_width(cx: &mut TestAppContext) {
         init_test(cx);
         let fs = FakeFs::new(cx.executor());

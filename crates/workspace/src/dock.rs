@@ -895,8 +895,27 @@ impl Dock {
 
     pub fn activate_panel(&mut self, panel_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if Some(panel_ix) != self.active_panel_index {
+            let bottom_dock_height = if self.position == DockPosition::Bottom {
+                self.active_panel_entry().map(|entry| {
+                    entry
+                        .size_state
+                        .size
+                        .unwrap_or_else(|| entry.panel.default_size(window, cx))
+                })
+            } else {
+                None
+            };
+
             if let Some(active_panel) = self.active_panel_entry() {
                 active_panel.panel.set_active(false, window, cx);
+            }
+
+            if let Some(height) = bottom_dock_height
+                && let Some(entry) = self.panel_entries.get_mut(panel_ix)
+                && entry.size_state.size != Some(height)
+            {
+                entry.size_state.size = Some(height);
+                entry.panel.size_state_changed(window, cx);
             }
 
             self.active_panel_index = Some(panel_ix);
