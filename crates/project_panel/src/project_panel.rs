@@ -3855,6 +3855,24 @@ impl ProjectPanel {
         }
     }
 
+    fn schedule_new_search_in_directory(
+        &self,
+        dir_path: RelPathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let workspace = self.workspace.clone();
+        cx.spawn_in(window, async move |_, cx| {
+            workspace.update_in(cx, |workspace, window, cx| {
+                search::ProjectSearchView::new_search_in_directory(
+                    workspace, &dir_path, window, cx,
+                );
+            })?;
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
     pub fn new_search_in_directory(
         &mut self,
         _: &NewSearchInDirectory,
@@ -3869,17 +3887,7 @@ impl ProjectPanel {
                 match entry.path.parent() {
                     Some(parent) => Arc::from(parent),
                     None => {
-                        // File at root, open search with empty filter
-                        self.workspace
-                            .update(cx, |workspace, cx| {
-                                search::ProjectSearchView::new_search_in_directory(
-                                    workspace,
-                                    RelPath::empty(),
-                                    window,
-                                    cx,
-                                );
-                            })
-                            .ok();
+                        self.schedule_new_search_in_directory(RelPathBuf::new(), window, cx);
                         return;
                     }
                 }
@@ -3892,13 +3900,7 @@ impl ProjectPanel {
                 dir_path.to_rel_path_buf()
             };
 
-            self.workspace
-                .update(cx, |workspace, cx| {
-                    search::ProjectSearchView::new_search_in_directory(
-                        workspace, &dir_path, window, cx,
-                    );
-                })
-                .ok();
+            self.schedule_new_search_in_directory(dir_path, window, cx);
         }
     }
 

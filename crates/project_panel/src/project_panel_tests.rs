@@ -115,6 +115,54 @@ async fn test_visible_list(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+async fn test_find_in_folder_switches_to_search_panel_without_reentrant_update(
+    cx: &mut gpui::TestAppContext,
+) {
+    init_test_with_editor(cx);
+    cx.update(search::init);
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        "/root",
+        json!({
+            "src": {
+                "main.rs": "fn main() {}",
+            }
+        }),
+    )
+    .await;
+    let project = Project::test(fs, ["/root".as_ref()], cx).await;
+    let window = cx.add_window(|window, cx| MultiWorkspace::test_new(project, window, cx));
+    let workspace = window
+        .read_with(cx, |multi_workspace, _| multi_workspace.workspace().clone())
+        .expect("test window should contain a workspace");
+    let cx = &mut VisualTestContext::from_window(window.into(), cx);
+    let project_panel = workspace.update_in(cx, |workspace, window, cx| {
+        let project_panel = ProjectPanel::new(workspace, window, cx);
+        workspace.add_panel(project_panel.clone(), window, cx);
+        let search_panel = cx.new(|cx| search::ProjectSearchPanel::new(workspace, window, cx));
+        workspace.add_panel(search_panel, window, cx);
+        project_panel
+    });
+    cx.run_until_parked();
+
+    select_path(&project_panel, "root/src", cx);
+    project_panel.update_in(cx, |project_panel, window, cx| {
+        project_panel.new_search_in_directory(&NewSearchInDirectory, window, cx);
+    });
+    cx.run_until_parked();
+
+    workspace.read_with(cx, |workspace, cx| {
+        let active_panel = workspace
+            .left_dock()
+            .read(cx)
+            .active_panel()
+            .expect("left dock should have an active panel");
+        assert_eq!(active_panel.panel_key(), "ProjectSearchPanel");
+    });
+}
+
+#[gpui::test]
 async fn test_opening_file(cx: &mut gpui::TestAppContext) {
     init_test_with_editor(cx);
 
