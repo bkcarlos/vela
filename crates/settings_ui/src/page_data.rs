@@ -871,6 +871,179 @@ fn appearance_page() -> SettingsPage {
         ]
     }
 
+    fn unified_font_section() -> [SettingsPageItem; 7] {
+        [
+            SettingsPageItem::SectionHeader("Unified Font"),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Use Unified Font Settings",
+                description: "Use the settings in this section throughout the application. Disable this to use the advanced per-area font settings below.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("use_unified_font_settings"),
+                    pick: |settings_content| {
+                        settings_content.theme.use_unified_font_settings.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.theme.use_unified_font_settings = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Font Family",
+                description: "Font family used throughout the application.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("unified_font_family"),
+                    pick: |settings_content| settings_content.theme.unified_font_family.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.theme.unified_font_family = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Font Size",
+                description: "Font size used throughout the application.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("unified_font_size"),
+                    pick: |settings_content| settings_content.theme.unified_font_size.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.theme.unified_font_size = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Font Weight",
+                description: "Font weight used throughout the application (100-900).",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("unified_font_weight"),
+                    pick: |settings_content| settings_content.theme.unified_font_weight.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.theme.unified_font_weight = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::DynamicItem(DynamicItem {
+                discriminant: SettingItem {
+                    files: USER,
+                    title: "Line Height",
+                    description: "Line height used for editor, Agent, Markdown, and terminal text.",
+                    field: Box::new(SettingField {
+                        organization_override: None,
+                        json_path: Some("unified_line_height$"),
+                        pick: |settings_content| {
+                            Some(
+                                &dynamic_variants::<settings::BufferLineHeight>()[settings_content
+                                    .theme
+                                    .unified_line_height
+                                    .as_ref()?
+                                    .discriminant()
+                                    as usize],
+                            )
+                        },
+                        write: |settings_content, value, _| {
+                            let Some(value) = value else {
+                                settings_content.theme.unified_line_height = None;
+                                return;
+                            };
+                            let settings_value = settings_content
+                                .theme
+                                .unified_line_height
+                                .get_or_insert_with(settings::BufferLineHeight::default);
+                            *settings_value = match value {
+                                settings::BufferLineHeightDiscriminants::Comfortable => {
+                                    settings::BufferLineHeight::Comfortable
+                                }
+                                settings::BufferLineHeightDiscriminants::Standard => {
+                                    settings::BufferLineHeight::Standard
+                                }
+                                settings::BufferLineHeightDiscriminants::Custom => {
+                                    let custom_value =
+                                        theme_settings::BufferLineHeight::from(*settings_value)
+                                            .value();
+                                    settings::BufferLineHeight::Custom(custom_value)
+                                }
+                            };
+                        },
+                    }),
+                    metadata: None,
+                },
+                pick_discriminant: |settings_content| {
+                    Some(
+                        settings_content
+                            .theme
+                            .unified_line_height
+                            .as_ref()?
+                            .discriminant() as usize,
+                    )
+                },
+                fields: dynamic_variants::<settings::BufferLineHeight>()
+                    .into_iter()
+                    .map(|variant| match variant {
+                        settings::BufferLineHeightDiscriminants::Comfortable => vec![],
+                        settings::BufferLineHeightDiscriminants::Standard => vec![],
+                        settings::BufferLineHeightDiscriminants::Custom => vec![SettingItem {
+                            files: USER,
+                            title: "Custom Line Height",
+                            description: "Custom unified line height value (must be at least 1.0).",
+                            field: Box::new(SettingField {
+                                organization_override: None,
+                                json_path: Some("unified_line_height"),
+                                pick: |settings_content| match settings_content
+                                    .theme
+                                    .unified_line_height
+                                    .as_ref()
+                                {
+                                    Some(settings::BufferLineHeight::Custom(value)) => Some(value),
+                                    _ => None,
+                                },
+                                write: |settings_content, value, _| {
+                                    let Some(value) = value else {
+                                        return;
+                                    };
+                                    if let Some(settings::BufferLineHeight::Custom(line_height)) =
+                                        settings_content.theme.unified_line_height.as_mut()
+                                    {
+                                        *line_height = f32::max(value, 1.0);
+                                    }
+                                },
+                            }),
+                            metadata: None,
+                        }],
+                    })
+                    .collect(),
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                files: USER,
+                title: "Font Fallbacks",
+                description: "Font fallbacks used throughout the application.",
+                field: Box::new(
+                    SettingField {
+                        organization_override: None,
+                        json_path: Some("unified_font_fallbacks"),
+                        pick: |settings_content| {
+                            settings_content.theme.unified_font_fallbacks.as_ref()
+                        },
+                        write: |settings_content, value, _| {
+                            settings_content.theme.unified_font_fallbacks = value;
+                        },
+                    }
+                    .unimplemented(),
+                ),
+                metadata: None,
+            }),
+        ]
+    }
+
     fn buffer_font_section() -> [SettingsPageItem; 7] {
         [
             SettingsPageItem::SectionHeader("Buffer Font"),
@@ -1476,6 +1649,7 @@ fn appearance_page() -> SettingsPage {
 
     let items: Box<[SettingsPageItem]> = concat_sections!(
         theme_section(),
+        unified_font_section(),
         buffer_font_section(),
         ui_font_section(),
         agent_panel_font_section(),

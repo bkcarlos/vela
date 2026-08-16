@@ -23,6 +23,14 @@
   // 5. "SublimeText"
   // 6. "TextMate"
   "base_keymap": "VSCode",
+  // Use one font configuration for the UI, editor, Agent, Git, Markdown preview, and terminal.
+  // Set this to false to use the individual font settings below.
+  "use_unified_font_settings": true,
+  "unified_font_family": ".VelaMono",
+  "unified_font_fallbacks": null,
+  "unified_font_size": 15,
+  "unified_font_weight": 400,
+  "unified_line_height": "comfortable",
   // The name of a font to use for rendering text in the editor
   // ".VelaMono" currently aliases to Google Sans Code
   // but this may change in the future.

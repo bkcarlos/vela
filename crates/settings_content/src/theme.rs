@@ -116,6 +116,21 @@ impl JsonSchema for FontFeaturesContent {
 #[with_fallible_options]
 #[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize, JsonSchema, MergeFrom)]
 pub struct ThemeSettingsContent {
+    /// Whether one font configuration is used throughout the application.
+    pub use_unified_font_settings: Option<bool>,
+    /// The font size used throughout the application when unified font settings are enabled.
+    pub unified_font_size: Option<FontSize>,
+    /// The font family used throughout the application when unified font settings are enabled.
+    pub unified_font_family: Option<FontFamilyName>,
+    /// The font fallbacks used throughout the application when unified font settings are enabled.
+    #[schemars(default = "default_font_fallbacks")]
+    #[schemars(extend("uniqueItems" = true))]
+    pub unified_font_fallbacks: Option<Vec<FontFamilyName>>,
+    /// The font weight used throughout the application when unified font settings are enabled.
+    #[schemars(default = "default_buffer_font_weight")]
+    pub unified_font_weight: Option<FontWeightContent>,
+    /// The line height used for text layouts that support configurable line height.
+    pub unified_line_height: Option<BufferLineHeight>,
     /// The default font size for text in the UI.
     pub ui_font_size: Option<FontSize>,
     /// The name of a font to use for rendering in the UI.

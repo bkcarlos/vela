@@ -37,6 +37,8 @@ pub fn appearance_to_mode(appearance: Appearance) -> ThemeAppearanceMode {
 /// Customizable settings for the UI and theme system.
 #[derive(Clone, PartialEq, RegisterSetting)]
 pub struct ThemeSettings {
+    /// Whether one font configuration is used throughout the application.
+    pub use_unified_font_settings: bool,
     /// The UI font size. Determines the size of text in the UI,
     /// as well as the size of a [gpui::Rems] unit.
     ///
@@ -713,42 +715,109 @@ impl settings::Settings for ThemeSettings {
         let content = &content.theme;
         let theme_selection: ThemeSelection = content.theme.clone().unwrap().into();
         let icon_theme_selection: IconThemeSelection = content.icon_theme.clone().unwrap().into();
+        let use_unified_font_settings = content.use_unified_font_settings.unwrap();
+        let unified_font_size = content.unified_font_size.unwrap();
+        let ui_font_size = if use_unified_font_settings {
+            unified_font_size
+        } else {
+            content.ui_font_size.unwrap()
+        };
+        let buffer_font_size = if use_unified_font_settings {
+            unified_font_size
+        } else {
+            content.buffer_font_size.unwrap()
+        };
+        let ui_font_family = if use_unified_font_settings {
+            content.unified_font_family.as_ref().unwrap()
+        } else {
+            content.ui_font_family.as_ref().unwrap()
+        };
+        let buffer_font_family = if use_unified_font_settings {
+            content.unified_font_family.as_ref().unwrap()
+        } else {
+            content.buffer_font_family.as_ref().unwrap()
+        };
+        let ui_font_fallbacks = if use_unified_font_settings {
+            content.unified_font_fallbacks.clone()
+        } else {
+            content.ui_font_fallbacks.clone()
+        };
+        let buffer_font_fallbacks = if use_unified_font_settings {
+            content.unified_font_fallbacks.clone()
+        } else {
+            content.buffer_font_fallbacks.clone()
+        };
+        let ui_font_weight = if use_unified_font_settings {
+            content.unified_font_weight.unwrap()
+        } else {
+            content.ui_font_weight.unwrap()
+        };
+        let buffer_font_weight = if use_unified_font_settings {
+            content.unified_font_weight.unwrap()
+        } else {
+            content.buffer_font_weight.unwrap()
+        };
+        let buffer_line_height = if use_unified_font_settings {
+            content.unified_line_height.unwrap()
+        } else {
+            content.buffer_line_height.unwrap()
+        };
+        let unified_font_family = use_unified_font_settings.then(|| {
+            content
+                .unified_font_family
+                .as_ref()
+                .unwrap()
+                .0
+                .clone()
+                .into()
+        });
+        let unified_font_size = use_unified_font_settings.then(|| unified_font_size.into_gpui());
+
         Self {
-            ui_font_size: clamp_font_size(content.ui_font_size.unwrap().into_gpui()),
+            use_unified_font_settings,
+            ui_font_size: clamp_font_size(ui_font_size.into_gpui()),
             ui_font: Font {
-                family: content.ui_font_family.as_ref().unwrap().0.clone().into(),
+                family: ui_font_family.0.clone().into(),
                 features: content.ui_font_features.clone().unwrap().into_gpui(),
-                fallbacks: font_fallbacks_from_settings(content.ui_font_fallbacks.clone()),
-                weight: content.ui_font_weight.unwrap().into_gpui(),
+                fallbacks: font_fallbacks_from_settings(ui_font_fallbacks),
+                weight: ui_font_weight.into_gpui(),
                 style: Default::default(),
             },
             buffer_font: Font {
-                family: content
-                    .buffer_font_family
-                    .as_ref()
-                    .unwrap()
-                    .0
-                    .clone()
-                    .into(),
+                family: buffer_font_family.0.clone().into(),
                 features: content.buffer_font_features.clone().unwrap().into_gpui(),
-                fallbacks: font_fallbacks_from_settings(content.buffer_font_fallbacks.clone()),
-                weight: content.buffer_font_weight.unwrap().into_gpui(),
+                fallbacks: font_fallbacks_from_settings(buffer_font_fallbacks),
+                weight: buffer_font_weight.into_gpui(),
                 style: FontStyle::default(),
             },
-            buffer_font_size: clamp_font_size(content.buffer_font_size.unwrap().into_gpui()),
-            buffer_line_height: content.buffer_line_height.unwrap().into(),
-            agent_ui_font_size: content.agent_ui_font_size.map(|s| s.into_gpui()),
-            agent_buffer_font_size: content.agent_buffer_font_size.map(|s| s.into_gpui()),
-            git_commit_buffer_font_size: content.git_commit_buffer_font_size.map(|s| s.into_gpui()),
-            markdown_preview_font_family: content
-                .markdown_preview_font_family
-                .as_ref()
-                .map(|f| f.0.clone().into()),
-            markdown_preview_code_font_family: content
-                .markdown_preview_code_font_family
-                .as_ref()
-                .map(|f| f.0.clone().into()),
-            markdown_preview_font_size: content.markdown_preview_font_size.map(|s| s.into_gpui()),
+            buffer_font_size: clamp_font_size(buffer_font_size.into_gpui()),
+            buffer_line_height: buffer_line_height.into(),
+            agent_ui_font_size: unified_font_size
+                .or_else(|| content.agent_ui_font_size.map(|size| size.into_gpui())),
+            agent_buffer_font_size: unified_font_size
+                .or_else(|| content.agent_buffer_font_size.map(|size| size.into_gpui())),
+            git_commit_buffer_font_size: unified_font_size.or_else(|| {
+                content
+                    .git_commit_buffer_font_size
+                    .map(|size| size.into_gpui())
+            }),
+            markdown_preview_font_family: unified_font_family.clone().or_else(|| {
+                content
+                    .markdown_preview_font_family
+                    .as_ref()
+                    .map(|family| family.0.clone().into())
+            }),
+            markdown_preview_code_font_family: unified_font_family.or_else(|| {
+                content
+                    .markdown_preview_code_font_family
+                    .as_ref()
+                    .map(|family| family.0.clone().into())
+            }),
+            markdown_preview_font_size: unified_font_size.or_else(|| {
+                content
+                    .markdown_preview_font_size
+                    .map(|size| size.into_gpui())
+            }),
             markdown_preview_theme: content
                 .markdown_preview_theme
                 .clone()

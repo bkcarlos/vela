@@ -80,15 +80,48 @@ fn settings_shell_to_task_shell(shell: settings::Shell) -> Shell {
 impl settings::Settings for TerminalSettings {
     fn from_settings(content: &settings::SettingsContent) -> Self {
         let user_content = content.terminal.clone().unwrap();
+        let theme_content = &content.theme;
+        let use_unified_font_settings = theme_content.use_unified_font_settings.unwrap();
+        let font_size = use_unified_font_settings
+            .then(|| theme_content.unified_font_size.unwrap().into_gpui())
+            .or_else(|| user_content.font_size.map(|size| size.into_gpui()));
+        let font_family = if use_unified_font_settings {
+            theme_content.unified_font_family.clone()
+        } else {
+            user_content.font_family
+        };
+        let font_fallbacks = if use_unified_font_settings {
+            theme_content.unified_font_fallbacks.clone()
+        } else {
+            user_content.font_fallbacks
+        };
+        let font_weight = if use_unified_font_settings {
+            theme_content
+                .unified_font_weight
+                .map(|weight| weight.into_gpui())
+        } else {
+            user_content.font_weight.map(|weight| weight.into_gpui())
+        };
+        let line_height = if use_unified_font_settings {
+            match theme_content.unified_line_height.unwrap() {
+                settings::BufferLineHeight::Comfortable => TerminalLineHeight::Comfortable,
+                settings::BufferLineHeight::Standard => TerminalLineHeight::Standard,
+                settings::BufferLineHeight::Custom(line_height) => {
+                    TerminalLineHeight::Custom(line_height)
+                }
+            }
+        } else {
+            user_content.line_height.unwrap()
+        };
         // Note: we allow a subset of "terminal" settings in the project files.
         let mut project_content = user_content.project.clone();
         project_content.merge_from_option(content.project.terminal.as_ref());
         TerminalSettings {
             shell: settings_shell_to_task_shell(project_content.shell.unwrap()),
             working_directory: project_content.working_directory.unwrap(),
-            font_size: user_content.font_size.map(|s| s.into_gpui()),
-            font_family: user_content.font_family,
-            font_fallbacks: user_content.font_fallbacks.map(|fallbacks| {
+            font_size,
+            font_family,
+            font_fallbacks: font_fallbacks.map(|fallbacks| {
                 FontFallbacks::from_fonts(
                     fallbacks
                         .into_iter()
@@ -97,8 +130,8 @@ impl settings::Settings for TerminalSettings {
                 )
             }),
             font_features: user_content.font_features.map(|f| f.into_gpui()),
-            font_weight: user_content.font_weight.map(|w| w.into_gpui()),
-            line_height: user_content.line_height.unwrap(),
+            font_weight,
+            line_height,
             env: project_content.env.unwrap(),
             cursor_shape: user_content.cursor_shape.unwrap().into(),
             blinking: user_content.blinking.unwrap(),
