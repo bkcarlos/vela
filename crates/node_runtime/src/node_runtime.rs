@@ -222,9 +222,10 @@ impl NodeRuntime {
         args: &[&str],
     ) -> Result<Output> {
         let http = self.0.lock().await.http.clone();
+        let proxy = http.proxy();
         self.instance()
             .await
-            .run_npm_subcommand(directory, http.proxy(), subcommand, args)
+            .run_npm_subcommand(directory, proxy.as_ref(), subcommand, args)
             .await
     }
 
@@ -246,9 +247,10 @@ impl NodeRuntime {
         args: &[&str],
     ) -> Result<NpmCommand> {
         let http = self.0.lock().await.http.clone();
+        let proxy = http.proxy();
         self.instance()
             .await
-            .npm_command(prefix_dir, http.proxy(), subcommand, args)
+            .npm_command(prefix_dir, proxy.as_ref(), subcommand, args)
             .await
     }
 
@@ -263,11 +265,12 @@ impl NodeRuntime {
         version_requirement: Option<&VersionReq>,
     ) -> Result<Version> {
         let http = self.0.lock().await.http.clone();
+        let proxy = http.proxy();
         let instance = self.instance().await;
         let output = instance
             .run_npm_subcommand(
                 None,
-                http.proxy(),
+                proxy.as_ref(),
                 "info",
                 &[
                     name,
@@ -288,7 +291,7 @@ impl NodeRuntime {
                 String::from_utf8_lossy(&output.stdout)
             )
         })?;
-        let before = npm_config_before(instance.as_ref(), http.proxy())
+        let before = npm_config_before(instance.as_ref(), proxy.as_ref())
             .await
             .context("getting npm before config")
             .log_err()

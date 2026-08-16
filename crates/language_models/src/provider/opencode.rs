@@ -340,7 +340,7 @@ impl HttpClient for InjectHeaderClient {
     fn user_agent(&self) -> Option<&http::HeaderValue> {
         self.inner.user_agent()
     }
-    fn proxy(&self) -> Option<&http_client::Url> {
+    fn proxy(&self) -> Option<http_client::Url> {
         self.inner.proxy()
     }
     fn send(

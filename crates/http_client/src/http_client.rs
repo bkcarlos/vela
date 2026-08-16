@@ -127,7 +127,7 @@ impl RequestBuilderExt for http::request::Builder {
 pub trait HttpClient: 'static + Send + Sync {
     fn user_agent(&self) -> Option<&HeaderValue>;
 
-    fn proxy(&self) -> Option<&Url>;
+    fn proxy(&self) -> Option<Url>;
 
     fn send(
         &self,
@@ -215,8 +215,8 @@ impl HttpClient for HttpClientWithProxy {
         self.client.user_agent()
     }
 
-    fn proxy(&self) -> Option<&Url> {
-        self.proxy.as_ref()
+    fn proxy(&self) -> Option<Url> {
+        self.proxy.clone().or_else(|| self.client.proxy())
     }
 
     #[cfg(feature = "test-support")]
@@ -352,8 +352,8 @@ impl HttpClient for HttpClientWithUrl {
         self.client.user_agent()
     }
 
-    fn proxy(&self) -> Option<&Url> {
-        self.client.proxy.as_ref()
+    fn proxy(&self) -> Option<Url> {
+        self.client.proxy()
     }
 
     #[cfg(feature = "test-support")]
@@ -443,7 +443,125 @@ pub fn read_proxy_from_system() -> Option<Url> {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn read_proxy_from_system() -> Option<Url> {
+    const INTERNET_SETTINGS: &str =
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+
+    let settings = windows_registry::CURRENT_USER
+        .open(INTERNET_SETTINGS)
+        .ok()?;
+    if settings.get_u32("ProxyEnable").ok()? != 1 {
+        return None;
+    }
+    parse_windows_proxy_server(&settings.get_string("ProxyServer").ok()?)
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_proxy_server(server: &str) -> Option<Url> {
+    let mut http_proxy = None;
+    let mut https_proxy = None;
+    let mut socks_proxy = None;
+    let mut unqualified_proxy = None;
+
+    for entry in server
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+    {
+        if let Some((kind, address)) = entry.split_once('=') {
+            match kind.trim().to_ascii_lowercase().as_str() {
+                "http" => http_proxy = proxy_url(address, "http"),
+                "https" => https_proxy = proxy_url(address, "http"),
+                "socks" | "socks5" => socks_proxy = proxy_url(address, "socks5h"),
+                _ => {}
+            }
+        } else {
+            unqualified_proxy = proxy_url(entry, "http");
+        }
+    }
+
+    https_proxy
+        .or(http_proxy)
+        .or(socks_proxy)
+        .or(unqualified_proxy)
+}
+
+#[cfg(target_os = "linux")]
+pub fn read_proxy_from_system() -> Option<Url> {
+    let mode = command_output("gsettings", &["get", "org.gnome.system.proxy", "mode"])
+        .map(|mode| mode.trim_matches(['\'', '"']).to_string());
+    if mode.as_deref() == Some("manual") {
+        return read_gnome_proxy("https", "http")
+            .or_else(|| read_gnome_proxy("http", "http"))
+            .or_else(|| read_gnome_proxy("socks", "socks5h"));
+    }
+
+    let proxy_type = ["kreadconfig6", "kreadconfig5"]
+        .iter()
+        .find_map(|command| {
+            command_output(
+                command,
+                &["--group", "Proxy Settings", "--key", "ProxyType"],
+            )
+            .filter(|proxy_type| proxy_type.trim() == "1")
+            .map(|_| *command)
+        })?;
+    for (key, scheme) in [
+        ("httpsProxy", "http"),
+        ("httpProxy", "http"),
+        ("socksProxy", "socks5h"),
+    ] {
+        let Some(address) =
+            command_output(proxy_type, &["--group", "Proxy Settings", "--key", key])
+        else {
+            continue;
+        };
+        if let Some(proxy) = proxy_url(address.trim(), scheme) {
+            return Some(proxy);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn read_gnome_proxy(kind: &str, scheme: &str) -> Option<Url> {
+    let schema = format!("org.gnome.system.proxy.{kind}");
+    let host = command_output("gsettings", &["get", &schema, "host"])?;
+    let host = host.trim().trim_matches(['\'', '"']);
+    if host.is_empty() {
+        return None;
+    }
+    let port = command_output("gsettings", &["get", &schema, "port"])?;
+    proxy_url(&format!("{host}:{}", port.trim()), scheme)
+}
+
+#[cfg(target_os = "linux")]
+fn command_output(command: &str, arguments: &[&str]) -> Option<String> {
+    let output = std::process::Command::new(command)
+        .args(arguments)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn proxy_url(address: &str, default_scheme: &str) -> Option<Url> {
+    let address = address.trim();
+    if address.is_empty() {
+        return None;
+    }
+    if address.contains("://") {
+        address.parse().ok()
+    } else {
+        format!("{default_scheme}://{address}").parse().ok()
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn read_proxy_from_system() -> Option<Url> {
     None
 }
@@ -480,7 +598,7 @@ impl HttpClient for BlockedHttpClient {
         None
     }
 
-    fn proxy(&self) -> Option<&Url> {
+    fn proxy(&self) -> Option<Url> {
         None
     }
 
@@ -576,7 +694,7 @@ impl HttpClient for FakeHttpClient {
         Some(&self.user_agent)
     }
 
-    fn proxy(&self) -> Option<&Url> {
+    fn proxy(&self) -> Option<Url> {
         None
     }
 

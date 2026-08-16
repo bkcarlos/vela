@@ -27,9 +27,7 @@ use futures::{
     stream::BoxStream,
 };
 use gpui::{App, AsyncApp, Entity, Global, Task, TaskExt, WeakEntity, actions};
-use http_client::{
-    HttpClient, HttpClientWithUrl, http, read_proxy_from_env, read_proxy_from_system,
-};
+use http_client::{HttpClient, HttpClientWithUrl, http, read_proxy_from_env};
 use parking_lot::{Mutex, RwLock};
 use postage::watch;
 use proxy::connect_proxy_stream;
@@ -151,7 +149,6 @@ impl ProxySettings {
                     .ok()
             })
             .or_else(read_proxy_from_env)
-            .or_else(read_proxy_from_system)
     }
 }
 
@@ -591,7 +588,7 @@ impl Client {
         let http = Arc::new(HttpClientWithUrl::new_url(
             cx.http_client(),
             &ClientSettings::get_global(cx).server_url,
-            cx.http_client().proxy().cloned(),
+            None,
         ));
         Self::new(clock, http, cx)
     }
@@ -1337,7 +1334,7 @@ impl Client {
         let app_version = cx.update(|cx| AppVersion::global(cx).to_string());
 
         let http = self.http.clone();
-        let proxy = http.proxy().cloned();
+        let proxy = http.proxy();
         let user_agent = http.user_agent().cloned();
         let credentials = credentials.clone();
         let rpc_url = self.rpc_url(http, release_channel);

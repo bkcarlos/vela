@@ -307,7 +307,7 @@ impl LspAdapter for JsonLspAdapter {
         });
 
         if let Some(proxy_settings) = cx.update(|cx| {
-            json_schema_proxy_settings(cx.http_client().proxy().map(ToString::to_string))
+            json_schema_proxy_settings(cx.http_client().proxy().map(|proxy| proxy.to_string()))
         }) {
             merge_json_value_into(proxy_settings, &mut config);
         }

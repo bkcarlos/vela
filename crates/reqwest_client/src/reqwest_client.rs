@@ -1,13 +1,20 @@
 use std::error::Error;
-use std::sync::{LazyLock, OnceLock};
-use std::{borrow::Cow, mem, pin::Pin, task::Poll, time::Duration};
+use std::sync::{Arc, LazyLock, OnceLock};
+use std::{
+    borrow::Cow,
+    mem,
+    pin::Pin,
+    task::Poll,
+    time::{Duration, Instant},
+};
 
 use gpui_util::defer;
 
 use anyhow::anyhow;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{AsyncRead, FutureExt as _, TryStreamExt as _};
-use http_client::{RedirectPolicy, Url, http};
+use http_client::{RedirectPolicy, Url, http, read_proxy_from_env, read_proxy_from_system};
+use parking_lot::Mutex;
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -20,9 +27,71 @@ static REDACT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"key=[^&]+")
 
 pub struct ReqwestClient {
     client: reqwest::Client,
-    proxy: Option<Url>,
+    proxy: ProxySource,
     user_agent: Option<HeaderValue>,
     handle: tokio::runtime::Handle,
+}
+
+enum ProxySource {
+    Fixed(Option<Url>),
+    System(SystemProxyResolver),
+}
+
+impl ProxySource {
+    fn current(&self) -> Option<Url> {
+        match self {
+            Self::Fixed(proxy) => proxy.clone(),
+            Self::System(resolver) => resolver.resolve(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SystemProxyResolver {
+    state: Arc<Mutex<SystemProxyState>>,
+}
+
+struct SystemProxyState {
+    proxy: Option<Url>,
+    last_checked: Instant,
+}
+
+impl SystemProxyResolver {
+    const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
+
+    fn new(proxy: Option<Url>) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(SystemProxyState {
+                proxy,
+                last_checked: Instant::now(),
+            })),
+        }
+    }
+
+    fn resolve(&self) -> Option<Url> {
+        self.resolve_with(|| read_proxy_from_env().or_else(read_proxy_from_system))
+    }
+
+    fn resolve_with(&self, read_proxy: impl FnOnce() -> Option<Url>) -> Option<Url> {
+        let mut state = self.state.lock();
+        if state.last_checked.elapsed() >= Self::REFRESH_INTERVAL {
+            let proxy = read_proxy();
+            if proxy != state.proxy {
+                match &proxy {
+                    Some(proxy) => log::info!(
+                        "system proxy changed to {}://{}:{}",
+                        proxy.scheme(),
+                        proxy.host_str().unwrap_or("<unknown>"),
+                        proxy.port_or_known_default().unwrap_or(0),
+                    ),
+                    None => log::info!("system proxy disabled"),
+                }
+                state.proxy = proxy;
+            }
+            state.last_checked = Instant::now();
+        }
+        state.proxy.clone()
+    }
 }
 
 impl ReqwestClient {
@@ -42,17 +111,24 @@ impl ReqwestClient {
     }
 
     pub fn new() -> Self {
-        Self::builder()
+        let active_proxy = read_proxy_from_env().or_else(read_proxy_from_system);
+        let resolver = SystemProxyResolver::new(active_proxy);
+        let proxy = reqwest::Proxy::custom({
+            let resolver = resolver.clone();
+            move |_url| resolver.resolve()
+        })
+        .no_proxy(reqwest::NoProxy::from_env());
+        let client = Self::builder()
+            .proxy(proxy)
             .build()
-            .expect("Failed to initialize HTTP client")
-            .into()
+            .expect("Failed to initialize HTTP client");
+        let mut client: ReqwestClient = client.into();
+        client.proxy = ProxySource::System(resolver);
+        client
     }
 
     pub fn user_agent(agent: &str) -> anyhow::Result<Self> {
-        let mut map = HeaderMap::new();
-        map.insert(http::header::USER_AGENT, HeaderValue::from_str(agent)?);
-        let client = Self::builder().default_headers(map).build()?;
-        Ok(client.into())
+        Self::proxy_and_user_agent(None, agent)
     }
 
     pub fn proxy_and_user_agent(proxy: Option<Url>, user_agent: &str) -> anyhow::Result<Self> {
@@ -61,31 +137,40 @@ impl ReqwestClient {
         let mut map = HeaderMap::new();
         map.insert(http::header::USER_AGENT, user_agent.clone());
         let mut client = Self::builder().default_headers(map);
-        let client_has_proxy;
+        let proxy_source;
 
-        if let Some(proxy) = proxy.as_ref().and_then(|proxy_url| {
-            reqwest::Proxy::all(proxy_url.clone())
-                .inspect_err(|e| {
+        if let Some(proxy) = proxy {
+            match reqwest::Proxy::all(proxy.clone()) {
+                Ok(reqwest_proxy) => {
+                    client = client.proxy(reqwest_proxy.no_proxy(reqwest::NoProxy::from_env()));
+                    proxy_source = ProxySource::Fixed(Some(proxy));
+                }
+                Err(error) => {
                     log::error!(
                         "Failed to parse proxy URL '{}': {}",
-                        proxy_url,
-                        e.source().unwrap_or(&e as &_)
-                    )
-                })
-                .ok()
-        }) {
-            // Respect NO_PROXY env var
-            client = client.proxy(proxy.no_proxy(reqwest::NoProxy::from_env()));
-            client_has_proxy = true;
+                        proxy,
+                        error.source().unwrap_or(&error as &_)
+                    );
+                    proxy_source = ProxySource::Fixed(None);
+                }
+            }
         } else {
-            client_has_proxy = false;
-        };
+            let active_proxy = read_proxy_from_env().or_else(read_proxy_from_system);
+            let resolver = SystemProxyResolver::new(active_proxy);
+            let reqwest_proxy = reqwest::Proxy::custom({
+                let resolver = resolver.clone();
+                move |_url| resolver.resolve()
+            })
+            .no_proxy(reqwest::NoProxy::from_env());
+            client = client.proxy(reqwest_proxy);
+            proxy_source = ProxySource::System(resolver);
+        }
 
         let client = client
             .use_preconfigured_tls(http_client_tls::tls_config())
             .build()?;
         let mut client: ReqwestClient = client.into();
-        client.proxy = client_has_proxy.then_some(proxy).flatten();
+        client.proxy = proxy_source;
         client.user_agent = Some(user_agent);
         Ok(client)
     }
@@ -111,7 +196,7 @@ impl From<reqwest::Client> for ReqwestClient {
         Self {
             client,
             handle,
-            proxy: None,
+            proxy: ProxySource::Fixed(None),
             user_agent: None,
         }
     }
@@ -228,8 +313,8 @@ fn redact_error(mut error: reqwest::Error) -> reqwest::Error {
 }
 
 impl http_client::HttpClient for ReqwestClient {
-    fn proxy(&self) -> Option<&Url> {
-        self.proxy.as_ref()
+    fn proxy(&self) -> Option<Url> {
+        self.proxy.current()
     }
 
     fn user_agent(&self) -> Option<&HeaderValue> {
@@ -295,7 +380,7 @@ mod tests {
 
     use http_client::{AsyncBody, HttpClient, Method, Request as HttpRequest, Url};
 
-    use crate::ReqwestClient;
+    use crate::{ReqwestClient, SystemProxyResolver, SystemProxyState};
 
     /// Regression test: `StreamReader::poll_next` used to drop the reader it
     /// `take()`s whenever the reader returned `Poll::Pending`, so the next
@@ -375,33 +460,47 @@ mod tests {
     }
 
     #[test]
-    fn test_proxy_uri() {
-        let client = ReqwestClient::new();
-        assert_eq!(client.proxy(), None);
+    fn test_system_proxy_resolver_refreshes() {
+        let old_proxy = Url::parse("http://localhost:10809").unwrap();
+        let new_proxy = Url::parse("http://localhost:10810").unwrap();
+        let resolver = SystemProxyResolver {
+            state: std::sync::Arc::new(parking_lot::Mutex::new(SystemProxyState {
+                proxy: Some(old_proxy),
+                last_checked: std::time::Instant::now() - SystemProxyResolver::REFRESH_INTERVAL,
+            })),
+        };
 
+        assert_eq!(
+            resolver.resolve_with(|| Some(new_proxy.clone())),
+            Some(new_proxy)
+        );
+    }
+
+    #[test]
+    fn test_proxy_uri() {
         let proxy = Url::parse("http://localhost:10809").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
 
         let proxy = Url::parse("https://localhost:10809").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
 
         let proxy = Url::parse("socks4://localhost:10808").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
 
         let proxy = Url::parse("socks4a://localhost:10808").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
 
         let proxy = Url::parse("socks5://localhost:10808").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
 
         let proxy = Url::parse("socks5h://localhost:10808").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy.clone()), "test").unwrap();
-        assert_eq!(client.proxy(), Some(&proxy));
+        assert_eq!(client.proxy(), Some(proxy));
     }
 
     #[test]
@@ -409,7 +508,7 @@ mod tests {
         let proxy = Url::parse("socks://127.0.0.1:20170").unwrap();
         let client = ReqwestClient::proxy_and_user_agent(Some(proxy), "test").unwrap();
         assert!(
-            client.proxy.is_none(),
+            client.proxy.current().is_none(),
             "An invalid proxy URL should add no proxy to the client!"
         )
     }

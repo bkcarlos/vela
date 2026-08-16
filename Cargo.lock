@@ -8609,6 +8609,7 @@ dependencies = [
  "tempfile",
  "url",
  "util",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
@@ -15506,6 +15507,7 @@ dependencies = [
  "http_client",
  "http_client_tls",
  "log",
+ "parking_lot",
  "regex",
  "serde",
  "tokio",

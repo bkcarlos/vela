@@ -109,7 +109,7 @@ impl HttpClient for FetchHttpClient {
         self.user_agent.as_ref()
     }
 
-    fn proxy(&self) -> Option<&http_client::Url> {
+    fn proxy(&self) -> Option<http_client::Url> {
         None
     }
 

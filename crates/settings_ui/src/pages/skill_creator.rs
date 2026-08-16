@@ -1337,7 +1337,7 @@ mod tests {
             None
         }
 
-        fn proxy(&self) -> Option<&Url> {
+        fn proxy(&self) -> Option<Url> {
             None
         }
 
