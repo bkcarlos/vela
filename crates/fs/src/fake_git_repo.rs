@@ -211,6 +211,11 @@ impl GitRepository for FakeGitRepository {
         let mut entries = HashMap::default();
         self.with_state_async(false, |state| {
             for (path, content) in &state.head_contents {
+                let new_oid = state
+                    .oids
+                    .iter()
+                    .find_map(|(oid, value)| (value == content).then_some(*oid))
+                    .unwrap_or(git::Oid::from_bytes(&[0; 20])?);
                 let status = if let Some((oid, original)) = state
                     .merge_base_contents
                     .get(path)
@@ -219,9 +224,12 @@ impl GitRepository for FakeGitRepository {
                     if original == content {
                         continue;
                     }
-                    TreeDiffStatus::Modified { old: *oid }
+                    TreeDiffStatus::Modified {
+                        old: *oid,
+                        new: new_oid,
+                    }
                 } else {
-                    TreeDiffStatus::Added
+                    TreeDiffStatus::Added { new: new_oid }
                 };
                 entries.insert(path.clone(), status);
             }

@@ -5870,7 +5870,13 @@ impl AgentPanel {
         )
         .on_open_project(|_, window, cx| {
             telemetry::event!("Agent Panel Add Project Clicked");
-            window.dispatch_action(workspace::Open::default().boxed_clone(), cx);
+            window.dispatch_action(
+                workspace::Open {
+                    create_new_window: Some(false),
+                }
+                .boxed_clone(),
+                cx,
+            );
         })
         .on_clone_repo(|_, window, cx| {
             telemetry::event!("Agent Panel Clone Repo Clicked");

@@ -7,8 +7,8 @@ use git::{
     status::{DiffTreeType, FileStatus, StatusCode, TrackedStatus, TreeDiff, TreeDiffStatus},
 };
 use gpui::{
-    App, AsyncApp, AsyncWindowContext, Context, Entity, EventEmitter, SharedString, Subscription,
-    Task, WeakEntity, Window,
+    App, AppContext as _, AsyncApp, AsyncWindowContext, Context, Entity, EventEmitter,
+    SharedString, Subscription, Task, WeakEntity, Window,
 };
 
 use language::Buffer;
@@ -26,12 +26,21 @@ pub enum DiffBase {
     Head,
     Index,
     Staged,
-    Merge { base_ref: SharedString },
+    Merge {
+        base_ref: SharedString,
+    },
+    BranchComparison {
+        base_ref: SharedString,
+        compare_ref: SharedString,
+    },
 }
 
 impl DiffBase {
     pub fn is_merge_base(&self) -> bool {
-        matches!(self, DiffBase::Merge { .. })
+        matches!(
+            self,
+            DiffBase::Merge { .. } | DiffBase::BranchComparison { .. }
+        )
     }
 }
 
@@ -254,7 +263,7 @@ impl DiffBufferList {
             // but *does not* exist in work-tree
             (Some(diff_from_head), Some(diff_from_merge_base)) if diff_from_head.is_deleted() => {
                 match diff_from_merge_base {
-                    TreeDiffStatus::Added => None, // unchanged, didn't exist in merge base or worktree
+                    TreeDiffStatus::Added { .. } => None, // unchanged, didn't exist in merge base or worktree
                     _ => Some(diff_from_head),
                 }
             }
@@ -268,7 +277,7 @@ impl DiffBufferList {
                         _ => StatusCode::Modified,
                     },
                     worktree_status: match tree_status {
-                        TreeDiffStatus::Added => StatusCode::Added,
+                        TreeDiffStatus::Added { .. } => StatusCode::Added,
                         _ => StatusCode::Modified,
                     },
                 }))
@@ -301,8 +310,13 @@ impl DiffBufferList {
 
     pub async fn reload_tree_diff(this: WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         let task = this.update(cx, |this, cx| {
-            let DiffBase::Merge { base_ref } = this.diff_base.clone() else {
-                return None;
+            let (base_ref, head) = match this.diff_base.clone() {
+                DiffBase::Merge { base_ref } => (base_ref, "HEAD".into()),
+                DiffBase::BranchComparison {
+                    base_ref,
+                    compare_ref,
+                } => (base_ref, compare_ref),
+                DiffBase::Head | DiffBase::Index | DiffBase::Staged => return None,
             };
             let Some(repo) = this.repo.as_ref() else {
                 this.tree_diff.take();
@@ -312,7 +326,7 @@ impl DiffBufferList {
                 Some(repo.diff_tree(
                     DiffTreeType::MergeBase {
                         base: base_ref,
-                        head: "HEAD".into(),
+                        head,
                     },
                     cx,
                 ))
@@ -358,6 +372,7 @@ impl DiffBufferList {
                     }
                     DiffBase::Index => item.status.staging().has_unstaged().then_some(item.status),
                     DiffBase::Staged => item.status.staging().has_staged().then_some(item.status),
+                    DiffBase::BranchComparison { .. } => None,
                 }) else {
                     continue;
                 };
@@ -425,9 +440,17 @@ impl DiffBufferList {
         cx: &Context<'_, Project>,
     ) -> Task<Result<LoadedDiffBuffer>> {
         let task = cx.spawn(async move |project, cx| {
-            let buffer = project
+            let buffer = match project
                 .update(cx, |project, cx| project.open_buffer(project_path, cx))?
-                .await?;
+                .await
+            {
+                Ok(buffer) => buffer,
+                Err(error) if matches!(diff_base, DiffBase::BranchComparison { .. }) => {
+                    log::debug!("using a temporary buffer for branch comparison: {error:#}");
+                    cx.new(|cx| Buffer::local("", cx))
+                }
+                Err(error) => return Err(error),
+            };
 
             let main_buffer = buffer.clone();
             let load_conflict_set = diff_base != DiffBase::Staged;
@@ -478,6 +501,50 @@ impl DiffBufferList {
                             .await?
                     };
                     (buffer, diff)
+                }
+                DiffBase::BranchComparison { .. } => {
+                    let entry = branch_diff.ok_or_else(|| {
+                        anyhow::anyhow!("branch comparison is missing tree diff data")
+                    })?;
+                    let (old_oid, new_oid) = match entry {
+                        git::status::TreeDiffStatus::Added { new } => (None, Some(new)),
+                        git::status::TreeDiffStatus::Modified { old, new } => {
+                            (Some(old), Some(new))
+                        }
+                        git::status::TreeDiffStatus::Deleted { old } => (Some(old), None),
+                    };
+                    let old_text = match old_oid {
+                        Some(oid) => Some(
+                            repo.update(cx, |repo, cx| repo.load_blob_content(oid, cx))
+                                .await?,
+                        ),
+                        None => None,
+                    };
+                    let new_text = match new_oid {
+                        Some(oid) => {
+                            repo.update(cx, |repo, cx| repo.load_blob_content(oid, cx))
+                                .await?
+                        }
+                        None => String::new(),
+                    };
+                    let file = buffer.read_with(cx, |buffer, _| buffer.file().cloned());
+                    let display_buffer = cx.new(|cx| {
+                        let mut buffer = Buffer::local(&new_text, cx);
+                        if let Some(file) = file {
+                            buffer.file_updated(file, cx);
+                        }
+                        buffer.set_capability(language::Capability::ReadOnly, cx);
+                        buffer
+                    });
+                    let snapshot = display_buffer.read_with(cx, |buffer, _| buffer.snapshot());
+                    let diff = cx.new(|cx| {
+                        BufferDiff::new(&snapshot, snapshot.language().cloned(), None, cx)
+                    });
+                    diff.update(cx, |diff, cx| {
+                        diff.set_base_text(old_text.map(Into::into), snapshot.text, cx)
+                    })
+                    .await;
+                    (display_buffer, diff)
                 }
             };
             let conflict_set = if load_conflict_set {

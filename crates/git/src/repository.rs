@@ -806,9 +806,20 @@ pub enum LogSource {
     Branch(SharedString),
     Sha(Oid),
     Path(RepoPath),
+    PathAtRef {
+        path: RepoPath,
+        reference: SharedString,
+    },
 }
 
 impl LogSource {
+    pub fn path(&self) -> Option<&RepoPath> {
+        match self {
+            Self::Path(path) | Self::PathAtRef { path, .. } => Some(path),
+            Self::All | Self::Branch(_) | Self::Sha(_) => None,
+        }
+    }
+
     fn get_args(&self) -> Vec<Cow<'_, str>> {
         match self {
             LogSource::All => vec![
@@ -822,6 +833,12 @@ impl LogSource {
             LogSource::Sha(oid) => vec![Cow::Owned(oid.to_string())],
             LogSource::Path(path) => vec![
                 Cow::Borrowed("--follow"),
+                Cow::Borrowed("--"),
+                Cow::Borrowed(path.as_unix_str()),
+            ],
+            LogSource::PathAtRef { path, reference } => vec![
+                Cow::Borrowed("--follow"),
+                Cow::Borrowed(reference.as_str()),
                 Cow::Borrowed("--"),
                 Cow::Borrowed(path.as_unix_str()),
             ],
@@ -1191,7 +1208,13 @@ pub trait GitRepository: Send + Sync {
 pub enum DiffType {
     HeadToIndex,
     HeadToWorktree,
-    MergeBase { base_ref: SharedString },
+    MergeBase {
+        base_ref: SharedString,
+    },
+    BranchComparison {
+        base_ref: SharedString,
+        compare_ref: SharedString,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -2315,6 +2338,19 @@ impl GitRepository for RealGitRepository {
                         git.build_command(&["diff", "--merge-base", base_ref.as_ref()])
                             .output()
                             .await?
+                    }
+                    DiffType::BranchComparison {
+                        base_ref,
+                        compare_ref,
+                    } => {
+                        git.build_command(&[
+                            "diff",
+                            "--merge-base",
+                            base_ref.as_ref(),
+                            compare_ref.as_ref(),
+                        ])
+                        .output()
+                        .await?
                     }
                 };
 
@@ -4682,6 +4718,83 @@ mod tests {
         let graph_data = request_rx.recv().await.unwrap();
         assert_eq!(graph_data.len(), 1);
         assert_eq!(graph_data[0].sha, commit_sha);
+    }
+
+    #[gpui::test]
+    async fn test_initial_graph_data_path_at_ref(cx: &mut TestAppContext) {
+        disable_git_global_config();
+        cx.executor().allow_parking();
+
+        let repo_dir = tempfile::tempdir().expect("create temporary repository");
+        git_init_repo(repo_dir.path());
+        fs::write(repo_dir.path().join("file"), "initial").expect("write initial file");
+        git_command(repo_dir.path(), ["add", "file"]);
+        git_command(repo_dir.path(), ["commit", "-m", "Initial commit"]);
+        git_command(repo_dir.path(), ["checkout", "-b", "feature"]);
+        fs::write(repo_dir.path().join("file"), "feature").expect("write feature file");
+        git_command(repo_dir.path(), ["commit", "-am", "Feature commit"]);
+        let feature_sha: Oid = git_command_output(repo_dir.path(), ["rev-parse", "HEAD"])
+            .parse()
+            .expect("parse feature commit SHA");
+        git_command(repo_dir.path(), ["checkout", "HEAD~1"]);
+
+        let repo = RealGitRepository::new(
+            &repo_dir.path().join(".git"),
+            None,
+            Some("git".into()),
+            cx.executor(),
+        )
+        .expect("open repository");
+        let (request_tx, request_rx) = async_channel::unbounded();
+
+        repo.initial_graph_data(
+            LogSource::PathAtRef {
+                path: RepoPath::new("file").expect("valid repository path"),
+                reference: "feature".into(),
+            },
+            LogOrder::DateOrder,
+            request_tx,
+        )
+        .await
+        .expect("load feature branch file history");
+
+        let graph_data = request_rx.recv().await.expect("receive graph data");
+        assert_eq!(graph_data.len(), 2);
+        assert_eq!(graph_data[0].sha, feature_sha);
+    }
+
+    #[gpui::test]
+    async fn test_branch_comparison_diff(cx: &mut TestAppContext) {
+        disable_git_global_config();
+        cx.executor().allow_parking();
+
+        let repo_dir = tempfile::tempdir().expect("create temporary repository");
+        git_init_repo(repo_dir.path());
+        fs::write(repo_dir.path().join("file"), "base\n").expect("write base file");
+        git_command(repo_dir.path(), ["add", "file"]);
+        git_command(repo_dir.path(), ["commit", "-m", "Base"]);
+        git_command(repo_dir.path(), ["branch", "base"]);
+        git_command(repo_dir.path(), ["checkout", "-b", "compare"]);
+        fs::write(repo_dir.path().join("file"), "compare\n").expect("write compare file");
+        git_command(repo_dir.path(), ["commit", "-am", "Compare"]);
+
+        let repo = RealGitRepository::new(
+            &repo_dir.path().join(".git"),
+            None,
+            Some("git".into()),
+            cx.executor(),
+        )
+        .expect("open repository");
+        let diff = repo
+            .diff(DiffType::BranchComparison {
+                base_ref: "base".into(),
+                compare_ref: "compare".into(),
+            })
+            .await
+            .expect("compare branches");
+
+        assert!(diff.contains("-base"));
+        assert!(diff.contains("+compare"));
     }
 
     #[gpui::test]

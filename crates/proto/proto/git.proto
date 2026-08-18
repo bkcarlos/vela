@@ -231,11 +231,13 @@ message GitDiff {
   uint64 repository_id = 3;
   DiffType diff_type = 4;
   optional string merge_base_ref = 5;
+  optional string compare_ref = 6;
 
   enum DiffType {
     HEAD_TO_WORKTREE = 0;
     HEAD_TO_INDEX = 1;
     MERGE_BASE = 2;
+    BRANCH_COMPARISON = 3;
   }
 }
 
@@ -562,6 +564,7 @@ message TreeDiffStatus {
   Status status = 1;
   string path = 2;
   optional string oid = 3;
+  optional string new_oid = 4;
 }
 
 message GetBlobContent {
@@ -751,12 +754,18 @@ message GetCommitDataResponse {
 
 message GitLogSourceAll {}
 
+message GitLogSourcePathAtRef {
+  string path = 1;
+  string reference = 2;
+}
+
 message GitLogSource {
   oneof source {
     GitLogSourceAll all = 1;
     string branch = 2;
     string sha = 3;
     string path = 4;
+    GitLogSourcePathAtRef path_at_ref = 5;
   }
 }
 

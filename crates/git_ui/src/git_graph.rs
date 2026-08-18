@@ -1,5 +1,6 @@
 pub use crate::commit_context_menu::{CopyCommitSha, CopyCommitTag, OpenCommitView};
 use crate::{
+    branch_picker,
     commit_context_menu::{CommitContextMenuData, CommitContextMenuSource, commit_context_menu},
     commit_tooltip::CommitAvatar,
     commit_view::CommitView,
@@ -53,7 +54,7 @@ use theme::AccentColors;
 use time::{OffsetDateTime, UtcOffset, format_description::BorrowedFormatItem};
 use ui::{
     Chip, ColumnWidthConfig, CommonAnimationExt as _, ContextMenu, DiffStat, Divider,
-    HeaderResizeInfo, HighlightedLabel, IndentGuideColors, ListItem, ListItemSpacing,
+    HeaderResizeInfo, HighlightedLabel, IndentGuideColors, ListItem, ListItemSpacing, PopoverMenu,
     RedistributableColumnsState, ScrollableHandle, Table, TableInteractionState,
     TableRenderContext, TableResizeBehavior, Tooltip, WithScrollbar, bind_redistributable_columns,
     prelude::*, redistribute_hidden_fractions, redistribute_hidden_widths,
@@ -1335,6 +1336,22 @@ pub struct GitGraph {
 }
 
 impl GitGraph {
+    fn set_path_history_reference(&mut self, reference: SharedString, cx: &mut Context<Self>) {
+        let Some(path) = self.log_source.path().cloned() else {
+            return;
+        };
+        let log_source = LogSource::PathAtRef { path, reference };
+        if self.log_source == log_source {
+            return;
+        }
+
+        self.log_source = log_source;
+        self.selected_entry_idx = None;
+        self.pending_select_sha = None;
+        self.invalidate_state(cx);
+        self.fetch_initial_graph_data(cx);
+    }
+
     fn invalidate_state(&mut self, cx: &mut Context<Self>) {
         self.graph_data.clear();
         self.search_state.matches.clear();
@@ -1395,7 +1412,7 @@ impl GitGraph {
             }
         };
 
-        let is_path_history = matches!(self.log_source, LogSource::Path(_));
+        let is_path_history = self.log_source.path().is_some();
         let graph_fraction = if is_path_history { 0.0 } else { value(0) };
         let offset = if is_path_history { 0 } else { 1 };
 
@@ -1482,7 +1499,7 @@ impl GitGraph {
             state
         });
 
-        let column_widths = if matches!(log_source, LogSource::Path(_)) {
+        let column_widths = if log_source.path().is_some() {
             cx.new(|_cx| {
                 RedistributableColumnsState::new(
                     4,
@@ -1523,7 +1540,7 @@ impl GitGraph {
         };
         let column_visibility = TableRow::from_element(
             false,
-            if matches!(log_source, LogSource::Path(_)) {
+            if log_source.path().is_some() {
                 TABLE_COLUMN_COUNT
             } else {
                 TABLE_COLUMN_COUNT + 1
@@ -2491,7 +2508,7 @@ impl GitGraph {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let is_path_history = matches!(self.log_source, LogSource::Path(_));
+        let is_path_history = self.log_source.path().is_some();
         let columns: &[&str] = if is_path_history {
             &["Description", "Date", "Author", "Commit"]
         } else {
@@ -2536,6 +2553,61 @@ impl GitGraph {
 
     fn render_search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let color = cx.theme().colors();
+        let path_history_branch_picker = self.log_source.path().map(|_| {
+            let selected_reference = match &self.log_source {
+                LogSource::PathAtRef { reference, .. } => Some(reference.clone()),
+                _ => self.get_repository(cx).and_then(|repository| {
+                    repository
+                        .read(cx)
+                        .snapshot()
+                        .branch
+                        .as_ref()
+                        .map(|branch| SharedString::from(branch.name().to_string()))
+                }),
+            };
+            let button_label = selected_reference.as_ref().map_or_else(
+                || "History: HEAD".to_string(),
+                |reference| format!("History: {reference}"),
+            );
+            let repository = self.get_repository(cx);
+            let workspace = self.workspace.clone();
+            let graph = cx.weak_entity();
+
+            PopoverMenu::new("path-history-branch-picker")
+                .menu(move |window, cx| {
+                    let graph = graph.clone();
+                    let on_select = Arc::new(
+                        move |branch: git::repository::Branch,
+                              _window: &mut Window,
+                              cx: &mut App| {
+                            graph
+                                .update(cx, |graph, cx| {
+                                    graph.set_path_history_reference(
+                                        branch.name().to_owned().into(),
+                                        cx,
+                                    );
+                                })
+                                .ok();
+                        },
+                    );
+                    Some(branch_picker::select_popover(
+                        workspace.clone(),
+                        repository.clone(),
+                        selected_reference.clone(),
+                        on_select,
+                        window,
+                        cx,
+                    ))
+                })
+                .trigger_with_tooltip(
+                    Button::new("path-history-branch", button_label).end_icon(
+                        Icon::new(IconName::ChevronDown)
+                            .size(IconSize::XSmall)
+                            .color(Color::Muted),
+                    ),
+                    Tooltip::text("Select History Branch"),
+                )
+        });
         let query_focus_handle = self
             .search_state
             .editor
@@ -2561,6 +2633,7 @@ impl GitGraph {
             .gap_1p5()
             .border_b_1()
             .border_color(color.border_variant)
+            .children(path_history_branch_picker)
             .child(
                 h_flex()
                     .h_8()
@@ -3735,7 +3808,7 @@ impl Render for GitGraph {
                     this.child(self.render_loading_spinner(cx))
                 })
         } else {
-            let is_path_history = matches!(self.log_source, LogSource::Path(_));
+            let is_path_history = self.log_source.path().is_some();
             let header_resize_info =
                 HeaderResizeInfo::from_redistributable(&self.column_widths, cx);
 
@@ -4115,10 +4188,10 @@ impl Item for GitGraph {
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
         });
-        let path_history_path = match &self.log_source {
-            LogSource::Path(path) => Some(path.as_unix_str().to_string()),
-            _ => None,
-        };
+        let path_history_path = self
+            .log_source
+            .path()
+            .map(|path| path.as_unix_str().to_string());
 
         Some(TabTooltipContent::Custom(Box::new(Tooltip::element({
             move |_, _| {
@@ -4140,7 +4213,7 @@ impl Item for GitGraph {
     }
 
     fn tab_content_text(&self, _detail: usize, cx: &App) -> SharedString {
-        if let LogSource::Path(path) = &self.log_source {
+        if let Some(path) = self.log_source.path() {
             return path
                 .as_ref()
                 .file_name()
@@ -4406,6 +4479,7 @@ mod persistence {
     pub const LOG_SOURCE_BRANCH: i32 = 1;
     pub const LOG_SOURCE_SHA: i32 = 2;
     pub const LOG_SOURCE_PATH: i32 = 3;
+    pub const LOG_SOURCE_PATH_AT_REF: i32 = 4;
 
     pub const LOG_ORDER_DATE: i32 = 0;
     pub const LOG_ORDER_TOPO: i32 = 1;
@@ -4418,6 +4492,7 @@ mod persistence {
             LogSource::Branch(_) => LOG_SOURCE_BRANCH,
             LogSource::Sha(_) => LOG_SOURCE_SHA,
             LogSource::Path(_) => LOG_SOURCE_PATH,
+            LogSource::PathAtRef { .. } => LOG_SOURCE_PATH_AT_REF,
         }
     }
 
@@ -4427,6 +4502,9 @@ mod persistence {
             LogSource::Branch(branch) => Some(branch.to_string()),
             LogSource::Sha(oid) => Some(oid.to_string()),
             LogSource::Path(path) => Some(path.as_unix_str().to_string()),
+            LogSource::PathAtRef { path, reference } => {
+                Some(format!("{}\n{}", reference, path.as_unix_str()))
+            }
         }
     }
 
@@ -4458,6 +4536,17 @@ mod persistence {
                 .as_ref()
                 .and_then(|v| RepoPath::new(v).ok())
                 .map(LogSource::Path)
+                .unwrap_or_default(),
+            Some(LOG_SOURCE_PATH_AT_REF) => state
+                .log_source_value
+                .as_ref()
+                .and_then(|value| value.split_once('\n'))
+                .and_then(|(reference, path)| {
+                    Some(LogSource::PathAtRef {
+                        path: RepoPath::new(path).ok()?,
+                        reference: reference.to_string().into(),
+                    })
+                })
                 .unwrap_or_default(),
             None | Some(_) => LogSource::default(),
         }
@@ -5882,6 +5971,19 @@ mod tests {
         assert_eq!(
             persistence::deserialize_log_source(&branch_state),
             LogSource::Branch("refs/heads/main".into())
+        );
+
+        let path_at_ref_state = SerializedGitGraphState {
+            log_source_type: Some(persistence::LOG_SOURCE_PATH_AT_REF),
+            log_source_value: Some("origin/feature\nsrc/main.rs".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            persistence::deserialize_log_source(&path_at_ref_state),
+            LogSource::PathAtRef {
+                path: RepoPath::new("src/main.rs").expect("valid repository path"),
+                reference: "origin/feature".into(),
+            }
         );
 
         let sha_state = SerializedGitGraphState {

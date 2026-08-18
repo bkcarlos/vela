@@ -4041,6 +4041,18 @@ impl GitStore {
                     base_ref: base_ref.into(),
                 }
             }
+            proto::git_diff::DiffType::BranchComparison => DiffType::BranchComparison {
+                base_ref: envelope
+                    .payload
+                    .merge_base_ref
+                    .context("merge_base_ref is required for BranchComparison")?
+                    .into(),
+                compare_ref: envelope
+                    .payload
+                    .compare_ref
+                    .context("compare_ref is required for BranchComparison")?
+                    .into(),
+            },
         };
 
         let mut diff = repository_handle
@@ -4089,7 +4101,9 @@ impl GitStore {
                 .map(|(path, status)| proto::TreeDiffStatus {
                     path: path.as_ref().as_unix_str().to_owned(),
                     status: match status {
-                        TreeDiffStatus::Added {} => proto::tree_diff_status::Status::Added.into(),
+                        TreeDiffStatus::Added { .. } => {
+                            proto::tree_diff_status::Status::Added.into()
+                        }
                         TreeDiffStatus::Modified { .. } => {
                             proto::tree_diff_status::Status::Modified.into()
                         }
@@ -4098,10 +4112,16 @@ impl GitStore {
                         }
                     },
                     oid: match status {
-                        TreeDiffStatus::Deleted { old } | TreeDiffStatus::Modified { old } => {
+                        TreeDiffStatus::Deleted { old } | TreeDiffStatus::Modified { old, .. } => {
                             Some(old.to_string())
                         }
-                        TreeDiffStatus::Added => None,
+                        TreeDiffStatus::Added { .. } => None,
+                    },
+                    new_oid: match status {
+                        TreeDiffStatus::Added { new } | TreeDiffStatus::Modified { new, .. } => {
+                            Some(new.to_string())
+                        }
+                        TreeDiffStatus::Deleted { .. } => None,
                     },
                 })
                 .collect(),
@@ -8567,11 +8587,20 @@ impl Repository {
                         .into_iter()
                         .filter_map(|entry| {
                             let status = match entry.status() {
-                                proto::tree_diff_status::Status::Added => TreeDiffStatus::Added,
+                                proto::tree_diff_status::Status::Added => TreeDiffStatus::Added {
+                                    new: git::Oid::from_str(
+                                        &entry.new_oid.context("missing new oid").log_err()?,
+                                    )
+                                    .log_err()?,
+                                },
                                 proto::tree_diff_status::Status::Modified => {
                                     TreeDiffStatus::Modified {
                                         old: git::Oid::from_str(
                                             &entry.oid.context("missing oid").log_err()?,
+                                        )
+                                        .log_err()?,
+                                        new: git::Oid::from_str(
+                                            &entry.new_oid.context("missing new oid").log_err()?,
                                         )
                                         .log_err()?,
                                     }
@@ -8608,16 +8637,25 @@ impl Repository {
                     backend.diff(diff_type).await
                 }
                 RepositoryState::Remote(RemoteRepositoryState { project_id, client }) => {
-                    let (proto_diff_type, merge_base_ref) = match &diff_type {
+                    let (proto_diff_type, merge_base_ref, compare_ref) = match &diff_type {
                         DiffType::HeadToIndex => {
-                            (proto::git_diff::DiffType::HeadToIndex.into(), None)
+                            (proto::git_diff::DiffType::HeadToIndex.into(), None, None)
                         }
                         DiffType::HeadToWorktree => {
-                            (proto::git_diff::DiffType::HeadToWorktree.into(), None)
+                            (proto::git_diff::DiffType::HeadToWorktree.into(), None, None)
                         }
                         DiffType::MergeBase { base_ref } => (
                             proto::git_diff::DiffType::MergeBase.into(),
                             Some(base_ref.to_string()),
+                            None,
+                        ),
+                        DiffType::BranchComparison {
+                            base_ref,
+                            compare_ref,
+                        } => (
+                            proto::git_diff::DiffType::BranchComparison.into(),
+                            Some(base_ref.to_string()),
+                            Some(compare_ref.to_string()),
                         ),
                     };
                     let response = client
@@ -8626,6 +8664,7 @@ impl Repository {
                             repository_id: id.to_proto(),
                             diff_type: proto_diff_type,
                             merge_base_ref,
+                            compare_ref,
                         })
                         .await?;
 
@@ -9875,6 +9914,12 @@ fn log_source_to_proto(log_source: &LogSource) -> proto::GitLogSource {
             LogSource::Path(path) => {
                 proto::git_log_source::Source::Path(path.as_unix_str().to_owned())
             }
+            LogSource::PathAtRef { path, reference } => {
+                proto::git_log_source::Source::PathAtRef(proto::GitLogSourcePathAtRef {
+                    path: path.as_unix_str().to_owned(),
+                    reference: reference.to_string(),
+                })
+            }
         }),
     }
 }
@@ -9890,6 +9935,10 @@ fn log_source_from_proto(log_source: proto::GitLogSource) -> Result<LogSource> {
         proto::git_log_source::Source::Path(path) => {
             Ok(LogSource::Path(RepoPath::from_proto(&path)?))
         }
+        proto::git_log_source::Source::PathAtRef(path_at_ref) => Ok(LogSource::PathAtRef {
+            path: RepoPath::from_proto(&path_at_ref.path)?,
+            reference: path_at_ref.reference.into(),
+        }),
     }
 }
 
