@@ -19,7 +19,7 @@ use git::{
     status::{FileStatus, StatusCode, TrackedStatus},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, DefiniteLength, DismissEvent,
+    Action, Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, DefiniteLength, DismissEvent,
     DragMoveEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
     MouseButton, MouseDownEvent, PathBuilder, Pixels, Point, ScrollHandle, ScrollStrategy,
     ScrollWheelEvent, SharedString, Subscription, Task, TextStyleRefinement,
@@ -2728,6 +2728,7 @@ impl GitGraph {
     }
 
     fn render_search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let log_order_control = self.render_log_order_control(cx);
         let color = cx.theme().colors();
         let path_history_branch_picker = self.log_source.path().map(|_| {
             let selected_reference = match &self.log_source {
@@ -2811,7 +2812,7 @@ impl GitGraph {
             .border_color(color.border_variant)
             .flex_wrap()
             .children(path_history_branch_picker)
-            .child(self.render_log_order_control(cx))
+            .child(log_order_control)
             .child(
                 h_flex()
                     .h_8()
