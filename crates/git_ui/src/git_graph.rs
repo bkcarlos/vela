@@ -2368,19 +2368,26 @@ impl GitGraph {
         }
     }
 
-    fn render_log_order_control(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_log_order_control(
+        &self,
+        graph: WeakEntity<Self>,
+    ) -> impl IntoElement + use<> {
         let current = self.log_order;
         Button::new("git-graph-log-order", Self::log_order_label(current))
             .style(ButtonStyle::Subtle)
             .label_size(LabelSize::Small)
             .tooltip(Tooltip::text("Commit Order (Date / Topo)"))
-            .on_click(cx.listener(|this, _, _, cx| {
-                let next = match this.log_order {
-                    LogOrder::DateOrder => LogOrder::TopoOrder,
-                    _ => LogOrder::DateOrder,
-                };
-                this.set_log_order(next, cx);
-            }))
+            .on_click(move |_, _, cx| {
+                graph
+                    .update(cx, |this, cx| {
+                        let next = match this.log_order {
+                            LogOrder::DateOrder => LogOrder::TopoOrder,
+                            _ => LogOrder::DateOrder,
+                        };
+                        this.set_log_order(next, cx);
+                    })
+                    .ok();
+            })
     }
 
     fn render_working_changes_row(&self, cx: &App) -> Option<impl IntoElement> {
@@ -2728,7 +2735,7 @@ impl GitGraph {
     }
 
     fn render_search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let log_order_control = self.render_log_order_control(cx);
+        let log_order_control = self.render_log_order_control(cx.weak_entity());
         let color = cx.theme().colors();
         let path_history_branch_picker = self.log_source.path().map(|_| {
             let selected_reference = match &self.log_source {
