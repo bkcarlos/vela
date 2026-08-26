@@ -8,6 +8,7 @@ pub struct ProjectEmptyState {
     label: SharedString,
     focus_handle: FocusHandle,
     open_project_key_binding: KeyBinding,
+    on_new_file: Option<ClickHandler>,
     on_open_project: Option<ClickHandler>,
     on_clone_repo: Option<ClickHandler>,
 }
@@ -22,9 +23,18 @@ impl ProjectEmptyState {
             label: label.into(),
             focus_handle,
             open_project_key_binding,
+            on_new_file: None,
             on_open_project: None,
             on_clone_repo: None,
         }
+    }
+
+    pub fn on_new_file(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_new_file = Some(Box::new(handler));
+        self
     }
 
     pub fn on_open_project(
@@ -47,7 +57,7 @@ impl ProjectEmptyState {
 impl RenderOnce for ProjectEmptyState {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let id = format!("empty-state-{}", self.label);
-        let label = format!("Choose one of the options below to use the {}", self.label);
+        let label = format!("Choose a start action to use the {}", self.label);
 
         v_flex()
             .id(id)
@@ -67,8 +77,17 @@ impl RenderOnce for ProjectEmptyState {
                             .mb_2()
                             .child(Label::new(label).size(LabelSize::Small).color(Color::Muted)),
                     )
+                    .when_some(self.on_new_file, |this, handler| {
+                        this.child(
+                            Button::new("new_file", "New File")
+                                .full_width()
+                                .style(ButtonStyle::Outlined)
+                                .start_icon(Icon::new(IconName::Plus).size(IconSize::Small))
+                                .on_click(handler),
+                        )
+                    })
                     .child(
-                        Button::new("open_project", "Open Project")
+                        Button::new("open_project", "Open")
                             .full_width()
                             .style(ButtonStyle::Filled)
                             .start_icon(Icon::new(IconName::FolderOpen).size(IconSize::Small))
@@ -85,7 +104,7 @@ impl RenderOnce for ProjectEmptyState {
                             .child(Divider::horizontal().color(DividerColor::Border)),
                     )
                     .child(
-                        Button::new("clone_repo", "Clone Repository")
+                        Button::new("clone_repo", "Clone Git Repository")
                             .full_width()
                             .style(ButtonStyle::Outlined)
                             .start_icon(Icon::new(IconName::GitBranch).size(IconSize::Small))

@@ -7478,16 +7478,25 @@ impl Render for ProjectPanel {
             let focus_handle = self.focus_handle(cx);
             let workspace = self.workspace.clone();
             let workspace_clone = self.workspace.clone();
+            let workspace_new_file = self.workspace.clone();
 
             v_flex()
                 .id("empty-project_panel-wrapper")
                 .size_full()
                 .child(
-                    ProjectEmptyState::new(
+                     ProjectEmptyState::new(
                         "Project Panel",
                         focus_handle.clone(),
                         KeyBinding::for_action_in(&workspace::Open::default(), &focus_handle, cx),
                     )
+                    .on_new_file(move |_, window, cx| {
+                        telemetry::event!("Project Panel New File Clicked");
+                        workspace_new_file
+                            .update(cx, |_, cx| {
+                                window.dispatch_action(workspace::NewFile.boxed_clone(), cx);
+                            })
+                            .log_err();
+                    })
                     .on_open_project(move |_, window, cx| {
                         telemetry::event!("Project Panel Add Project Clicked");
                         workspace

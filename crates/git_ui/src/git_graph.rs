@@ -13,7 +13,7 @@ use git::{
     BuildCommitPermalinkParams, GitHostingProviderRegistry, GitRemote, Oid, ParsedGitRemote,
     parse_git_remote_url,
     repository::{
-        CommitDiff, CommitFile, InitialGraphCommitData, LogOrder, LogSource, RepoPath,
+        CommitDetails, CommitDiff, CommitFile, InitialGraphCommitData, LogOrder, LogSource, RepoPath,
         SearchCommitArgs,
     },
     status::{FileStatus, StatusCode, TrackedStatus},
@@ -593,6 +593,8 @@ actions!(
         ScrollDown,
         /// Toggles the selected commit's changed files between flat and tree views.
         ToggleChangedFilesView,
+        /// Cycles commit graph order between date and topological.
+        ToggleLogOrder,
     ]
 );
 
@@ -1333,6 +1335,9 @@ pub struct GitGraph {
     changed_files_view_mode: ChangedFilesViewMode,
     changed_files_expanded_dirs: HashMap<RepoPath, bool>,
     pending_select_sha: Option<Oid>,
+    pub(crate) embedded: bool,
+    inspect_commit_view: Option<Entity<CommitView>>,
+    inspect_loading_sha: Option<String>,
 }
 
 impl GitGraph {
@@ -1595,6 +1600,9 @@ impl GitGraph {
             changed_files_view_mode: ChangedFilesViewMode::default(),
             changed_files_expanded_dirs: HashMap::default(),
             pending_select_sha: None,
+            embedded: false,
+            inspect_commit_view: None,
+            inspect_loading_sha: None,
         };
 
         this.fetch_initial_graph_data(cx);
@@ -1944,6 +1952,7 @@ impl GitGraph {
         self.selected_entry_idx = None;
         self.selected_commit_diff = None;
         self.selected_commit_diff_stats = None;
+        self.clear_inspect_view();
         self.changed_files_expanded_dirs.clear();
         cx.emit(ItemEvent::Edit);
         cx.notify();
@@ -2148,6 +2157,7 @@ impl GitGraph {
         self.selected_entry_idx = Some(idx);
         self.selected_commit_diff = None;
         self.selected_commit_diff_stats = None;
+        self.clear_inspect_view();
         self.changed_files_expanded_dirs.clear();
         self.changed_files_scroll_handle
             .scroll_to_item(0, ScrollStrategy::Top);
@@ -2306,6 +2316,172 @@ impl GitGraph {
             self.repo_id = repo_id;
             self.invalidate_state(cx);
         }
+    }
+
+    pub fn set_log_source(&mut self, log_source: LogSource, cx: &mut Context<Self>) {
+        if self.log_source == log_source {
+            return;
+        }
+        self.log_source = log_source;
+        self.selected_entry_idx = None;
+        self.pending_select_sha = None;
+        self.clear_inspect_view();
+        self.invalidate_state(cx);
+        self.fetch_initial_graph_data(cx);
+        cx.emit(ItemEvent::Edit);
+        cx.notify();
+    }
+
+    pub fn set_log_order(&mut self, log_order: LogOrder, cx: &mut Context<Self>) {
+        if self.log_order == log_order {
+            return;
+        }
+        self.log_order = log_order;
+        self.selected_entry_idx = None;
+        self.pending_select_sha = None;
+        self.clear_inspect_view();
+        self.invalidate_state(cx);
+        self.fetch_initial_graph_data(cx);
+        cx.emit(ItemEvent::Edit);
+        cx.notify();
+    }
+
+    fn toggle_log_order(&mut self, _: &ToggleLogOrder, _window: &mut Window, cx: &mut Context<Self>) {
+        let next = match self.log_order {
+            LogOrder::DateOrder => LogOrder::TopoOrder,
+            _ => LogOrder::DateOrder,
+        };
+        self.set_log_order(next, cx);
+    }
+
+    fn clear_inspect_view(&mut self) {
+        self.inspect_commit_view = None;
+        self.inspect_loading_sha = None;
+    }
+
+    fn log_order_label(order: LogOrder) -> &'static str {
+        match order {
+            LogOrder::DateOrder => "Date",
+            LogOrder::TopoOrder => "Topo",
+            LogOrder::AuthorDateOrder => "Author Date",
+            LogOrder::ReverseChronological => "Reverse",
+        }
+    }
+
+    fn render_log_order_control(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let current = self.log_order;
+        Button::new("git-graph-log-order", Self::log_order_label(current))
+            .style(ButtonStyle::Subtle)
+            .label_size(LabelSize::Small)
+            .tooltip(Tooltip::text("Commit Order (Date / Topo)"))
+            .on_click(cx.listener(|this, _, _, cx| {
+                let next = match this.log_order {
+                    LogOrder::DateOrder => LogOrder::TopoOrder,
+                    _ => LogOrder::DateOrder,
+                };
+                this.set_log_order(next, cx);
+            }))
+    }
+
+    fn render_working_changes_row(&self, cx: &App) -> Option<impl IntoElement> {
+        let repository = self.get_repository(cx)?;
+        let count = repository.read(cx).snapshot().status_summary().count;
+        if count == 0 {
+            return None;
+        }
+        let label = if count == 1 {
+            "1 file".to_string()
+        } else {
+            format!("{count} files")
+        };
+        Some(
+            h_flex()
+                .id("working-changes-row")
+                .w_full()
+                .px_2()
+                .py_1()
+                .gap_2()
+                .cursor_pointer()
+                .border_b_1()
+                .border_color(cx.theme().colors().border_variant)
+                .hover(|s| s.bg(cx.theme().colors().element_hover))
+                .child(
+                    Icon::new(IconName::Pencil)
+                        .size(IconSize::Small)
+                        .color(Color::Accent),
+                )
+                .child(Label::new("Uncommitted Changes"))
+                .child(
+                    Label::new(label)
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(crate::git_panel::ActivateChangesTab.boxed_clone(), cx);
+                }),
+        )
+    }
+
+    fn ensure_inspect_commit_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(idx) = self.selected_entry_idx else {
+            self.clear_inspect_view();
+            return;
+        };
+        let Some(commit) = self.graph_data.commits.get(idx) else {
+            return;
+        };
+        let sha = commit.data.sha.to_string();
+        if self
+            .inspect_commit_view
+            .as_ref()
+            .is_some_and(|view| view.read(cx).commit.sha.as_ref() == sha)
+        {
+            return;
+        }
+        if self.inspect_loading_sha.as_deref() == Some(sha.as_str()) {
+            return;
+        }
+
+        let Some(diff) = self.selected_commit_diff.clone() else {
+            return;
+        };
+        let Some(repository) = self.get_repository(cx) else {
+            return;
+        };
+        let data = repository.update(cx, |repository, cx| {
+            repository
+                .fetch_commit_data(commit.data.sha, false, cx)
+                .clone()
+        });
+        let CommitDataState::Loaded(data) = data else {
+            return;
+        };
+        let Some(workspace_entity) = self.workspace.upgrade() else {
+            return;
+        };
+        let project = workspace_entity.read(cx).project().clone();
+        let details = CommitDetails {
+            sha: sha.clone().into(),
+            message: data.message.clone(),
+            commit_timestamp: data.commit_timestamp,
+            author_email: data.author_email.clone(),
+            author_name: data.author_name.clone(),
+        };
+        let workspace_handle = self.workspace.clone();
+        self.inspect_loading_sha = Some(sha);
+        self.inspect_commit_view = Some(cx.new(|cx| {
+            CommitView::new(
+                details,
+                diff,
+                repository,
+                project,
+                workspace_entity,
+                workspace_handle,
+                None,
+                window,
+                cx,
+            )
+        }));
     }
 
     pub fn select_commit_by_sha(&mut self, sha: impl TryInto<Oid>, cx: &mut Context<Self>) {
@@ -2633,7 +2809,9 @@ impl GitGraph {
             .gap_1p5()
             .border_b_1()
             .border_color(color.border_variant)
+            .flex_wrap()
             .children(path_history_branch_picker)
+            .child(self.render_log_order_control(cx))
             .child(
                 h_flex()
                     .h_8()
@@ -2888,12 +3066,14 @@ impl GitGraph {
             }));
 
         v_flex()
-            .min_w(px(300.))
             .h_full()
             .bg(cx.theme().colors().editor_background)
-            .flex_basis(DefiniteLength::Fraction(
-                self.commit_details_split_state.read(cx).right_ratio(),
-            ))
+            .when(self.embedded, |this| this.w_full().flex_1().min_h(px(180.)))
+            .when(!self.embedded, |this| {
+                this.min_w(px(300.)).flex_basis(DefiniteLength::Fraction(
+                    self.commit_details_split_state.read(cx).right_ratio(),
+                ))
+            })
             .child(
                 v_flex()
                     .relative()
@@ -2912,6 +3092,7 @@ impl GitGraph {
                                     this._selected_commit_message_task = None;
                                     this.changed_files_expanded_dirs.clear();
                                     this._commit_diff_task = None;
+                                    this.clear_inspect_view();
                                     cx.notify();
                                 })),
                         ),
@@ -3213,10 +3394,20 @@ impl GitGraph {
                             .vertical_scrollbar_for(&self.changed_files_scroll_handle, window, cx),
                     ),
             )
+            .children(self.inspect_commit_view.clone().map(|view| {
+                div()
+                    .flex_1()
+                    .min_h(px(140.))
+                    .w_full()
+                    .border_t_1()
+                    .border_color(cx.theme().colors().border_variant)
+                    .child(view)
+                    .into_any_element()
+            }))
             .child(Divider::horizontal())
             .child(
                 h_flex().p_1p5().w_full().child(
-                    Button::new("view-commit", "View Commit")
+                    Button::new("view-commit", "Open in Tab")
                         .full_width()
                         .start_icon(
                             Icon::new(IconName::GitCommit)
@@ -3773,6 +3964,7 @@ impl GitGraph {
 
 impl Render for GitGraph {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inspect_commit_view(window, cx);
         // This happens when we changed branches, we should refresh our search as well
         if let QueryState::Pending(query) = &mut self.search_state.state {
             let query = std::mem::take(query);
@@ -3807,12 +3999,21 @@ impl Render for GitGraph {
                 .when(is_loading && error.is_none(), |this| {
                     this.child(self.render_loading_spinner(cx))
                 })
+                .into_any_element()
         } else {
             let is_path_history = self.log_source.path().is_some();
             let header_resize_info =
                 HeaderResizeInfo::from_redistributable(&self.column_widths, cx);
 
-            let column_filter = self.column_visibility.clone();
+            let column_filter = if self.embedded {
+                if is_path_history {
+                    TableRow::from_vec(vec![false, true, true, true], 4)
+                } else {
+                    TableRow::from_vec(vec![false, false, true, true, true], 5)
+                }
+            } else {
+                self.column_visibility.clone()
+            };
 
             // The graph column (index 0) only exists in the non-path-history layout and is
             // rendered as a separate canvas outside the table.
@@ -4099,9 +4300,30 @@ impl Render for GitGraph {
                         state.commit_ratio();
                     });
                 }))
-                .when(self.selected_entry_idx.is_some(), |this| {
-                    this.child(self.render_commit_view_resize_handle(window, cx))
-                        .child(self.render_commit_detail_panel(window, cx))
+                .map(|this| {
+                    if self.embedded {
+                        v_flex()
+                            .size_full()
+                            .children(self.render_working_changes_row(cx))
+                            .child(this.flex_1().min_h(px(120.)))
+                            .when(self.selected_entry_idx.is_some(), |this| {
+                                this.child(
+                                    div()
+                                        .flex_1()
+                                        .min_h(px(180.))
+                                        .border_t_1()
+                                        .border_color(cx.theme().colors().border_variant)
+                                        .child(self.render_commit_detail_panel(window, cx)),
+                                )
+                            })
+                            .into_any_element()
+                    } else {
+                        this.when(self.selected_entry_idx.is_some(), |this| {
+                            this.child(self.render_commit_view_resize_handle(window, cx))
+                                .child(self.render_commit_detail_panel(window, cx))
+                        })
+                        .into_any_element()
+                    }
                 })
         };
 
@@ -4130,6 +4352,7 @@ impl Render for GitGraph {
             .on_action(cx.listener(Self::scroll_down))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::toggle_changed_files_view))
+            .on_action(cx.listener(Self::toggle_log_order))
             .on_action(cx.listener(Self::focus_next_tab_stop))
             .on_action(cx.listener(Self::focus_previous_tab_stop))
             .on_action(cx.listener(|this, _: &SelectNextMatch, _window, cx| {

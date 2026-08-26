@@ -1,6 +1,6 @@
 use crate::{
     NewFile, Open, OpenMode, PathList, RecentWorkspace, SerializedWorkspaceLocation,
-    ToggleWorkspaceSidebar, Workspace, WorkspaceSettings,
+    Workspace, WorkspaceSettings,
     item::{Item, ItemEvent},
     persistence::WorkspaceDb,
 };
@@ -10,16 +10,18 @@ use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     ParentElement, Render, Styled, Task, TaskExt, Window, actions,
 };
-use gpui::{WeakEntity, linear_color_stop, linear_gradient};
+use gpui::WeakEntity;
 use menu::{SelectNext, SelectPrevious};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{DefaultOpenBehavior, Settings};
-use ui::{ButtonLike, Divider, DividerColor, KeyBinding, Vector, VectorName, prelude::*};
+use std::path::Path;
+use ui::{ButtonLike, prelude::*};
 use util::ResultExt;
 use vela_actions::{
-    Extensions, OpenKeymap, OpenOnboarding, OpenSettings, assistant::ToggleFocus, command_palette,
+    Extensions, OpenKeymap, OpenOnboarding, OpenRecent, OpenRemote, OpenSettings,
+    assistant::ToggleFocus, command_palette,
 };
 
 #[derive(PartialEq, Clone, Debug, Deserialize, Serialize, JsonSchema, Action)]
@@ -51,18 +53,8 @@ impl SectionHeader {
 }
 
 impl RenderOnce for SectionHeader {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        h_flex()
-            .px_1()
-            .mb_2()
-            .gap_2()
-            .child(
-                Label::new(self.title.to_ascii_uppercase())
-                    .buffer_font(cx)
-                    .color(Color::Muted)
-                    .size(LabelSize::XSmall),
-            )
-            .child(Divider::horizontal().color(DividerColor::BorderVariant))
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        Label::new(self.title)
     }
 }
 
@@ -94,31 +86,55 @@ impl SectionButton {
 }
 
 impl RenderOnce for SectionButton {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let id = format!("onb-button-{}-{}", self.label, self.tab_index);
-        let action_ref: &dyn Action = &*self.action;
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let id = format!("welcome-button-{}-{}", self.label, self.tab_index);
 
         ButtonLike::new(id)
             .tab_index(self.tab_index as isize)
-            .full_width()
-            .size(ButtonSize::Medium)
+            .size(ButtonSize::Compact)
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        Icon::new(self.icon)
+                            .color(Color::Accent)
+                            .size(IconSize::Small),
+                    )
+                    .child(Label::new(self.label).color(Color::Accent)),
+            )
+            .on_click(move |_, window, cx| {
+                self.focus_handle.dispatch_action(&*self.action, window, cx)
+            })
+    }
+}
+
+#[derive(IntoElement)]
+struct RecentProjectButton {
+    name: SharedString,
+    path: SharedString,
+    action: Box<dyn Action>,
+    tab_index: usize,
+    focus_handle: FocusHandle,
+}
+
+impl RenderOnce for RecentProjectButton {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let id = format!("welcome-recent-{}-{}", self.name, self.tab_index);
+
+        ButtonLike::new(id)
+            .tab_index(self.tab_index as isize)
+            .size(ButtonSize::Compact)
             .child(
                 h_flex()
                     .w_full()
-                    .justify_between()
+                    .min_w_0()
+                    .gap_3()
+                    .child(Label::new(self.name).color(Color::Accent).truncate())
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Icon::new(self.icon)
-                                    .color(Color::Muted)
-                                    .size(IconSize::Small),
-                            )
-                            .child(Label::new(self.label)),
-                    )
-                    .child(
-                        KeyBinding::for_action_in(action_ref, &self.focus_handle, cx)
-                            .size(rems_from_px(12.)),
+                        Label::new(self.path)
+                            .size(LabelSize::Small)
+                            .color(Color::Muted)
+                            .truncate(),
                     ),
             )
             .on_click(move |_, window, cx| {
@@ -127,15 +143,57 @@ impl RenderOnce for SectionButton {
     }
 }
 
-enum SectionVisibility {
-    Always,
+#[derive(IntoElement)]
+struct WalkthroughCard {
+    icon: IconName,
+    title: SharedString,
+    subtitle: SharedString,
+    action: Box<dyn Action>,
+    tab_index: usize,
+    focus_handle: FocusHandle,
 }
 
-impl SectionVisibility {
-    fn is_visible(&self) -> bool {
-        match self {
-            SectionVisibility::Always => true,
-        }
+impl RenderOnce for WalkthroughCard {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let id = format!("welcome-walkthrough-{}-{}", self.title, self.tab_index);
+        let accent = Color::Accent.color(cx);
+        let colors = cx.theme().colors();
+
+        ButtonLike::new(id)
+            .tab_index(self.tab_index as isize)
+            .full_width()
+            .child(
+                v_flex()
+                    .w_full()
+                    .p_3()
+                    .gap_1()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(colors.border_variant)
+                    .bg(colors.surface_background)
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                Icon::new(self.icon)
+                                    .color(Color::Accent)
+                                    .size(IconSize::Small),
+                            )
+                            .child(Label::new(self.title)),
+                    )
+                    .when(!self.subtitle.is_empty(), |this| {
+                        this.child(
+                            Label::new(self.subtitle)
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                    })
+                    .child(div().mt_1().h(px(2.)).w_full().rounded_full().bg(accent)),
+            )
+            .on_click(move |_, window, cx| {
+                self.focus_handle.dispatch_action(&*self.action, window, cx)
+            })
     }
 }
 
@@ -143,80 +201,77 @@ struct SectionEntry {
     icon: IconName,
     title: &'static str,
     action: &'static dyn Action,
-    visibility_guard: SectionVisibility,
 }
 
 impl SectionEntry {
-    fn render(&self, button_index: usize, focus: &FocusHandle) -> Option<impl IntoElement> {
-        self.visibility_guard.is_visible().then(|| {
-            SectionButton::new(
-                self.title,
-                self.icon,
-                self.action,
-                button_index,
-                focus.clone(),
-            )
-        })
+    fn render(&self, button_index: usize, focus: &FocusHandle) -> impl IntoElement {
+        SectionButton::new(
+            self.title,
+            self.icon,
+            self.action,
+            button_index,
+            focus.clone(),
+        )
     }
 }
 
-const CONTENT: (Section<4>, Section<3>) = (
-    Section {
-        title: "Get Started",
-        entries: [
-            SectionEntry {
-                icon: IconName::Plus,
-                title: "New File",
-                action: &NewFile,
-                visibility_guard: SectionVisibility::Always,
+const START: Section<4> = Section {
+    title: "Start",
+    entries: [
+        SectionEntry {
+            icon: IconName::Plus,
+            title: "New File...",
+            action: &NewFile,
+        },
+        SectionEntry {
+            icon: IconName::FolderOpen,
+            title: "Open...",
+            action: &Open::DEFAULT,
+        },
+        SectionEntry {
+            icon: IconName::GitBranch,
+            title: "Clone Git Repository...",
+            action: &GitClone,
+        },
+        SectionEntry {
+            icon: IconName::Server,
+            title: "Connect to...",
+            action: &OpenRemote {
+                from_existing_connection: false,
+                create_new_window: None,
             },
-            SectionEntry {
-                icon: IconName::FolderOpen,
-                title: "Open Project",
-                action: &Open::DEFAULT,
-                visibility_guard: SectionVisibility::Always,
+        },
+    ],
+};
+
+const CONFIGURE: Section<4> = Section {
+    title: "Configure",
+    entries: [
+        SectionEntry {
+            icon: IconName::Settings,
+            title: "Open Settings",
+            action: &OpenSettings,
+        },
+        SectionEntry {
+            icon: IconName::Keyboard,
+            title: "Customize Keymaps",
+            action: &OpenKeymap,
+        },
+        SectionEntry {
+            icon: IconName::Blocks,
+            title: "Explore Extensions",
+            action: &Extensions {
+                category_filter: None,
+                id: None,
             },
-            SectionEntry {
-                icon: IconName::CloudDownload,
-                title: "Clone Repository",
-                action: &GitClone,
-                visibility_guard: SectionVisibility::Always,
-            },
-            SectionEntry {
-                icon: IconName::ListCollapse,
-                title: "Open Command Palette",
-                action: &command_palette::Toggle,
-                visibility_guard: SectionVisibility::Always,
-            },
-        ],
-    },
-    Section {
-        title: "Configure",
-        entries: [
-            SectionEntry {
-                icon: IconName::Settings,
-                title: "Open Settings",
-                action: &OpenSettings,
-                visibility_guard: SectionVisibility::Always,
-            },
-            SectionEntry {
-                icon: IconName::Keyboard,
-                title: "Customize Keymaps",
-                action: &OpenKeymap,
-                visibility_guard: SectionVisibility::Always,
-            },
-            SectionEntry {
-                icon: IconName::Blocks,
-                title: "Explore Extensions",
-                action: &Extensions {
-                    category_filter: None,
-                    id: None,
-                },
-                visibility_guard: SectionVisibility::Always,
-            },
-        ],
-    },
-);
+        },
+        SectionEntry {
+            icon: IconName::ListCollapse,
+            title: "Open Command Palette",
+            action: &command_palette::Toggle,
+        },
+    ],
+};
 
 struct Section<const COLS: usize> {
     title: &'static str,
@@ -227,12 +282,13 @@ impl<const COLS: usize> Section<COLS> {
     fn render(self, index_offset: usize, focus: &FocusHandle) -> impl IntoElement {
         v_flex()
             .min_w_full()
+            .gap_1()
             .child(SectionHeader::new(self.title))
             .children(
                 self.entries
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, entry)| entry.render(index_offset + index, focus)),
+                    .map(|(index, entry)| entry.render(index_offset + index, focus)),
             )
     }
 }
@@ -240,6 +296,7 @@ impl<const COLS: usize> Section<COLS> {
 pub struct WelcomePage {
     workspace: WeakEntity<Workspace>,
     focus_handle: FocusHandle,
+    #[allow(dead_code)]
     fallback_to_recent_projects: bool,
     recent_workspaces: Option<Vec<RecentWorkspace>>,
 }
@@ -255,27 +312,25 @@ impl WelcomePage {
         cx.on_focus(&focus_handle, window, |_, _, cx| cx.notify())
             .detach();
 
-        if fallback_to_recent_projects {
-            let fs = workspace
-                .upgrade()
-                .map(|ws| ws.read(cx).app_state().fs.clone());
-            let db = WorkspaceDb::global(cx);
-            cx.spawn_in(window, async move |this: WeakEntity<Self>, cx| {
-                let Some(fs) = fs else { return };
-                let workspaces = db
-                    .recent_project_workspaces(fs.as_ref())
-                    .await
-                    .log_err()
-                    .unwrap_or_default();
+        let fs = workspace
+            .upgrade()
+            .map(|ws| ws.read(cx).app_state().fs.clone());
+        let db = WorkspaceDb::global(cx);
+        cx.spawn_in(window, async move |this: WeakEntity<Self>, cx| {
+            let Some(fs) = fs else { return };
+            let workspaces = db
+                .recent_project_workspaces(fs.as_ref())
+                .await
+                .log_err()
+                .unwrap_or_default();
 
-                this.update(cx, |this, cx| {
-                    this.recent_workspaces = Some(workspaces);
-                    cx.notify();
-                })
-                .ok();
+            this.update(cx, |this, cx| {
+                this.recent_workspaces = Some(workspaces);
+                cx.notify();
             })
-            .detach();
-        }
+            .ok();
+        })
+        .detach();
 
         WelcomePage {
             workspace,
@@ -319,139 +374,153 @@ impl WelcomePage {
                         })
                         .log_err();
                 } else {
-                    use vela_actions::OpenRecent;
                     window.dispatch_action(OpenRecent::default().boxed_clone(), cx);
                 }
             }
         }
     }
 
-    fn render_agent_card(&self, tab_index: usize, cx: &mut Context<Self>) -> impl IntoElement {
-        let focus = self.focus_handle.clone();
-        let color = cx.theme().colors();
-
-        let description = "Run multiple threads at once, mix and match any ACP-compatible agent, and keep work conflict-free with worktrees.";
-
-        v_flex()
-            .w_full()
-            .p_2()
-            .rounded_md()
-            .border_1()
-            .border_color(color.border_variant)
-            .bg(linear_gradient(
-                360.,
-                linear_color_stop(color.panel_background, 1.0),
-                linear_color_stop(color.editor_background, 0.45),
-            ))
-            .child(
-                h_flex()
-                    .gap_1p5()
-                    .child(
-                        Icon::new(IconName::Vela)
-                            .color(Color::Muted)
-                            .size(IconSize::Small),
-                    )
-                    .child(Label::new("Collaborate with Agents")),
-            )
-            .child(
-                Label::new(description)
-                    .size(LabelSize::Small)
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(
-                Button::new("open-agent", "Open Agent Panel")
-                    .full_width()
-                    .tab_index(tab_index as isize)
-                    .style(ButtonStyle::Outlined)
-                    .key_binding(
-                        KeyBinding::for_action_in(&ToggleFocus, &self.focus_handle, cx)
-                            .size(rems_from_px(12.)),
-                    )
-                    .on_click(move |_, window, cx| {
-                        focus.dispatch_action(&ToggleWorkspaceSidebar, window, cx);
-                        focus.dispatch_action(&ToggleFocus, window, cx);
-                    }),
-            )
-    }
-
-    fn render_recent_project_section(
-        &self,
-        recent_projects: Vec<impl IntoElement>,
-    ) -> impl IntoElement {
-        v_flex()
-            .w_full()
-            .child(SectionHeader::new("Recent Projects"))
-            .children(recent_projects)
-    }
-
     fn render_recent_project(
         &self,
         project_index: usize,
         tab_index: usize,
-        location: &SerializedWorkspaceLocation,
         paths: &PathList,
     ) -> impl IntoElement {
-        let name = project_name(paths);
-
-        let (icon, title) = match location {
-            SerializedWorkspaceLocation::Local => (IconName::Folder, name),
-            SerializedWorkspaceLocation::Remote(_) => (IconName::Server, name),
-        };
-
-        SectionButton::new(
-            title,
-            icon,
-            &OpenRecentProject {
+        RecentProjectButton {
+            name: project_name(paths).into(),
+            path: project_path_display(paths).into(),
+            action: OpenRecentProject {
                 index: project_index,
-            },
+            }
+            .boxed_clone(),
             tab_index,
-            self.focus_handle.clone(),
-        )
+            focus_handle: self.focus_handle.clone(),
+        }
     }
-}
 
-impl Render for WelcomePage {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (first_section, second_section) = CONTENT;
-        let first_section_entries = first_section.entries.len();
-        let mut next_tab_index = first_section_entries + second_section.entries.len();
-
-        let ai_enabled = AgentSettings::get_global(cx).enabled(cx);
-
-        let recent_projects = self
+    fn render_recent_section(&self, start_tab_index: usize) -> impl IntoElement {
+        let recents = self
             .recent_workspaces
             .as_ref()
             .into_iter()
             .flatten()
-            .take(5)
+            .take(8)
             .enumerate()
             .map(|(index, workspace)| {
                 self.render_recent_project(
                     index,
-                    first_section_entries + index,
-                    &workspace.location,
+                    start_tab_index + index,
                     &workspace.identity_paths,
                 )
             })
             .collect::<Vec<_>>();
 
-        let showing_recent_projects =
-            self.fallback_to_recent_projects && !recent_projects.is_empty();
-        let second_section = if showing_recent_projects {
-            self.render_recent_project_section(recent_projects)
-                .into_any_element()
-        } else {
-            second_section
-                .render(first_section_entries, &self.focus_handle)
-                .into_any_element()
-        };
+        let more_tab_index = start_tab_index + recents.len();
+        let focus = self.focus_handle.clone();
+        let is_empty = recents.is_empty();
 
-        let welcome_label = if self.fallback_to_recent_projects {
-            "Welcome back to Vela"
-        } else {
-            "Welcome to Vela"
-        };
+        v_flex()
+            .w_full()
+            .gap_1()
+            .child(SectionHeader::new("Recent"))
+            .when(is_empty, |this| {
+                this.child(
+                    Label::new("You have no recent folders")
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+            })
+            .children(recents)
+            .child(
+                ButtonLike::new("welcome-recent-more")
+                    .tab_index(more_tab_index as isize)
+                    .size(ButtonSize::Compact)
+                    .child(Label::new("More...").color(Color::Accent))
+                    .on_click(move |_, window, cx| {
+                        focus.dispatch_action(&OpenRecent::default(), window, cx)
+                    }),
+            )
+    }
+
+    fn render_walkthroughs(&self, start_tab_index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        let ai_enabled = AgentSettings::get_global(cx).enabled(cx);
+        let focus = self.focus_handle.clone();
+        let mut tab_index = start_tab_index;
+
+        let mut cards: Vec<WalkthroughCard> = Vec::new();
+        cards.push(WalkthroughCard {
+            icon: IconName::Star,
+            title: "Get started with Vela".into(),
+            subtitle: "Customize your editor, learn the basics, and start coding.".into(),
+            action: OpenOnboarding.boxed_clone(),
+            tab_index,
+            focus_handle: focus.clone(),
+        });
+        tab_index += 1;
+
+        cards.push(WalkthroughCard {
+            icon: IconName::Keyboard,
+            title: "Learn the fundamentals".into(),
+            subtitle: "Open the command palette and customize your keymaps.".into(),
+            action: command_palette::Toggle.boxed_clone(),
+            tab_index,
+            focus_handle: focus.clone(),
+        });
+        tab_index += 1;
+
+        cards.push(WalkthroughCard {
+            icon: IconName::Settings,
+            title: "Customize your editor".into(),
+            subtitle: "Pick a theme, font, and the settings that fit how you work.".into(),
+            action: OpenSettings.boxed_clone(),
+            tab_index,
+            focus_handle: focus.clone(),
+        });
+        tab_index += 1;
+
+        if ai_enabled {
+            cards.push(WalkthroughCard {
+                icon: IconName::Vela,
+                title: "Collaborate with Agents".into(),
+                subtitle: "Run threads, mix ACP-compatible agents, and keep work conflict-free."
+                    .into(),
+                action: ToggleFocus.boxed_clone(),
+                tab_index,
+                focus_handle: focus.clone(),
+            });
+            tab_index += 1;
+        }
+
+        cards.push(WalkthroughCard {
+            icon: IconName::Blocks,
+            title: "Explore Extensions".into(),
+            subtitle: "Add languages, themes, and tools from the extension directory.".into(),
+            action: Extensions {
+                category_filter: None,
+                id: None,
+            }
+            .boxed_clone(),
+            tab_index,
+            focus_handle: focus,
+        });
+
+        v_flex()
+            .w_full()
+            .gap_2()
+            .child(SectionHeader::new("Walkthroughs"))
+            .children(cards)
+    }
+}
+
+impl Render for WelcomePage {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let start_section = START;
+        let configure_section = CONFIGURE;
+        let start_entries = start_section.entries.len();
+        let configure_entries = configure_section.entries.len();
+        let recent_tab_index = start_entries;
+        let configure_tab_index = recent_tab_index + 10;
+        let walkthrough_tab_index = configure_tab_index + configure_entries;
 
         h_flex()
             .key_context("Welcome")
@@ -463,50 +532,44 @@ impl Render for WelcomePage {
             .bg(cx.theme().colors().editor_background)
             .justify_center()
             .child(
-                v_flex()
+                h_flex()
                     .id("welcome-content")
-                    .p_8()
-                    .max_w_128()
+                    .p_12()
+                    .w_full()
+                    .max_w(rems_from_px(960.))
                     .size_full()
-                    .gap_6()
+                    .gap_16()
+                    .items_start()
                     .justify_center()
                     .overflow_y_scroll()
+                    .flex_wrap()
                     .child(
-                        h_flex()
-                            .w_full()
-                            .justify_center()
-                            .mb_4()
-                            .gap_4()
-                            .child(Vector::square(VectorName::VelaLogo, rems_from_px(45.)))
+                        v_flex()
+                            .flex_1()
+                            .min_w(rems(18.))
+                            .max_w(rems(28.))
+                            .gap_6()
                             .child(
-                                v_flex().child(Headline::new(welcome_label)).child(
-                                    Label::new("The editor for what's next")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Muted)
-                                        .italic(),
-                                ),
-                            ),
+                                v_flex()
+                                    .gap_1()
+                                    .child(Headline::new("Vela").size(HeadlineSize::Large))
+                                    .child(
+                                        Label::new("The editor for what's next")
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
+                                    ),
+                            )
+                            .child(start_section.render(Default::default(), &self.focus_handle))
+                            .child(self.render_recent_section(recent_tab_index))
+                            .child(configure_section.render(configure_tab_index, &self.focus_handle)),
                     )
-                    .child(first_section.render(Default::default(), &self.focus_handle))
-                    .child(second_section)
-                    .when(ai_enabled && !showing_recent_projects, |this| {
-                        let agent_tab_index = next_tab_index;
-                        next_tab_index += 1;
-                        this.child(self.render_agent_card(agent_tab_index, cx))
-                    })
-                    .when(!self.fallback_to_recent_projects, |this| {
-                        this.child(
-                            v_flex().gap_4().child(Divider::horizontal()).child(
-                                Button::new("welcome-exit", "Return to Onboarding")
-                                    .tab_index(next_tab_index as isize)
-                                    .full_width()
-                                    .label_size(LabelSize::XSmall)
-                                    .on_click(|_, window, cx| {
-                                        window.dispatch_action(OpenOnboarding.boxed_clone(), cx);
-                                    }),
-                            ),
-                        )
-                    }),
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w(rems(18.))
+                            .max_w(rems(28.))
+                            .child(self.render_walkthroughs(walkthrough_tab_index, cx)),
+                    ),
             )
     }
 }
@@ -537,6 +600,26 @@ impl Item for WelcomePage {
     fn to_item_events(event: &Self::Event, f: &mut dyn FnMut(crate::item::ItemEvent)) {
         f(*event)
     }
+}
+
+
+fn project_path_display(paths: &PathList) -> String {
+    let Some(path) = paths.paths().first() else {
+        return String::new();
+    };
+    let parent = path.parent().unwrap_or(path.as_ref());
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = Path::new(&home);
+        if let Ok(stripped) = parent.strip_prefix(home) {
+            let rest = stripped.display().to_string();
+            return if rest.is_empty() {
+                "~".to_string()
+            } else {
+                format!("~/{rest}")
+            };
+        }
+    }
+    parent.display().to_string()
 }
 
 impl crate::SerializableItem for WelcomePage {
