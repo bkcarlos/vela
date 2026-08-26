@@ -1,10 +1,9 @@
 use crate::{
-    NewFile, Open, OpenMode, PathList, RecentWorkspace, SerializedWorkspaceLocation,
+    NewFile, Open, OpenFiles, OpenMode, PathList, RecentWorkspace, SerializedWorkspaceLocation,
     Workspace, WorkspaceSettings,
     item::{Item, ItemEvent},
     persistence::WorkspaceDb,
 };
-use agent_settings::AgentSettings;
 use git::Clone as GitClone;
 use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
@@ -20,8 +19,7 @@ use std::path::Path;
 use ui::{ButtonLike, prelude::*};
 use util::ResultExt;
 use vela_actions::{
-    Extensions, OpenKeymap, OpenOnboarding, OpenRecent, OpenRemote, OpenSettings,
-    assistant::ToggleFocus, command_palette,
+    Extensions, OpenOnboarding, OpenRecent, OpenRemote, OpenSettings, command_palette,
 };
 
 #[derive(PartialEq, Clone, Debug, Deserialize, Serialize, JsonSchema, Action)]
@@ -215,7 +213,7 @@ impl SectionEntry {
     }
 }
 
-const START: Section<4> = Section {
+const START: Section<5> = Section {
     title: "Start",
     entries: [
         SectionEntry {
@@ -224,8 +222,13 @@ const START: Section<4> = Section {
             action: &NewFile,
         },
         SectionEntry {
+            icon: IconName::File,
+            title: "Open File...",
+            action: &OpenFiles,
+        },
+        SectionEntry {
             icon: IconName::FolderOpen,
-            title: "Open...",
+            title: "Open Folder...",
             action: &Open::DEFAULT,
         },
         SectionEntry {
@@ -240,35 +243,6 @@ const START: Section<4> = Section {
                 from_existing_connection: false,
                 create_new_window: None,
             },
-        },
-    ],
-};
-
-const CONFIGURE: Section<4> = Section {
-    title: "Configure",
-    entries: [
-        SectionEntry {
-            icon: IconName::Settings,
-            title: "Open Settings",
-            action: &OpenSettings,
-        },
-        SectionEntry {
-            icon: IconName::Keyboard,
-            title: "Customize Keymaps",
-            action: &OpenKeymap,
-        },
-        SectionEntry {
-            icon: IconName::Blocks,
-            title: "Explore Extensions",
-            action: &Extensions {
-                category_filter: None,
-                id: None,
-            },
-        },
-        SectionEntry {
-            icon: IconName::ListCollapse,
-            title: "Open Command Palette",
-            action: &command_palette::Toggle,
         },
     ],
 };
@@ -332,12 +306,18 @@ impl WelcomePage {
         })
         .detach();
 
-        WelcomePage {
-            workspace,
+        let page = WelcomePage {
+            workspace: workspace.clone(),
             focus_handle,
             fallback_to_recent_projects,
             recent_workspaces: None,
+        };
+        if let Some(workspace) = workspace.upgrade() {
+            workspace.update(cx, |workspace, cx| {
+                close_agent_panel(workspace, window, cx);
+            });
         }
+        page
     }
 
     fn select_next(&mut self, _: &SelectNext, window: &mut Window, cx: &mut Context<Self>) {
@@ -442,8 +422,7 @@ impl WelcomePage {
             )
     }
 
-    fn render_walkthroughs(&self, start_tab_index: usize, cx: &mut Context<Self>) -> impl IntoElement {
-        let ai_enabled = AgentSettings::get_global(cx).enabled(cx);
+    fn render_walkthroughs(&self, start_tab_index: usize, _cx: &mut Context<Self>) -> impl IntoElement {
         let focus = self.focus_handle.clone();
         let mut tab_index = start_tab_index;
 
@@ -478,19 +457,6 @@ impl WelcomePage {
         });
         tab_index += 1;
 
-        if ai_enabled {
-            cards.push(WalkthroughCard {
-                icon: IconName::Vela,
-                title: "Collaborate with Agents".into(),
-                subtitle: "Run threads, mix ACP-compatible agents, and keep work conflict-free."
-                    .into(),
-                action: ToggleFocus.boxed_clone(),
-                tab_index,
-                focus_handle: focus.clone(),
-            });
-            tab_index += 1;
-        }
-
         cards.push(WalkthroughCard {
             icon: IconName::Blocks,
             title: "Explore Extensions".into(),
@@ -515,12 +481,9 @@ impl WelcomePage {
 impl Render for WelcomePage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let start_section = START;
-        let configure_section = CONFIGURE;
         let start_entries = start_section.entries.len();
-        let configure_entries = configure_section.entries.len();
         let recent_tab_index = start_entries;
-        let configure_tab_index = recent_tab_index + 10;
-        let walkthrough_tab_index = configure_tab_index + configure_entries;
+        let walkthrough_tab_index = recent_tab_index + 10;
 
         h_flex()
             .key_context("Welcome")
@@ -560,8 +523,7 @@ impl Render for WelcomePage {
                                     ),
                             )
                             .child(start_section.render(Default::default(), &self.focus_handle))
-                            .child(self.render_recent_section(recent_tab_index))
-                            .child(configure_section.render(configure_tab_index, &self.focus_handle)),
+                            .child(self.render_recent_section(recent_tab_index)),
                     )
                     .child(
                         v_flex()
@@ -597,11 +559,29 @@ impl Item for WelcomePage {
         false
     }
 
+    fn added_to_workspace(
+        &mut self,
+        workspace: &mut Workspace,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        close_agent_panel(workspace, window, cx);
+    }
+
     fn to_item_events(event: &Self::Event, f: &mut dyn FnMut(crate::item::ItemEvent)) {
         f(*event)
     }
 }
 
+
+
+fn close_agent_panel(workspace: &mut Workspace, window: &mut Window, cx: &mut gpui::App) {
+    if let Some(position) = workspace.agent_panel_position(cx) {
+        workspace
+            .dock_at_position(position)
+            .update(cx, |dock, cx| dock.set_open(false, window, cx));
+    }
+}
 
 fn project_path_display(paths: &PathList) -> String {
     let Some(path) = paths.paths().first() else {

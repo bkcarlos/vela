@@ -803,15 +803,16 @@ impl TitleBar {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let Some(name) = name else {
+            // Empty window / welcome page: recents live on the Welcome page,
+            // not in the title bar (VS Code-style).
+            return div().into_any_element();
+        };
         let workspace = self.workspace.clone();
 
-        let is_project_selected = name.is_some();
+        let is_project_selected = true;
 
-        let display_name = if let Some(ref name) = name {
-            util::truncate_and_trailoff(name, MAX_PROJECT_NAME_LENGTH)
-        } else {
-            "Open Recent Project".to_string()
-        };
+        let display_name = util::truncate_and_trailoff(&name, MAX_PROJECT_NAME_LENGTH);
 
         let is_sidebar_open = self
             .multi_workspace
