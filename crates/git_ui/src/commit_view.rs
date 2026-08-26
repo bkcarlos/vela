@@ -74,7 +74,7 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct CommitView {
-    commit: CommitDetails,
+    pub(crate) commit: CommitDetails,
     editor: Entity<SplittableEditor>,
     message: Entity<Markdown>,
     message_expanded: bool,
@@ -239,7 +239,7 @@ impl CommitView {
             .detach();
     }
 
-    fn new(
+    pub(crate) fn new(
         commit: CommitDetails,
         commit_diff: CommitDiff,
         repository: Entity<Repository>,

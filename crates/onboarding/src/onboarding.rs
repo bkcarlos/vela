@@ -24,7 +24,6 @@ pub use workspace::welcome::ShowWelcome;
 use workspace::welcome::WelcomePage;
 use workspace::{
     AppState, Workspace, WorkspaceId,
-    dock::DockPosition,
     item::{Item, ItemEvent},
     notifications::NotifyResultExt as _,
     open_new, register_serializable_item, with_active_or_new_workspace,
@@ -181,19 +180,18 @@ pub fn init(cx: &mut App) {
 }
 
 pub fn show_onboarding_view(app_state: Arc<AppState>, cx: &mut App) -> Task<anyhow::Result<()>> {
-    telemetry::event!("Onboarding Page Opened");
+    telemetry::event!("Welcome Page Opened");
     open_new(
         Default::default(),
         app_state,
         cx,
         |workspace, window, cx| {
             {
-                workspace.toggle_dock(DockPosition::Left, window, cx);
-                let onboarding_page = Onboarding::new(workspace, cx);
-                workspace.add_item_to_center(Box::new(onboarding_page.clone()), window, cx);
-
-                window.focus(&onboarding_page.focus_handle(cx), cx);
-
+                let welcome_page = cx.new(|cx| {
+                    WelcomePage::new(workspace.weak_handle(), true, window, cx)
+                });
+                workspace.add_item_to_center(Box::new(welcome_page.clone()), window, cx);
+                window.focus(&welcome_page.focus_handle(cx), cx);
                 cx.notify();
             };
             let kvp = KeyValueStore::global(cx);

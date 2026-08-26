@@ -5,6 +5,7 @@ use crate::commit_context_menu::{
 use crate::commit_modal::CommitModal;
 use crate::commit_tooltip::{CommitAvatar, CommitTooltip};
 use crate::commit_view::CommitView;
+use crate::git_graph::GitGraph;
 use crate::git_panel_settings::GitPanelScrollbarAccessor;
 use crate::project_diff::{DeployBranchDiff, Diff, ProjectDiff};
 use crate::remote_output::{self, RemoteAction, SuccessMessage};
@@ -956,6 +957,7 @@ pub struct GitPanel {
     commit_history: CommitHistory,
     focused_history_entry: Option<usize>,
     history_keyboard_nav: bool,
+    history_graph: Option<Entity<GitGraph>>,
     _commit_message_buffer_subscription: Option<Subscription>,
     _repo_subscriptions: Vec<Subscription>,
     _settings_subscription: Subscription,
@@ -1258,6 +1260,7 @@ impl GitPanel {
                 commit_history: CommitHistory::Loading,
                 focused_history_entry: None,
                 history_keyboard_nav: false,
+                history_graph: None,
                 _commit_message_buffer_subscription: None,
                 _repo_subscriptions: Vec::new(),
                 _settings_subscription,
@@ -4364,6 +4367,7 @@ impl GitPanel {
         self.reopen_commit_buffer(window, cx);
         self.preload_commit_history(cx);
         if self.active_tab == GitPanelTab::History {
+            self.ensure_history_graph(window, cx);
             self.load_commit_history(cx);
         }
         self.update_visible_entries_task = cx.spawn_in(window, async move |_, cx| {
@@ -6136,13 +6140,66 @@ impl GitPanel {
             ))
     }
 
+    fn ensure_history_graph(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(repo) = self.active_repository.as_ref() else {
+            self.history_graph = None;
+            return;
+        };
+        let repo_id = repo.read(cx).id;
+        let git_store = self.project.read(cx).git_store().clone();
+        let workspace = self.workspace.clone();
+        let log_source = LogSource::All;
+
+        if let Some(graph) = &self.history_graph {
+            graph.update(cx, |graph, cx| {
+                graph.set_repo_id(repo_id, cx);
+                graph.set_log_source(log_source, cx);
+            });
+            return;
+        }
+
+        self.history_graph = Some(cx.new(|cx| {
+            let mut graph = GitGraph::new(
+                repo_id,
+                git_store,
+                workspace,
+                Some(LogSource::All),
+                window,
+                cx,
+            );
+            graph.embedded = true;
+            graph
+        }));
+    }
+
+    pub fn show_history_for_source(
+        &mut self,
+        repo_id: project::git_store::RepositoryId,
+        log_source: LogSource,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.set_active_tab(GitPanelTab::History, window, cx);
+        self.ensure_history_graph(window, cx);
+        if let Some(graph) = &self.history_graph {
+            graph.update(cx, |graph, cx| {
+                graph.set_repo_id(repo_id, cx);
+                graph.set_log_source(log_source, cx);
+            });
+            graph.focus_handle(cx).focus(window, cx);
+        }
+    }
+
     fn render_history_tab(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().flex_1().size_full().overflow_hidden().map(|this| {
             let has_repo = self.active_repository.is_some();
+            if !has_repo {
+                return this.child(Self::render_history_placeholder("No repository found"));
+            }
+            if let Some(graph) = self.history_graph.clone() {
+                return this.child(graph);
+            }
             match &self.commit_history {
-                _ if !has_repo => {
-                    this.child(Self::render_history_placeholder("No repository found"))
-                }
                 CommitHistory::Error(_) => this.child(Self::render_history_placeholder(
                     "Failed to load commit history",
                 )),
@@ -6283,7 +6340,12 @@ impl GitPanel {
         self.active_tab = tab;
         match tab {
             GitPanelTab::History => {
-                self.focus_handle.focus(window, cx);
+                self.ensure_history_graph(window, cx);
+                if let Some(graph) = &self.history_graph {
+                    graph.focus_handle(cx).focus(window, cx);
+                } else {
+                    self.focus_handle.focus(window, cx);
+                }
                 self.load_commit_history(cx);
             }
             GitPanelTab::Changes => {
