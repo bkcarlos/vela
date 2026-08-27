@@ -1248,7 +1248,7 @@ impl TerminalBuilder {
 
                 (
                     TerminalType::Pty {
-                        pty_tx,
+                        resources: PtyResources::Active(pty_tx),
                         info: Arc::new(pty_info),
                     },
                     None,
@@ -1450,9 +1450,16 @@ impl TerminalBuilder {
     }
 }
 
+/// Separates retained PTY process metadata from resources needed only while
+/// the terminal is live.
+enum PtyResources {
+    Active(PtySender),
+    Released,
+}
+
 enum TerminalType {
     Pty {
-        pty_tx: PtySender,
+        resources: PtyResources,
         info: Arc<PtyProcessInfo>,
     },
     DisplayOnly,
@@ -1662,7 +1669,11 @@ impl Terminal {
 
                 self.last_content.terminal_bounds = new_bounds;
 
-                if let TerminalType::Pty { pty_tx, .. } = &self.terminal_type {
+                if let TerminalType::Pty {
+                    resources: PtyResources::Active(pty_tx),
+                    ..
+                } = &self.terminal_type
+                {
                     pty_tx.resize(new_bounds);
                 }
 
@@ -2029,7 +2040,11 @@ impl Terminal {
         let input = input.into();
         #[cfg(any(test, feature = "test-support"))]
         self.pty_write_log.borrow_mut().push(input.to_vec());
-        if let TerminalType::Pty { pty_tx, .. } = &self.terminal_type {
+        if let TerminalType::Pty {
+            resources: PtyResources::Active(pty_tx),
+            ..
+        } = &self.terminal_type
+        {
             if log::log_enabled!(log::Level::Debug) {
                 if let Ok(str) = str::from_utf8(&input) {
                     log::debug!("Writing to PTY: {:?}", str);
@@ -2118,6 +2133,37 @@ impl Terminal {
 
     pub fn is_pty(&self) -> bool {
         matches!(self.terminal_type, TerminalType::Pty { .. })
+    }
+
+
+    /// Returns whether this terminal still owns its live PTY sender.
+    pub fn has_active_pty_resources(&self) -> bool {
+        matches!(
+            self.terminal_type,
+            TerminalType::Pty {
+                resources: PtyResources::Active(_),
+                ..
+            }
+        )
+    }
+
+    /// Releases live PTY resources while retaining process metadata and buffered output.
+    ///
+    /// Calling this method after the resources have already been released is a no-op.
+    pub fn release_pty_resources(&mut self) {
+        let TerminalType::Pty { resources, info } = &mut self.terminal_type else {
+            return;
+        };
+        let PtyResources::Active(pty_tx) = std::mem::replace(resources, PtyResources::Released)
+        else {
+            return;
+        };
+        let info = info.clone();
+
+        let kill_processes =
+            terminate_processes_with_grace_period(info, self.background_executor.clone());
+        pty_tx.shutdown();
+        self.background_executor.spawn(kill_processes).detach();
     }
 
     pub fn write_init_command_after_startup(
@@ -3177,14 +3223,7 @@ impl Drop for Terminal {
         if let Some(subprocess) = self.subprocess.take() {
             subprocess.kill();
         }
-        if let TerminalType::Pty { pty_tx, info } =
-            std::mem::replace(&mut self.terminal_type, TerminalType::DisplayOnly)
-        {
-            let kill_processes =
-                terminate_processes_with_grace_period(info, self.background_executor.clone());
-            pty_tx.shutdown();
-            self.background_executor.spawn(kill_processes).detach();
-        }
+        self.release_pty_resources();
     }
 }
 
