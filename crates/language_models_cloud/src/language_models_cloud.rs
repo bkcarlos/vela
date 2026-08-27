@@ -494,6 +494,7 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                 let http_client = self.http_client.clone();
                 let token_provider = self.token_provider.clone();
                 let auth_context = token_provider.auth_context(cx);
+                let executor = cx.background_executor().clone();
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -519,10 +520,14 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                     .await?;
 
                     let mut mapper = AnthropicEventMapper::new(provider_name.clone());
-                    Ok(map_cloud_completion_events(
+                    let events = map_cloud_completion_events(
                         Box::pin(response_lines(response, includes_status_messages)),
                         &provider_name,
                         move |event| mapper.map_event(event),
+                    );
+                    Ok(language_model::stream_in_background(
+                        events.boxed(),
+                        executor,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -559,6 +564,7 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                 }
 
                 let auth_context = token_provider.auth_context(cx);
+                let executor = cx.background_executor().clone();
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -584,10 +590,14 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                     .await?;
 
                     let mut mapper = OpenAiResponseEventMapper::new();
-                    Ok(map_cloud_completion_events(
+                    let events = map_cloud_completion_events(
                         Box::pin(response_lines(response, includes_status_messages)),
                         &provider_name,
                         move |event| mapper.map_event(event),
+                    );
+                    Ok(language_model::stream_in_background(
+                        events.boxed(),
+                        executor,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -609,6 +619,7 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                     Err(error) => return async move { Err(error.into()) }.boxed(),
                 };
                 let auth_context = token_provider.auth_context(cx);
+                let executor = cx.background_executor().clone();
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -634,10 +645,14 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                     .await?;
 
                     let mut mapper = OpenAiEventMapper::new();
-                    Ok(map_cloud_completion_events(
+                    let events = map_cloud_completion_events(
                         Box::pin(response_lines(response, includes_status_messages)),
                         &provider_name,
                         move |event| mapper.map_event(event),
+                    );
+                    Ok(language_model::stream_in_background(
+                        events.boxed(),
+                        executor,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
@@ -652,6 +667,7 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                         Err(error) => return async move { Err(error.into()) }.boxed(),
                     };
                 let auth_context = token_provider.auth_context(cx);
+                let executor = cx.background_executor().clone();
                 let future = self.request_limiter.stream(async move {
                     let PerformLlmCompletionResponse {
                         response,
@@ -677,10 +693,14 @@ impl<TP: CloudLlmTokenProvider + 'static> LanguageModel for CloudLanguageModel<T
                     .await?;
 
                     let mut mapper = GoogleEventMapper::new();
-                    Ok(map_cloud_completion_events(
+                    let events = map_cloud_completion_events(
                         Box::pin(response_lines(response, includes_status_messages)),
                         &provider_name,
                         move |event| mapper.map_event(event),
+                    );
+                    Ok(language_model::stream_in_background(
+                        events.boxed(),
+                        executor,
                     ))
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()

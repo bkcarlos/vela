@@ -592,9 +592,13 @@ impl LanguageModel for OpenAiSubscribedLanguageModel {
                 .await
         });
 
+        let executor = cx.background_executor().clone();
         async move {
             let mapper = OpenAiResponseEventMapper::new();
-            Ok(mapper.map_stream(future.await?.boxed()).boxed())
+            Ok(language_model::stream_in_background(
+                mapper.map_stream(future.await?.boxed()).boxed(),
+                executor,
+            ))
         }
         .boxed()
     }

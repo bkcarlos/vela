@@ -684,9 +684,13 @@ impl LanguageModel for OpenCodeLanguageModel {
                 };
                 let stream =
                     self.stream_anthropic(anthropic_request, http_client, extra_headers, cx);
+                let executor = cx.background_executor().clone();
                 async move {
                     let mapper = AnthropicEventMapper::new(PROVIDER_NAME);
-                    Ok(mapper.map_stream(stream.await?).boxed())
+                    Ok(language_model::stream_in_background(
+                        mapper.map_stream(stream.await?).boxed(),
+                        executor,
+                    ))
                 }
                 .boxed()
             }
@@ -714,9 +718,13 @@ impl LanguageModel for OpenCodeLanguageModel {
                 };
                 let stream =
                     self.stream_openai_chat(openai_request, http_client, extra_headers, cx);
+                let executor = cx.background_executor().clone();
                 async move {
                     let mapper = OpenAiEventMapper::new();
-                    Ok(mapper.map_stream(stream.await?).boxed())
+                    Ok(language_model::stream_in_background(
+                        mapper.map_stream(stream.await?).boxed(),
+                        executor,
+                    ))
                 }
                 .boxed()
             }
@@ -736,9 +744,13 @@ impl LanguageModel for OpenCodeLanguageModel {
                 );
                 let stream =
                     self.stream_openai_response(response_request, http_client, extra_headers, cx);
+                let executor = cx.background_executor().clone();
                 async move {
                     let mapper = OpenAiResponseEventMapper::new();
-                    Ok(mapper.map_stream(stream.await?).boxed())
+                    Ok(language_model::stream_in_background(
+                        mapper.map_stream(stream.await?).boxed(),
+                        executor,
+                    ))
                 }
                 .boxed()
             }
@@ -755,9 +767,13 @@ impl LanguageModel for OpenCodeLanguageModel {
                     Err(error) => return async move { Err(error.into()) }.boxed(),
                 };
                 let stream = self.stream_google(google_request, http_client, extra_headers, cx);
+                let executor = cx.background_executor().clone();
                 async move {
                     let mapper = GoogleEventMapper::new();
-                    Ok(mapper.map_stream(stream.await?.boxed()).boxed())
+                    Ok(language_model::stream_in_background(
+                        mapper.map_stream(stream.await?.boxed()).boxed(),
+                        executor,
+                    ))
                 }
                 .boxed()
             }

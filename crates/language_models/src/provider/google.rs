@@ -367,9 +367,11 @@ impl LanguageModel for GoogleLanguageModel {
             Err(error) => return async move { Err(error.into()) }.boxed(),
         };
         let request = self.stream_completion(request, cx);
+        let executor = cx.background_executor().clone();
         let future = self.request_limiter.stream(async move {
             let response = request.await.map_err(LanguageModelCompletionError::from)?;
-            Ok(GoogleEventMapper::new().map_stream(response))
+            let events = GoogleEventMapper::new().map_stream(response);
+            Ok(language_model::stream_in_background(events.boxed(), executor))
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

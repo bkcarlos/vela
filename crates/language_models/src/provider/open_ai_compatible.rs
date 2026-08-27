@@ -438,9 +438,13 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
                 Err(error) => return async move { Err(error.into()) }.boxed(),
             };
             let completions = self.stream_completion(request, cx);
+            let executor = cx.background_executor().clone();
             async move {
                 let mapper = OpenAiEventMapper::new();
-                Ok(mapper.map_stream(completions.await?).boxed())
+                Ok(language_model::stream_in_background(
+                    mapper.map_stream(completions.await?).boxed(),
+                    executor,
+                ))
             }
             .boxed()
         } else {
@@ -455,9 +459,13 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
                 supports_none_reasoning_effort(&self.model),
             );
             let completions = self.stream_response(request, cx);
+            let executor = cx.background_executor().clone();
             async move {
                 let mapper = OpenAiResponseEventMapper::new();
-                Ok(mapper.map_stream(completions.await?).boxed())
+                Ok(language_model::stream_in_background(
+                    mapper.map_stream(completions.await?).boxed(),
+                    executor,
+                ))
             }
             .boxed()
         }
