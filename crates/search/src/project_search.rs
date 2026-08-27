@@ -52,7 +52,7 @@ use util::{ResultExt as _, paths::PathMatcher, rel_path::RelPath};
 use workspace::{
     DeploySearch, ItemNavHistory, NewSearch, Workspace, WorkspaceId,
     dock::{DockPosition, Panel, PanelEvent},
-    item::{Item, ItemEvent, ItemHandle, SaveOptions},
+    item::{Item, ItemBufferKind, ItemEvent, ItemHandle, SaveOptions},
     searchable::{Direction, SearchEvent, SearchToken, SearchableItem, SearchableItemHandle},
 };
 
@@ -226,6 +226,7 @@ fn contains_uppercase(str: &str) -> bool {
 
 pub struct ProjectSearch {
     pub(crate) project: Entity<Project>,
+    workspace: WeakEntity<Workspace>,
     pub excerpts: Entity<MultiBuffer>,
     pub pending_search: Option<Task<Option<SearchResults<SearchResult>>>>,
     pub match_ranges: Vec<Range<Anchor>>,
@@ -238,6 +239,7 @@ pub struct ProjectSearch {
     search_excluded_history_cursor: SearchHistoryCursor,
     pub project_search_turning_into_text_finder: Arc<AtomicBool>,
     _excerpts_subscription: Subscription,
+    _workspace_subscription: Option<Subscription>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -339,7 +341,7 @@ impl ProjectSearchPanel {
     pub fn new(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let weak_workspace = workspace.weak_handle();
         let project = workspace.project().clone();
-        let search_entity = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search_entity = cx.new(|cx| ProjectSearch::new(project, weak_workspace.clone(), cx));
         let search_view =
             cx.new(|cx| ProjectSearchView::new(weak_workspace, search_entity, window, cx, None));
         search_view.update(cx, |search_view, cx| {
@@ -472,13 +474,19 @@ impl Panel for ProjectSearchPanel {
 }
 
 impl ProjectSearch {
-    pub fn new(project: Entity<Project>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        project: Entity<Project>,
+        workspace: WeakEntity<Workspace>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let capability = project.read(cx).capability();
         let excerpts = cx.new(|_| MultiBuffer::new(capability));
-        let subscription = Self::subscribe_to_excerpts(&excerpts, cx);
+        let excerpts_subscription = Self::subscribe_to_excerpts(&excerpts, cx);
+        let workspace_subscription = Self::subscribe_to_workspace(&workspace, cx);
 
         Self {
             project,
+            workspace,
             excerpts,
             pending_search: Default::default(),
             match_ranges: Default::default(),
@@ -490,7 +498,8 @@ impl ProjectSearch {
             search_included_history_cursor: Default::default(),
             search_excluded_history_cursor: Default::default(),
             project_search_turning_into_text_finder: Arc::new(AtomicBool::new(false)),
-            _excerpts_subscription: subscription,
+            _excerpts_subscription: excerpts_subscription,
+            _workspace_subscription: workspace_subscription,
         }
     }
 
@@ -499,10 +508,12 @@ impl ProjectSearch {
             let excerpts = self
                 .excerpts
                 .update(cx, |excerpts, cx| cx.new(|cx| excerpts.clone(cx)));
-            let subscription = Self::subscribe_to_excerpts(&excerpts, cx);
+            let excerpts_subscription = Self::subscribe_to_excerpts(&excerpts, cx);
+            let workspace_subscription = Self::subscribe_to_workspace(&self.workspace, cx);
 
             Self {
                 project: self.project.clone(),
+                workspace: self.workspace.clone(),
                 excerpts,
                 pending_search: Default::default(),
                 match_ranges: self.match_ranges.clone(),
@@ -518,7 +529,8 @@ impl ProjectSearch {
                 search_included_history_cursor: self.search_included_history_cursor.clone(),
                 search_excluded_history_cursor: self.search_excluded_history_cursor.clone(),
                 project_search_turning_into_text_finder: Arc::new(AtomicBool::new(false)),
-                _excerpts_subscription: subscription,
+                _excerpts_subscription: excerpts_subscription,
+                _workspace_subscription: workspace_subscription,
             }
         })
     }
@@ -533,33 +545,55 @@ impl ProjectSearch {
         })
     }
 
+    fn subscribe_to_workspace(
+        workspace: &WeakEntity<Workspace>,
+        cx: &mut Context<Self>,
+    ) -> Option<Subscription> {
+        workspace.upgrade().map(|workspace| {
+            cx.subscribe(&workspace, |this, _, event, cx| {
+                if matches!(event, workspace::Event::ItemRemoved { .. }) {
+                    this.remove_closed_untitled_buffers(cx);
+                }
+            })
+        })
+    }
+
     fn remove_deleted_buffers(&mut self, cx: &mut Context<Self>) {
-        let deleted_buffer_ids = self
+        self.remove_stale_buffers(None, cx);
+    }
+
+    fn remove_closed_untitled_buffers(&mut self, cx: &mut Context<Self>) {
+        self.remove_stale_buffers(self.workspace.upgrade().as_ref(), cx);
+    }
+
+    fn remove_stale_buffers(
+        &mut self,
+        workspace: Option<&Entity<Workspace>>,
+        cx: &mut Context<Self>,
+    ) {
+        let stale_buffer_ids = self
             .excerpts
             .read(cx)
             .all_buffers_iter()
-            .filter(|buffer| {
-                buffer
-                    .read(cx)
-                    .file()
-                    .is_some_and(|file| file.disk_state().is_deleted())
-            })
+            .filter(|buffer| is_buffer_stale(&self.project, workspace, buffer, cx))
             .map(|buffer| buffer.read(cx).remote_id())
             .collect::<Vec<_>>();
 
-        if deleted_buffer_ids.is_empty() {
+        if stale_buffer_ids.is_empty() {
             return;
         }
 
         let snapshot = self.excerpts.update(cx, |excerpts, cx| {
-            for buffer_id in deleted_buffer_ids {
+            for buffer_id in stale_buffer_ids {
                 excerpts.remove_excerpts_for_buffer(buffer_id, cx);
             }
             excerpts.snapshot(cx)
         });
 
-        self.match_ranges
-            .retain(|range| snapshot.anchor_to_buffer_anchor(range.start).is_some());
+        if self.pending_search.is_none() {
+            self.match_ranges
+                .retain(|range| snapshot.anchor_to_buffer_anchor(range.start).is_some());
+        }
 
         cx.notify();
     }
@@ -2876,6 +2910,31 @@ fn register_workspace_action_for_present_search<A: Action>(
     });
 }
 
+
+fn is_buffer_stale(
+    project: &Entity<Project>,
+    workspace: Option<&Entity<Workspace>>,
+    buffer: &Entity<Buffer>,
+    cx: &App,
+) -> bool {
+    let buffer_entity_id = buffer.entity_id();
+    let buffer = buffer.read(cx);
+    if let Some(file) = buffer.file() {
+        file.disk_state().is_deleted()
+    } else if let Some(workspace) = workspace {
+        !workspace.read(cx).items(cx).any(|item| {
+            item.buffer_kind(cx) == ItemBufferKind::Singleton
+                && item.project_item_model_ids(cx).contains(&buffer_entity_id)
+        }) && !project
+            .read(cx)
+            .buffer_store()
+            .read(cx)
+            .is_shared(buffer.remote_id(), cx)
+    } else {
+        false
+    }
+}
+
 #[cfg(any(test, feature = "test-support"))]
 pub fn perform_project_search(
     search_view: &Entity<ProjectSearchView>,
@@ -2968,7 +3027,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search = cx.new(|cx| ProjectSearch::new(project, WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search, window, cx, None)
         });
@@ -3038,7 +3097,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search = cx.new(|cx| ProjectSearch::new(project, WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search, window, cx, None)
         });
@@ -3079,7 +3138,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search = cx.new(|cx| ProjectSearch::new(project, WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search, window, cx, None)
         });
@@ -3229,7 +3288,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project.clone(), cx));
+        let search = cx.new(|cx| ProjectSearch::new(project.clone(), WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
@@ -3402,7 +3461,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project.clone(), cx));
+        let search = cx.new(|cx| ProjectSearch::new(project.clone(), WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
@@ -4840,7 +4899,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project, cx));
+        let search = cx.new(|cx| ProjectSearch::new(project, WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
@@ -5193,7 +5252,7 @@ pub mod tests {
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
         let cx = &mut VisualTestContext::from_window(window.into(), cx);
-        let search = cx.new(|cx| ProjectSearch::new(project.clone(), cx));
+        let search = cx.new(|cx| ProjectSearch::new(project.clone(), WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
@@ -5364,7 +5423,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project.clone(), cx));
+        let search = cx.new(|cx| ProjectSearch::new(project.clone(), WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
@@ -5614,7 +5673,7 @@ pub mod tests {
         let workspace = window
             .read_with(cx, |mw, _| mw.workspace().clone())
             .unwrap();
-        let search = cx.new(|cx| ProjectSearch::new(project.clone(), cx));
+        let search = cx.new(|cx| ProjectSearch::new(project.clone(), WeakEntity::new_invalid(), cx));
         let search_view = cx.add_window(|window, cx| {
             ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
         });
