@@ -276,21 +276,24 @@ jobs:
         run: ./script/download-wasi-sdk
       - name: Build Linux release tarball
         run: ./script/bundle-linux
-      - name: Add checksum
+      - name: Add checksum and stage flat artifacts
         run: |
           cd target/release
           sha256sum vela-linux-x86_64.tar.gz | awk '{print $1}' > vela-linux-x86_64.tar.gz.sha256
           cd ../..
           sha256sum target/vela-remote-server-linux-x86_64.gz | awk '{print $1}' > target/vela-remote-server-linux-x86_64.gz.sha256
+          # upload-artifact preserves paths under a common prefix; staging flat
+          # keeps publish_release globs (.../vela-linux-x86_64-tar-gz/*.tar.gz) working.
+          mkdir -p target/linux-dist
+          cp target/release/vela-linux-x86_64.tar.gz target/linux-dist/
+          cp target/release/vela-linux-x86_64.tar.gz.sha256 target/linux-dist/
+          cp target/vela-remote-server-linux-x86_64.gz target/linux-dist/
+          cp target/vela-remote-server-linux-x86_64.gz.sha256 target/linux-dist/
       - name: Upload tarball artifact
         uses: actions/upload-artifact@v4
         with:
           name: vela-linux-x86_64-tar-gz
-          path: |
-            target/release/vela-linux-x86_64.tar.gz
-            target/release/vela-linux-x86_64.tar.gz.sha256
-            target/vela-remote-server-linux-x86_64.gz
-            target/vela-remote-server-linux-x86_64.gz.sha256
+          path: target/linux-dist/
           if-no-files-found: error
           retention-days: 14
 
