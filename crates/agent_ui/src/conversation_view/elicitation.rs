@@ -51,7 +51,7 @@ impl ElicitationFormState {
                                 editor.set_placeholder_text("Type a custom answer…", window, cx);
                             } else if name == "chat" {
                                 editor.set_placeholder_text(
-                                    "Ask a follow-up before deciding…",
+                                    "Ask a question or provide more context…",
                                     window,
                                     cx,
                                 );
@@ -1766,9 +1766,14 @@ impl<'a> ElicitationCard<'a> {
             .border_t_1()
             .border_color(cx.theme().colors().border.opacity(0.7))
             .child(
-                Label::new("Need to clarify something?")
+                Label::new("Chat about this")
                     .size(LabelSize::Small)
                     .weight(FontWeight::MEDIUM),
+            )
+            .child(
+                Label::new("Send a message without submitting the answers above.")
+                    .size(LabelSize::XSmall)
+                    .color(Color::Muted),
             )
             .child(
                 div()
@@ -2183,7 +2188,7 @@ impl<'a> ElicitationCard<'a> {
                     h_flex()
                         .gap_1()
                         .child(
-                            Button::new(("elicitation-chat", self.entry_ix), "Send follow-up")
+                            Button::new(("elicitation-chat", self.entry_ix), "Chat about this")
                                 .style(ButtonStyle::Outlined)
                                 .label_size(LabelSize::Small)
                                 .on_click(move |_, window, cx| {
