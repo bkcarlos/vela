@@ -5380,6 +5380,38 @@ mod tests {
     }
 
     #[gpui::test]
+    async fn test_dragged_binary_file_keeps_path_mention(cx: &mut TestAppContext) {
+        init_test(cx);
+        let (message_editor, editor, mut cx) = setup_paste_test_message_editor(
+            json!({"archive.zip": "PK\u{3}\u{4}binary content"}),
+            cx,
+        )
+        .await;
+        insert_dragged_project_paths(&message_editor, vec!["archive.zip"], &mut cx);
+
+        let expected_uri = MentionUri::File {
+            abs_path: path!("/project/archive.zip").into(),
+        }
+        .to_uri()
+        .to_string();
+
+        editor.update(&mut cx, |editor, cx| {
+            assert_eq!(editor.text(cx), format!("[@archive.zip]({expected_uri}) "));
+        });
+
+        let contents = mention_contents(&message_editor, &mut cx).await;
+        let [(uri, Mention::Link)] = contents.as_slice() else {
+            panic!("binary files should remain attached as path mentions");
+        };
+        assert_eq!(
+            uri,
+            &MentionUri::File {
+                abs_path: path!("/project/archive.zip").into(),
+            }
+        );
+    }
+
+    #[gpui::test]
     async fn test_paste_external_directory_path_inserts_directory_mention(cx: &mut TestAppContext) {
         init_test(cx);
         let (message_editor, editor, mut cx) = setup_paste_test_message_editor(

@@ -424,7 +424,11 @@ impl MentionSet {
 
         let buffer = project.update(cx, |project, cx| project.open_buffer(project_path, cx));
         cx.spawn(async move |_, cx| {
-            let buffer = buffer.await?;
+            let buffer = match buffer.await {
+                Ok(buffer) => buffer,
+                Err(error) if is_binary_file_error(&error) => return Ok(Mention::Link),
+                Err(error) => return Err(error),
+            };
             let buffer_content = outline::get_buffer_content_or_outline(
                 buffer.clone(),
                 Some(&abs_path.to_string_lossy()),
@@ -699,6 +703,12 @@ impl MentionSet {
             }
         })
     }
+}
+
+fn is_binary_file_error(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .any(|cause| cause.to_string() == "Binary files are not supported")
 }
 
 /// Computes disambiguated labels for a set of mentions, so that mentions sharing
