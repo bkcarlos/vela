@@ -4,12 +4,12 @@ use collections::{HashMap, HashSet};
 use component::{Component, ComponentScope, example_group_with_title, single_example};
 use editor::Editor;
 use futures::channel::oneshot;
-use gpui::{AnyElement, App, Div, Empty, Entity, Hsla, SharedString, Window, div};
+use gpui::{AnyElement, App, Div, Empty, Entity, FontWeight, Hsla, SharedString, Window, div};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use ui::{
-    Button, Checkbox, Color, Icon, IconName, IconSize, Indicator, Label, LabelSize, ToggleState,
-    prelude::*,
+    Button, ButtonStyle, Checkbox, Color, Icon, IconName, IconSize, Indicator, Label, LabelSize,
+    ToggleState, prelude::*,
 };
 
 #[derive(Clone)]
@@ -46,6 +46,15 @@ impl ElicitationFormState {
                             let mut editor = Editor::single_line(window, cx);
                             if let Some(default) = &schema.default {
                                 editor.set_text(default.clone(), window, cx);
+                            }
+                            if name.starts_with("other-") {
+                                editor.set_placeholder_text("Type a custom answer…", window, cx);
+                            } else if name == "chat" {
+                                editor.set_placeholder_text(
+                                    "Ask a follow-up before deciding…",
+                                    window,
+                                    cx,
+                                );
                             }
                             editor
                         });
@@ -1366,9 +1375,15 @@ impl<'a> ElicitationCard<'a> {
         };
 
         let is_ask_user = self.elicitation.ask_user_request.is_some();
-        let body = v_flex().gap_2().p_3().when(!is_ask_user, |this| {
-            this.child(Label::new(self.elicitation.request.message.clone()).size(LabelSize::Small))
-        });
+        let body = v_flex()
+            .gap_2()
+            .p_3()
+            .when(is_ask_user, |this| this.p_4())
+            .when(!is_ask_user, |this| {
+                this.child(
+                    Label::new(self.elicitation.request.message.clone()).size(LabelSize::Small),
+                )
+            });
         let body = match &self.elicitation.request.mode {
             acp::ElicitationMode::Form(mode) if is_pending && is_ask_user => {
                 body.child(self.render_ask_user(mode, cx))
@@ -1408,7 +1423,7 @@ impl<'a> ElicitationCard<'a> {
                             )
                             .child(
                                 Label::new(if is_ask_user {
-                                    "Ask User Question"
+                                    "Agent needs your input"
                                 } else {
                                     "Input Requested"
                                 })
@@ -1426,7 +1441,7 @@ impl<'a> ElicitationCard<'a> {
             .when(is_pending, |this| this.child(self.render_actions(cx)))
     }
 
-    fn render_ask_user(&self, mode: &acp::ElicitationFormMode, cx: &App) -> AnyElement {
+    fn render_ask_user(&self, _mode: &acp::ElicitationFormMode, cx: &App) -> AnyElement {
         let Some(state) = self.form_state else {
             return Empty.into_any_element();
         };
@@ -1435,54 +1450,341 @@ impl<'a> ElicitationCard<'a> {
         };
 
         v_flex()
-            .gap_3()
-            .children(request.questions.iter().enumerate().map(|(index, _)| {
-                let answer_key = format!("answer-{index}");
-                let other_key = format!("other-{index}");
+            .gap_4()
+            .children(
+                request
+                    .questions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, question)| {
+                        self.render_ask_user_question(
+                            index,
+                            request.questions.len(),
+                            question,
+                            state,
+                            cx,
+                        )
+                    }),
+            )
+            .when_some(state.fields.get("chat"), |this, field| {
+                this.child(self.render_ask_user_chat(field, state.field_errors.get("chat"), cx))
+            })
+            .into_any_element()
+    }
+
+    fn render_ask_user_question(
+        &self,
+        question_index: usize,
+        question_count: usize,
+        question: &acp_thread::AskUserQuestion,
+        state: &ElicitationFormState,
+        cx: &App,
+    ) -> Div {
+        let answer_key = format!("answer-{question_index}");
+        let other_key = format!("other-{question_index}");
+        let selected_values = match state.fields.get(&answer_key) {
+            Some(ElicitationFieldState::SingleSelect { value }) => {
+                value.iter().cloned().collect::<HashSet<_>>()
+            }
+            Some(ElicitationFieldState::MultiSelect(values)) => values.clone(),
+            _ => HashSet::default(),
+        };
+        let error = state.field_errors.get(&answer_key);
+
+        v_flex()
+            .gap_2()
+            .when(question_index > 0, |this| {
+                this.pt_4()
+                    .border_t_1()
+                    .border_color(cx.theme().colors().border.opacity(0.7))
+            })
+            .child(
+                h_flex()
+                    .w_full()
+                    .justify_between()
+                    .child(
+                        Label::new(question.header.clone())
+                            .size(LabelSize::XSmall)
+                            .weight(FontWeight::SEMIBOLD)
+                            .color(Color::Muted),
+                    )
+                    .when(question_count > 1, |this| {
+                        this.child(
+                            Label::new(format!(
+                                "Question {} of {}",
+                                question_index + 1,
+                                question_count
+                            ))
+                            .size(LabelSize::XSmall)
+                            .color(Color::Muted),
+                        )
+                    }),
+            )
+            .child(
+                Label::new(question.question.clone())
+                    .size(LabelSize::Default)
+                    .weight(FontWeight::MEDIUM),
+            )
+            .child(
                 v_flex()
-                    .gap_2()
-                    .when(index > 0, |this| {
-                        this.pt_3()
-                            .border_t_1()
-                            .border_color(cx.theme().colors().border.opacity(0.8))
-                    })
+                    .gap_1()
                     .children(
-                        [answer_key, other_key]
-                            .into_iter()
-                            .filter_map(|field_name| {
-                                let property = mode.requested_schema.properties.get(&field_name)?;
-                                let field = state.fields.get(&field_name)?;
-                                Some(self.render_field(
-                                    &field_name,
-                                    property,
-                                    field,
-                                    state.field_errors.get(&field_name),
+                        question
+                            .options
+                            .iter()
+                            .enumerate()
+                            .map(|(option_index, option)| {
+                                self.render_ask_user_option(
+                                    question_index,
+                                    option_index,
+                                    option,
+                                    question.multi_select,
+                                    selected_values.contains(&option.label),
+                                    error.is_some(),
                                     cx,
-                                ))
+                                )
                             }),
                     )
-            }))
-            .when_some(
-                mode.requested_schema
-                    .properties
-                    .get("chat")
-                    .zip(state.fields.get("chat")),
-                |this, (property, field)| {
-                    this.child(
-                        v_flex()
-                            .pt_3()
-                            .border_t_1()
-                            .border_color(cx.theme().colors().border.opacity(0.8))
-                            .child(self.render_field(
-                                "chat",
-                                property,
-                                field,
-                                state.field_errors.get("chat"),
-                                cx,
-                            )),
-                    )
+                    .when_some(state.fields.get(&other_key), |this, field| {
+                        this.child(self.render_ask_user_other(
+                            question_index,
+                            question.options.len(),
+                            field,
+                            state.field_errors.get(&other_key),
+                            cx,
+                        ))
+                    }),
+            )
+            .when_some(error.cloned(), |this, error| {
+                this.child(Label::new(error).size(LabelSize::Small).color(Color::Error))
+            })
+    }
+
+    fn render_ask_user_option(
+        &self,
+        question_index: usize,
+        option_index: usize,
+        option: &acp_thread::AskUserOption,
+        multi_select: bool,
+        is_selected: bool,
+        has_error: bool,
+        cx: &App,
+    ) -> AnyElement {
+        let field_name = format!("answer-{question_index}");
+        let option_value = option.label.clone();
+        let border_color = if has_error {
+            Color::Error.color(cx)
+        } else if is_selected {
+            Color::Accent.color(cx)
+        } else {
+            cx.theme().colors().border.opacity(0.7)
+        };
+        let row_background = Self::option_row_background(is_selected, cx);
+        let hover_background = Self::option_row_hover_background(is_selected, cx);
+        let elicitation_id = self.elicitation.id.clone();
+        let option_number = option_index + 1;
+        let control = if multi_select {
+            Checkbox::new(
+                format!(
+                    "ask-user-option-{}-{question_index}-{option_index}",
+                    self.entry_ix
+                ),
+                if is_selected {
+                    ToggleState::Selected
+                } else {
+                    ToggleState::Unselected
                 },
             )
+            .into_any_element()
+        } else {
+            Self::render_radio_indicator(
+                is_selected,
+                border_color,
+                Self::option_control_background(cx),
+            )
+            .into_any_element()
+        };
+
+        let on_single_select_change = self.handlers.on_single_select_change.clone();
+        let on_multi_select_change = self.handlers.on_multi_select_change.clone();
+        h_flex()
+            .id(format!(
+                "ask-user-row-{}-{question_index}-{option_index}",
+                self.entry_ix
+            ))
+            .w_full()
+            .min_h(rems_from_px(42.))
+            .items_start()
+            .gap_2()
+            .rounded_md()
+            .border_1()
+            .border_color(border_color)
+            .bg(row_background)
+            .px_2()
+            .py_1p5()
+            .hover(move |this| this.bg(hover_background).cursor_pointer())
+            .on_click(move |_, _window, cx| {
+                if multi_select {
+                    on_multi_select_change(
+                        elicitation_id.clone(),
+                        field_name.clone(),
+                        option_value.clone(),
+                        !is_selected,
+                        cx,
+                    );
+                } else {
+                    on_single_select_change(
+                        elicitation_id.clone(),
+                        field_name.clone(),
+                        option_value.clone(),
+                        cx,
+                    );
+                }
+            })
+            .child(Self::render_ask_user_option_number(
+                option_number,
+                is_selected,
+                cx,
+            ))
+            .child(
+                v_flex()
+                    .min_w_0()
+                    .flex_1()
+                    .gap_0p5()
+                    .child(
+                        Label::new(option.label.clone())
+                            .size(LabelSize::Small)
+                            .weight(FontWeight::MEDIUM),
+                    )
+                    .when(!option.description.is_empty(), |this| {
+                        this.child(
+                            Label::new(option.description.clone())
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        )
+                    }),
+            )
+            .child(div().mt_0p5().flex_none().child(control))
+            .into_any_element()
+    }
+
+    fn render_ask_user_option_number(number: usize, is_selected: bool, cx: &App) -> Div {
+        div()
+            .size_5()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_sm()
+            .bg(if is_selected {
+                Color::Accent.color(cx).opacity(0.18)
+            } else {
+                cx.theme().colors().element_background
+            })
+            .child(
+                Label::new(number.to_string())
+                    .size(LabelSize::XSmall)
+                    .weight(FontWeight::SEMIBOLD)
+                    .color(if is_selected {
+                        Color::Accent
+                    } else {
+                        Color::Muted
+                    }),
+            )
+    }
+
+    fn render_ask_user_other(
+        &self,
+        question_index: usize,
+        option_count: usize,
+        field: &ElicitationFieldState,
+        error: Option<&SharedString>,
+        cx: &App,
+    ) -> AnyElement {
+        let ElicitationFieldState::Text(editor) = field else {
+            return Empty.into_any_element();
+        };
+        let has_value = !editor.read(cx).text(cx).trim().is_empty();
+        let border_color = if error.is_some() {
+            Color::Error.color(cx)
+        } else if has_value {
+            Color::Accent.color(cx)
+        } else {
+            cx.theme().colors().border.opacity(0.7)
+        };
+
+        h_flex()
+            .id(format!("ask-user-other-{}-{question_index}", self.entry_ix))
+            .w_full()
+            .min_h(rems_from_px(42.))
+            .items_start()
+            .gap_2()
+            .rounded_md()
+            .border_1()
+            .border_color(border_color)
+            .bg(cx.theme().colors().editor_background)
+            .px_2()
+            .py_1p5()
+            .child(Self::render_ask_user_option_number(
+                option_count + 1,
+                has_value,
+                cx,
+            ))
+            .child(
+                v_flex()
+                    .min_w_0()
+                    .flex_1()
+                    .gap_1()
+                    .child(
+                        Label::new("Other")
+                            .size(LabelSize::Small)
+                            .weight(FontWeight::MEDIUM),
+                    )
+                    .child(div().w_full().text_sm().child(editor.clone())),
+            )
+            .into_any_element()
+    }
+
+    fn render_ask_user_chat(
+        &self,
+        field: &ElicitationFieldState,
+        error: Option<&SharedString>,
+        cx: &App,
+    ) -> AnyElement {
+        let ElicitationFieldState::Text(editor) = field else {
+            return Empty.into_any_element();
+        };
+        let border_color = if error.is_some() {
+            Color::Error.color(cx)
+        } else {
+            cx.theme().colors().border.opacity(0.7)
+        };
+
+        v_flex()
+            .gap_1()
+            .pt_3()
+            .border_t_1()
+            .border_color(cx.theme().colors().border.opacity(0.7))
+            .child(
+                Label::new("Need to clarify something?")
+                    .size(LabelSize::Small)
+                    .weight(FontWeight::MEDIUM),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(border_color)
+                    .bg(cx.theme().colors().editor_background)
+                    .px_2()
+                    .py_1()
+                    .text_sm()
+                    .child(editor.clone()),
+            )
+            .when_some(error.cloned(), |this, error| {
+                this.child(Label::new(error).size(LabelSize::Small).color(Color::Error))
+            })
             .into_any_element()
     }
 
@@ -1852,19 +2154,69 @@ impl<'a> ElicitationCard<'a> {
             _ => None,
         };
         let is_ask_user = self.elicitation.ask_user_request.is_some();
+        let border_color = cx.theme().colors().border.opacity(0.8);
+
+        if is_ask_user {
+            let on_submit = self.handlers.on_submit.clone();
+            let on_chat = self.handlers.on_chat.clone();
+            let on_decline = self.handlers.on_decline.clone();
+            let submit_id = self.elicitation.id.clone();
+            let chat_id = self.elicitation.id.clone();
+            let decline_id = self.elicitation.id.clone();
+
+            return h_flex()
+                .w_full()
+                .p_2()
+                .gap_2()
+                .justify_between()
+                .border_t_1()
+                .border_color(border_color)
+                .child(
+                    Button::new(("elicitation-decline", self.entry_ix), "Skip")
+                        .style(ButtonStyle::Subtle)
+                        .label_size(LabelSize::Small)
+                        .on_click(move |_, window, cx| {
+                            on_decline(decline_id.clone(), window, cx);
+                        }),
+                )
+                .child(
+                    h_flex()
+                        .gap_1()
+                        .child(
+                            Button::new(("elicitation-chat", self.entry_ix), "Send follow-up")
+                                .style(ButtonStyle::Outlined)
+                                .label_size(LabelSize::Small)
+                                .on_click(move |_, window, cx| {
+                                    on_chat(chat_id.clone(), window, cx);
+                                }),
+                        )
+                        .child(
+                            Button::new(("elicitation-accept", self.entry_ix), "Submit answers")
+                                .style(ButtonStyle::Filled)
+                                .start_icon(
+                                    Icon::new(IconName::Check)
+                                        .size(IconSize::XSmall)
+                                        .color(Color::Accent),
+                                )
+                                .label_size(LabelSize::Small)
+                                .on_click(move |_, window, cx| {
+                                    on_submit(submit_id.clone(), window, cx);
+                                }),
+                        ),
+                )
+                .into_any_element();
+        }
+
         let (accept_label, accept_icon, accept_icon_color) = if open_url.is_some() {
             ("Open", IconName::ArrowUpRight, Color::Muted)
         } else {
             ("Submit", IconName::Check, Color::Success)
         };
-        let border_color = cx.theme().colors().border.opacity(0.8);
         let on_submit = self.handlers.on_submit.clone();
-        let on_chat = self.handlers.on_chat.clone();
         let on_open_url = self.handlers.on_open_url.clone();
         let on_decline = self.handlers.on_decline.clone();
         let on_cancel = self.handlers.on_cancel.clone();
         let submit_id = self.elicitation.id.clone();
-        let chat_id = self.elicitation.id.clone();
         let decline_id = self.elicitation.id.clone();
         let cancel_id = self.elicitation.id.clone();
 
@@ -1891,39 +2243,25 @@ impl<'a> ElicitationCard<'a> {
                         }
                     }),
             )
-            .when(is_ask_user, |this| {
-                this.child(
-                    Button::new(("elicitation-chat", self.entry_ix), "Chat about this")
-                        .label_size(LabelSize::Small)
-                        .on_click(move |_, window, cx| {
-                            on_chat(chat_id.clone(), window, cx);
-                        }),
-                )
-            })
             .child(
-                Button::new(
-                    ("elicitation-decline", self.entry_ix),
-                    if is_ask_user { "Skip" } else { "Decline" },
-                )
-                .start_icon(
-                    Icon::new(IconName::Close)
-                        .size(IconSize::XSmall)
-                        .color(Color::Error),
-                )
-                .label_size(LabelSize::Small)
-                .on_click(move |_, window, cx| {
-                    on_decline(decline_id.clone(), window, cx);
-                }),
+                Button::new(("elicitation-decline", self.entry_ix), "Decline")
+                    .start_icon(
+                        Icon::new(IconName::Close)
+                            .size(IconSize::XSmall)
+                            .color(Color::Error),
+                    )
+                    .label_size(LabelSize::Small)
+                    .on_click(move |_, window, cx| {
+                        on_decline(decline_id.clone(), window, cx);
+                    }),
             )
-            .when(!is_ask_user, |this| {
-                this.child(
-                    Button::new(("elicitation-cancel", self.entry_ix), "Cancel")
-                        .label_size(LabelSize::Small)
-                        .on_click(move |_, window, cx| {
-                            on_cancel(cancel_id.clone(), window, cx);
-                        }),
-                )
-            })
+            .child(
+                Button::new(("elicitation-cancel", self.entry_ix), "Cancel")
+                    .label_size(LabelSize::Small)
+                    .on_click(move |_, window, cx| {
+                        on_cancel(cancel_id.clone(), window, cx);
+                    }),
+            )
             .into_any_element()
     }
 }

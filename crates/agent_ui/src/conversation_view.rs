@@ -4205,10 +4205,15 @@ pub(crate) mod tests {
             .clone()
             .expect("connection should preload an elicitation");
         let active_thread = active_thread(&conversation_view, cx);
-        active_thread.read_with(cx, |thread, _cx| {
+        active_thread.read_with(cx, |thread, cx| {
             assert!(
                 thread.has_elicitation_form_state(&elicitation_id),
                 "pending form elicitations that predate ThreadView construction should be usable"
+            );
+            assert_eq!(
+                thread.pending_elicitation_entry(cx).map(|(_, id)| id),
+                Some(elicitation_id),
+                "pending elicitations should be discoverable for inline subagent rendering"
             );
         });
     }

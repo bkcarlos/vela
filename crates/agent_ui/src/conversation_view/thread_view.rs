@@ -2668,6 +2668,26 @@ impl ThreadView {
             .unwrap_or(false)
     }
 
+    pub(crate) fn pending_elicitation_entry(
+        &self,
+        cx: &App,
+    ) -> Option<(usize, ElicitationEntryId)> {
+        let thread = self.thread.read(cx);
+        thread
+            .entries()
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(entry_ix, entry)| {
+                let AgentThreadEntry::Elicitation(id) = entry else {
+                    return None;
+                };
+                let (_, elicitation) = thread.elicitation(id)?;
+                matches!(elicitation.status, ElicitationStatus::Pending { .. })
+                    .then(|| (entry_ix, id.clone()))
+            })
+    }
+
     pub fn sync_elicitation_state_for_entry(
         &mut self,
         index: usize,
@@ -11104,6 +11124,10 @@ impl ThreadView {
                 self.conversation.read(cx).pending_tool_call(sid, cx)
             })
             .is_some();
+        let pending_elicitation = thread_view
+            .as_ref()
+            .and_then(|thread_view| thread_view.read(cx).pending_elicitation_entry(cx));
+        let is_waiting_for_input = is_pending_tool_call || pending_elicitation.is_some();
 
         let is_expanded = self
             .entry_view_state
@@ -11261,9 +11285,16 @@ impl ThreadView {
                                                 self.tool_name_font_size(),
                                             )),
                                         )
+                                    })
+                                    .when(pending_elicitation.is_some(), |this| {
+                                        this.child(
+                                            Label::new("— Waiting for input")
+                                                .size(LabelSize::Custom(self.tool_name_font_size()))
+                                                .color(Color::Info),
+                                        )
                                     }),
                             )
-                            .when(!has_no_title_or_canceled && !is_pending_tool_call, |this| {
+                            .when(!has_no_title_or_canceled && !is_waiting_for_input, |this| {
                                 this.tooltip(move |_, cx| {
                                     Tooltip::with_meta(
                                         title.to_string(),
@@ -11273,7 +11304,7 @@ impl ThreadView {
                                     )
                                 })
                             })
-                            .when(has_expandable_content && !is_pending_tool_call, |this| {
+                            .when(has_expandable_content && !is_waiting_for_input, |this| {
                                 this.cursor_pointer()
                                     .hover(|s| s.bg(cx.theme().colors().element_hover))
                                     .child(
@@ -11375,6 +11406,29 @@ impl ThreadView {
                                 window,
                                 cx,
                             ))
+                            .child(fullscreen_toggle)
+                    } else {
+                        this
+                    }
+                } else if is_running
+                    && let Some((elicitation_entry_ix, elicitation_id)) =
+                        pending_elicitation.as_ref()
+                {
+                    let elicitation_card = {
+                        let subagent_view = thread_view.read(cx);
+                        let thread = subagent_view.thread.read(cx);
+                        thread.elicitation(elicitation_id).map(|(_, elicitation)| {
+                            subagent_view.render_elicitation(
+                                *elicitation_entry_ix,
+                                elicitation,
+                                window,
+                                cx,
+                            )
+                        })
+                    };
+                    if let Some(elicitation_card) = elicitation_card {
+                        this.child(Divider::horizontal().color(DividerColor::Border))
+                            .child(elicitation_card)
                             .child(fullscreen_toggle)
                     } else {
                         this
