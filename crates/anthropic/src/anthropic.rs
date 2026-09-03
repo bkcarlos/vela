@@ -20,12 +20,17 @@ pub mod completion;
 
 pub const ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
 
-fn auth_header(api_key: &str) -> (&'static str, String) {
-    if let Some(key) = api_key.strip_prefix("bearer:") {
-        ("Authorization", format!("Bearer {}", key.trim()))
-    } else {
-        ("X-Api-Key", api_key.trim().to_string())
-    }
+/// Attach both Anthropic (`X-Api-Key`) and Bearer auth so official Anthropic
+/// and compatible gateways work without the user picking a mode. A legacy
+/// `bearer:` prefix on the key is stripped if present.
+pub(crate) fn apply_auth_headers(
+    builder: http::request::Builder,
+    api_key: &str,
+) -> http::request::Builder {
+    let key = api_key.strip_prefix("bearer:").unwrap_or(api_key).trim();
+    builder
+        .header("X-Api-Key", key)
+        .header("Authorization", format!("Bearer {key}"))
 }
 pub const FAST_MODE_BETA_HEADER: &str = "fast-mode-2026-02-01";
 
@@ -281,15 +286,17 @@ pub async fn list_models(
 ) -> Result<Vec<Model>> {
     let uri = format!("{api_url}/v1/models?limit=1000");
 
-    let request = HttpRequest::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .header("Anthropic-Version", "2023-06-01")
-        .header(auth_header(api_key).0, auth_header(api_key).1)
-        .header("Accept", "application/json")
-        .extra_headers(extra_headers)
-        .body(AsyncBody::default())
-        .context("failed to build Anthropic models list request")?;
+    let request = apply_auth_headers(
+        HttpRequest::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header("Anthropic-Version", "2023-06-01")
+            .header("Accept", "application/json"),
+        api_key,
+    )
+    .extra_headers(extra_headers)
+    .body(AsyncBody::default())
+    .context("failed to build Anthropic models list request")?;
 
     let mut response = client
         .send(request)
@@ -364,12 +371,14 @@ async fn send_request(
 ) -> Result<(http::Response<AsyncBody>, RateLimitInfo), AnthropicError> {
     let uri = format!("{api_url}/v1/messages");
 
-    let mut request_builder = HttpRequest::builder()
-        .method(Method::POST)
-        .uri(uri)
-        .header("Anthropic-Version", "2023-06-01")
-        .header(auth_header(api_key).0, auth_header(api_key).1)
-        .header("Content-Type", "application/json");
+    let mut request_builder = apply_auth_headers(
+        HttpRequest::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Anthropic-Version", "2023-06-01")
+            .header("Content-Type", "application/json"),
+        api_key,
+    );
 
     if let Some(beta_headers) = beta_headers {
         request_builder = request_builder.header("Anthropic-Beta", beta_headers);

@@ -28,7 +28,6 @@ const PROVIDER_NAME: LanguageModelProviderName = ANTHROPIC_PROVIDER_NAME;
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct AnthropicSettings {
     pub api_url: String,
-    pub auth_mode: settings::AnthropicAuthMode,
     /// Extend Vela's list of Anthropic models.
     pub available_models: Vec<AvailableModel>,
     /// User-configured headers added to every Anthropic request.
@@ -43,8 +42,12 @@ pub struct AnthropicLanguageModelProvider {
 const API_KEY_ENV_VAR_NAME: &str = "ANTHROPIC_API_KEY";
 static API_KEY_ENV_VAR: LazyLock<EnvVar> = env_var!(API_KEY_ENV_VAR_NAME);
 
-pub(crate) const RESERVED_HEADER_NAMES: &[&str] =
-    &["X-Api-Key", "Anthropic-Version", "Anthropic-Beta"];
+pub(crate) const RESERVED_HEADER_NAMES: &[&str] = &[
+    "X-Api-Key",
+    "Authorization",
+    "Anthropic-Version",
+    "Anthropic-Beta",
+];
 
 pub struct State {
     api_key_state: ApiKeyState,
@@ -111,13 +114,12 @@ impl State {
         };
         let settings = AnthropicLanguageModelProvider::settings(cx);
         let extra_headers = settings.custom_headers.clone();
-        let auth_mode = settings.auth_mode;
 
         cx.spawn(async move |this, cx| {
             let models = anthropic::list_models(
                 http_client.as_ref(),
                 &api_url,
-                &format_api_key(api_key.as_ref(), auth_mode),
+                api_key.as_ref(),
                 &extra_headers,
             )
             .await?;
@@ -322,13 +324,6 @@ fn pick_preferred_model(
 }
 
 /// Convert a settings-defined `available_models` entry into an `anthropic::Model`.
-fn format_api_key(api_key: &str, auth_mode: settings::AnthropicAuthMode) -> String {
-    match auth_mode {
-        settings::AnthropicAuthMode::XApiKey => api_key.to_string(),
-        settings::AnthropicAuthMode::Bearer => format!("bearer:{api_key}"),
-    }
-}
-
 fn available_model_to_anthropic_model(available: &AvailableModel) -> anthropic::Model {
     let mode = match available.mode.unwrap_or_default() {
         settings::ModelMode::Default => AnthropicModelMode::Default,
@@ -476,17 +471,11 @@ impl AnthropicModel {
     > {
         let http_client = self.http_client.clone();
 
-        let (api_key, api_url, extra_headers, auth_mode) = self.state.read_with(cx, |state, cx| {
+        let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, cx| {
             let api_url = AnthropicLanguageModelProvider::api_url(cx);
             let settings = AnthropicLanguageModelProvider::settings(cx);
             let extra_headers = settings.custom_headers.clone();
-            let auth_mode = settings.auth_mode;
-            (
-                state.api_key_state.key(&api_url),
-                api_url,
-                extra_headers,
-                auth_mode,
-            )
+            (state.api_key_state.key(&api_url), api_url, extra_headers)
         });
 
         let beta_headers = self.model.beta_headers();
@@ -497,11 +486,10 @@ impl AnthropicModel {
                     provider: PROVIDER_NAME,
                 });
             };
-            let formatted_api_key = format_api_key(&api_key, auth_mode);
             let request = anthropic::stream_completion(
                 http_client.as_ref(),
                 &api_url,
-                &formatted_api_key,
+                &api_key,
                 request,
                 beta_headers,
                 &extra_headers,
@@ -642,7 +630,10 @@ impl LanguageModel for AnthropicModel {
         let future = self.request_limiter.stream(async move {
             let response = request.await?;
             let events = AnthropicEventMapper::new(PROVIDER_NAME).map_stream(response);
-            Ok(language_model::stream_in_background(events.boxed(), executor))
+            Ok(language_model::stream_in_background(
+                events.boxed(),
+                executor,
+            ))
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

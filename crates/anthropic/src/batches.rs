@@ -3,7 +3,7 @@ use futures::AsyncReadExt;
 use http_client::{AsyncBody, HttpClient, Method, Request as HttpRequest};
 use serde::{Deserialize, Serialize};
 
-use crate::{AnthropicError, ApiError, RateLimitInfo, Request, Response};
+use crate::{AnthropicError, ApiError, RateLimitInfo, Request, Response, apply_auth_headers};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BatchRequest {
@@ -74,12 +74,14 @@ pub async fn create_batch(
 ) -> Result<MessageBatch, AnthropicError> {
     let uri = format!("{api_url}/v1/messages/batches");
 
-    let request_builder = HttpRequest::builder()
-        .method(Method::POST)
-        .uri(uri)
-        .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim())
-        .header("Content-Type", "application/json");
+    let request_builder = apply_auth_headers(
+        HttpRequest::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Anthropic-Version", "2023-06-01")
+            .header("Content-Type", "application/json"),
+        api_key,
+    );
 
     let serialized_request =
         serde_json::to_string(&request).map_err(AnthropicError::SerializeRequest)?;
@@ -116,11 +118,13 @@ pub async fn retrieve_batch(
 ) -> Result<MessageBatch, AnthropicError> {
     let uri = format!("{api_url}/v1/messages/batches/{message_batch_id}");
 
-    let request_builder = HttpRequest::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim());
+    let request_builder = apply_auth_headers(
+        HttpRequest::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header("Anthropic-Version", "2023-06-01"),
+        api_key,
+    );
 
     let http_request = request_builder
         .body(AsyncBody::default())
@@ -155,11 +159,13 @@ pub async fn retrieve_batch_results(
 ) -> Result<Vec<BatchIndividualResponse>, AnthropicError> {
     let uri = format!("{api_url}/v1/messages/batches/{message_batch_id}/results");
 
-    let request_builder = HttpRequest::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim());
+    let request_builder = apply_auth_headers(
+        HttpRequest::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header("Anthropic-Version", "2023-06-01"),
+        api_key,
+    );
 
     let http_request = request_builder
         .body(AsyncBody::default())

@@ -68,7 +68,6 @@ impl settings::Settings for AllLanguageModelSettings {
         Self {
             anthropic: AnthropicSettings {
                 api_url: anthropic.api_url.unwrap(),
-                auth_mode: anthropic.auth_mode.unwrap_or_default(),
                 available_models: anthropic.available_models.unwrap_or_default(),
                 custom_headers: custom_headers_from(
                     "Anthropic",
