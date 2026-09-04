@@ -29,6 +29,7 @@ const API_KEY_PLACEHOLDER: &str = "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct AnthropicCompatibleSettings {
     pub api_url: String,
+    pub auth_mode: settings::AnthropicAuthMode,
     pub available_models: Vec<AvailableModel>,
     pub custom_headers: CustomHeaders,
 }
@@ -47,6 +48,13 @@ impl ApiCompatibleProviderSettings for AnthropicCompatibleSettings {
 }
 
 pub type State = ApiCompatibleProviderState<AnthropicCompatibleSettings>;
+
+fn format_api_key(api_key: &str, auth_mode: settings::AnthropicAuthMode) -> String {
+    match auth_mode {
+        settings::AnthropicAuthMode::XApiKey => api_key.to_string(),
+        settings::AnthropicAuthMode::Bearer => format!("bearer:{api_key}"),
+    }
+}
 
 fn available_model_to_anthropic_model(available: &AvailableModel) -> anthropic::Model {
     let mode = match available.mode.unwrap_or_default() {
@@ -238,14 +246,16 @@ impl AnthropicCompatibleLanguageModel {
         let http_client = self.http_client.clone();
         let provider_name = self.provider_name.clone();
 
-        let (api_key, api_url, extra_headers) = self.state.read_with(cx, |state, _cx| {
-            let api_url = state.settings.api_url.clone();
-            (
-                state.api_key_state.key(&api_url),
-                api_url,
-                state.settings.custom_headers.clone(),
-            )
-        });
+        let (api_key, api_url, extra_headers, auth_mode) =
+            self.state.read_with(cx, |state, _cx| {
+                let api_url = state.settings.api_url.clone();
+                (
+                    state.api_key_state.key(&api_url),
+                    api_url,
+                    state.settings.custom_headers.clone(),
+                    state.settings.auth_mode,
+                )
+            });
 
         let beta_headers = self.model.beta_headers();
 
@@ -255,11 +265,12 @@ impl AnthropicCompatibleLanguageModel {
                     provider: provider_name,
                 });
             };
+            let formatted_api_key = format_api_key(&api_key, auth_mode);
 
             let request = anthropic::stream_completion(
                 http_client.as_ref(),
                 &api_url,
-                &api_key,
+                &formatted_api_key,
                 request,
                 beta_headers,
                 &extra_headers,
@@ -358,7 +369,10 @@ impl LanguageModel for AnthropicCompatibleLanguageModel {
         let future = self.request_limiter.stream(async move {
             let response = completion_request.await?;
             let events = AnthropicEventMapper::new(provider_name).map_stream(response);
-            Ok(language_model::stream_in_background(events.boxed(), executor))
+            Ok(language_model::stream_in_background(
+                events.boxed(),
+                executor,
+            ))
         });
         async move { Ok(future.await?.boxed()) }.boxed()
     }

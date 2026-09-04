@@ -34,7 +34,7 @@ pub struct AllLanguageModelSettingsContent {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
 pub struct AnthropicSettingsContent {
     pub api_url: Option<String>,
-    /// Deprecated: requests now send both `X-Api-Key` and `Authorization: Bearer`.
+    /// Deprecated for the built-in Anthropic provider (always uses `X-Api-Key`).
     /// Kept so existing settings.json files still deserialize.
     pub auth_mode: Option<AnthropicAuthMode>,
     pub available_models: Option<Vec<AnthropicAvailableModel>>,
@@ -53,6 +53,9 @@ pub enum AnthropicAuthMode {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
 pub struct AnthropicCompatibleSettingsContent {
     pub api_url: String,
+    /// Authentication header format for this compatible Anthropic gateway.
+    /// Defaults to `x_api_key`; some gateways require `bearer`.
+    pub auth_mode: Option<AnthropicAuthMode>,
     pub available_models: Vec<AnthropicCompatibleAvailableModel>,
     pub custom_headers: Option<HashMap<String, String>>,
 }

@@ -8,7 +8,7 @@ use language_model::{
 };
 
 use settings::{
-    AnthropicCompatibleAvailableModel, AnthropicCompatibleModelCapabilities,
+    AnthropicAuthMode, AnthropicCompatibleAvailableModel, AnthropicCompatibleModelCapabilities,
     AnthropicCompatibleSettingsContent, OpenAiCompatibleAvailableModel,
     OpenAiCompatibleModelCapabilities, OpenAiCompatibleSettingsContent, OpenAiReasoningEffort,
     SettingsStore,
@@ -591,6 +591,8 @@ pub(crate) struct LlmProviderForm {
     provider_name: Entity<Editor>,
     api_url: Entity<Editor>,
     api_key: Entity<Editor>,
+    /// Anthropic-compatible only. Ignored for OpenAI-compatible providers.
+    auth_mode: AnthropicAuthMode,
     models: Vec<ModelInput>,
     error: Option<SharedString>,
 }
@@ -629,12 +631,18 @@ impl LlmProviderForm {
             "000000000000000000000000000000000000000000000000"
         };
 
+        let auth_mode = existing
+            .as_ref()
+            .and_then(|data| data.auth_mode)
+            .unwrap_or_default();
+
         Self {
             kind,
             original_id,
             provider_name,
             api_url: new_input(kind.default_api_url(), api_url_initial, false, window, cx),
             api_key: new_input(api_key_placeholder, None, true, window, cx),
+            auth_mode,
             models,
             error: None,
         }
@@ -647,6 +655,7 @@ impl LlmProviderForm {
 struct ExistingProviderData {
     id: LanguageModelProviderId,
     api_url: String,
+    auth_mode: Option<AnthropicAuthMode>,
     models: Vec<ExistingModel>,
 }
 
@@ -727,6 +736,7 @@ fn existing_provider_data(
             ExistingProviderData {
                 id: provider_id.clone(),
                 api_url: content.api_url.clone(),
+                auth_mode: None,
                 models: content
                     .available_models
                     .iter()
@@ -746,6 +756,7 @@ fn existing_provider_data(
             ExistingProviderData {
                 id: provider_id.clone(),
                 api_url: content.api_url.clone(),
+                auth_mode: content.auth_mode,
                 models: content
                     .available_models
                     .iter()
@@ -962,6 +973,16 @@ fn render_llm_provider_form_page(
                     &form.api_key,
                     cx,
                 ))
+                .when(
+                    matches!(form.kind, CompatibleProviderKind::Anthropic),
+                    |this| {
+                        this.child(render_anthropic_auth_mode_selector(
+                            form.auth_mode,
+                            window,
+                            cx,
+                        ))
+                    },
+                )
                 .child(render_models_section(form, window, cx)),
         )
         .child(
@@ -1234,6 +1255,62 @@ fn render_capability_checkbox(
         }))
 }
 
+fn render_anthropic_auth_mode_selector(
+    selected: AnthropicAuthMode,
+    window: &mut Window,
+    cx: &mut Context<SettingsWindow>,
+) -> AnyElement {
+    let settings_window = cx.entity().downgrade();
+    let menu = ContextMenu::build(window, cx, move |mut menu, _window, _cx| {
+        for mode in [AnthropicAuthMode::XApiKey, AnthropicAuthMode::Bearer] {
+            let label = match mode {
+                AnthropicAuthMode::XApiKey => "X-Api-Key",
+                AnthropicAuthMode::Bearer => "Authorization: Bearer",
+            };
+            let settings_window = settings_window.clone();
+            menu.push_item(
+                ui::ContextMenuEntry::new(label)
+                    .toggleable(IconPosition::End, mode == selected)
+                    .handler(move |_window, cx| {
+                        settings_window
+                            .update(cx, |this, cx| {
+                                if let Some(form) = this.llm_provider_form.as_mut() {
+                                    form.auth_mode = mode;
+                                }
+                                cx.notify();
+                            })
+                            .ok();
+                    }),
+            );
+        }
+        menu
+    });
+
+    v_flex()
+        .gap_1()
+        .child(Label::new("Authentication mode").size(LabelSize::Small))
+        .child(
+            Label::new("Choose the header this gateway expects for the API key.")
+                .size(LabelSize::XSmall)
+                .color(Color::Muted),
+        )
+        .child(
+            DropdownMenu::new(
+                "anthropic-compatible-auth-mode",
+                match selected {
+                    AnthropicAuthMode::XApiKey => "X-Api-Key",
+                    AnthropicAuthMode::Bearer => "Authorization: Bearer",
+                },
+                menu,
+            )
+            .style(DropdownStyle::Outlined)
+            .trigger_size(ButtonSize::Compact)
+            .full_width(true)
+            .aria_label("Anthropic authentication mode"),
+        )
+        .into_any_element()
+}
+
 fn render_reasoning_effort_selector(
     selected: OpenAiReasoningEffort,
     index: usize,
@@ -1326,6 +1403,7 @@ struct LlmProviderFormValues {
     provider_name: String,
     api_url: String,
     api_key: String,
+    auth_mode: AnthropicAuthMode,
     models: Vec<ModelValues>,
 }
 
@@ -1365,6 +1443,7 @@ fn save_llm_provider_form(
             provider_name: form.provider_name.read(cx).text(cx),
             api_url: form.api_url.read(cx).text(cx),
             api_key: form.api_key.read(cx).text(cx),
+            auth_mode: form.auth_mode,
             models: form
                 .models
                 .iter()
@@ -1398,6 +1477,7 @@ fn save_llm_provider_form(
         }
     };
     let is_edit = values.original_id.is_some();
+    let auth_mode = values.auth_mode;
 
     let fs = <dyn fs::Fs>::global(cx);
     cx.spawn_in(window, async move |this, cx| {
@@ -1448,6 +1528,7 @@ fn save_llm_provider_form(
                                     Arc::from(provider_name.as_str()),
                                     AnthropicCompatibleSettingsContent {
                                         api_url: api_url.clone(),
+                                        auth_mode: Some(auth_mode),
                                         available_models,
                                         custom_headers,
                                     },

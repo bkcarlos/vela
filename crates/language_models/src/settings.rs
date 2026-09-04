@@ -83,6 +83,7 @@ impl settings::Settings for AllLanguageModelSettings {
                         key,
                         AnthropicCompatibleSettings {
                             api_url: value.api_url,
+                            auth_mode: value.auth_mode.unwrap_or_default(),
                             available_models: value.available_models,
                             custom_headers: custom_headers_from(
                                 &provider_label,

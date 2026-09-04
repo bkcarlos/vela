@@ -20,17 +20,17 @@ pub mod completion;
 
 pub const ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
 
-/// Attach both Anthropic (`X-Api-Key`) and Bearer auth so official Anthropic
-/// and compatible gateways work without the user picking a mode. A legacy
-/// `bearer:` prefix on the key is stripped if present.
+/// Pick one auth header from the API key.
+/// Keys prefixed with `bearer:` use `Authorization: Bearer`; otherwise `X-Api-Key`.
 pub(crate) fn apply_auth_headers(
     builder: http::request::Builder,
     api_key: &str,
 ) -> http::request::Builder {
-    let key = api_key.strip_prefix("bearer:").unwrap_or(api_key).trim();
-    builder
-        .header("X-Api-Key", key)
-        .header("Authorization", format!("Bearer {key}"))
+    if let Some(key) = api_key.strip_prefix("bearer:") {
+        builder.header("Authorization", format!("Bearer {}", key.trim()))
+    } else {
+        builder.header("X-Api-Key", api_key.trim())
+    }
 }
 pub const FAST_MODE_BETA_HEADER: &str = "fast-mode-2026-02-01";
 
