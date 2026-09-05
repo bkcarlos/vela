@@ -77,8 +77,8 @@ use terminal_view::{TerminalView, terminal_panel::TerminalPanel};
 use text::OffsetRangeExt;
 use theme_settings::ThemeSettings;
 use ui::{
-    ContextMenu, GradientFade, IconButton, KeyBinding, PopoverMenu, PopoverMenuHandle,
-    ProjectEmptyState, Tab, Tooltip, prelude::*, utils::WithRemSize,
+    ContextMenu, GradientFade, IconButton, PopoverMenu, PopoverMenuHandle, Tab, Tooltip,
+    prelude::*, utils::WithRemSize,
 };
 use util::ResultExt as _;
 use workspace::{
@@ -1153,6 +1153,7 @@ pub struct AgentPanel {
     agent_panel_menu_handle: PopoverMenuHandle<ContextMenu>,
     _extension_subscription: Option<Subscription>,
     _project_subscription: Subscription,
+    _language_model_subscription: Subscription,
     zoomed: bool,
     pending_serialization: Option<Task<Result<()>>>,
     selected_agent: Agent,
@@ -1472,6 +1473,10 @@ impl AgentPanel {
         let thread_store = ThreadStore::global(cx);
 
         let base_view = BaseView::Uninitialized;
+        let language_model_subscription = cx
+            .subscribe(&LanguageModelRegistry::global(cx), |_, _, _, cx| {
+                cx.notify()
+            });
 
         // Subscribe to extension events to sync agent servers when extensions change
         let extension_subscription = ExtensionStore::try_global(cx).map(|store| {
@@ -1586,6 +1591,7 @@ impl AgentPanel {
 
             _extension_subscription: extension_subscription,
             _project_subscription,
+            _language_model_subscription: language_model_subscription,
             zoomed: false,
             pending_serialization: None,
             thread_store,
@@ -5861,27 +5867,105 @@ impl AgentPanel {
     }
 
     fn render_no_project_state(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let focus_handle = self.focus_handle(cx);
-
-        ProjectEmptyState::new(
-            "Agent Panel",
-            focus_handle.clone(),
-            KeyBinding::for_action_in(&workspace::Open::default(), &focus_handle, cx),
-        )
-        .on_open_project(|_, window, cx| {
-            telemetry::event!("Agent Panel Add Project Clicked");
-            window.dispatch_action(
-                workspace::Open {
-                    create_new_window: Some(false),
-                }
-                .boxed_clone(),
-                cx,
+        let registry = LanguageModelRegistry::read_global(cx);
+        let configuration_error = registry.configuration_error(registry.default_model(), cx);
+        let is_native = self.selected_agent.is_native();
+        let needs_provider = is_native
+            && matches!(
+                configuration_error,
+                Some(language_model::ConfigurationError::NoProvider)
+                    | Some(language_model::ConfigurationError::ProviderNotAuthenticated(_))
             );
-        })
-        .on_clone_repo(|_, window, cx| {
-            telemetry::event!("Agent Panel Clone Repo Clicked");
-            window.dispatch_action(git::Clone.boxed_clone(), cx);
-        })
+        let (title, description) = if !is_native {
+            (
+                "Get started with Agent",
+                "Open a folder, then follow your agent's sign-in instructions.",
+            )
+        } else {
+            match configuration_error {
+                Some(language_model::ConfigurationError::NoProvider) => (
+                    "Set up your assistant",
+                    "Connect a model to ask questions and edit code.",
+                ),
+                Some(language_model::ConfigurationError::ProviderNotAuthenticated(_)) => (
+                    "Check your connection",
+                    "Update your provider's credentials to continue.",
+                ),
+                Some(language_model::ConfigurationError::ModelNotFound) => (
+                    "Choose your model",
+                    "Your provider is connected. Open a folder, then select a model in Agent.",
+                ),
+                None => (
+                    "Ready when you are",
+                    "Open a folder using the button at the top of the window.",
+                ),
+            }
+        };
+
+        v_flex()
+            .id("agent-getting-started")
+            .size_full()
+            .overflow_y_scroll()
+            .p_4()
+            .items_center()
+            .track_focus(&self.focus_handle(cx))
+            .child(
+                v_flex()
+                    .w_full()
+                    .max_w(px(360.))
+                    .gap_4()
+                    .child(
+                        v_flex()
+                            .p_4()
+                            .gap_3()
+                            .rounded_lg()
+                            .border_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .bg(cx.theme().colors().editor_background)
+                            .child(Icon::new(IconName::VelaAgentTwo).size(IconSize::Medium).color(Color::Accent))
+                            .child(Label::new(title))
+                            .child(Label::new(description).size(LabelSize::Small).color(Color::Muted))
+                            .when(needs_provider, |this| {
+                                this.child(
+                                    Label::new("1. Add a provider and its API key.\n2. Open a folder and choose a model.")
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                )
+                                .child(
+                                    Button::new("configure-agent-llm", "Set Up Model")
+                                        .full_width()
+                                        .style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                                        .start_icon(Icon::new(IconName::Plus).size(IconSize::Small))
+                                        .on_click(|_, window, cx| {
+                                            window.dispatch_action(
+                                                Box::new(vela_actions::OpenSettingsAt {
+                                                    path: "llm_providers".to_string(),
+                                                    target: None,
+                                                }),
+                                                cx,
+                                            );
+                                        }),
+                                )
+                            }),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .px_1()
+                            .child(Label::new("Things to try").size(LabelSize::Small).color(Color::Muted))
+                            .children([
+                                "Explain this project's structure",
+                                "Find and fix a bug",
+                                "Write tests for this function",
+                            ].into_iter().map(|example| {
+                                h_flex()
+                                    .gap_2()
+                                    .child(Icon::new(IconName::ChevronRight).size(IconSize::Small).color(Color::Muted))
+                                    .child(Label::new(example).size(LabelSize::Small))
+                            }))
+                            .child(Label::new("Use @ to add files as context.").size(LabelSize::Small).color(Color::Muted)),
+                    ),
+            )
     }
 
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

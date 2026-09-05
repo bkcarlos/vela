@@ -1,4 +1,3 @@
-use ai_onboarding::YoungAccountBanner;
 use anyhow::{Result, anyhow};
 use client::{
     Client, RefreshLlmTokenListener, TelemetrySettings, UserStore, global_llm_token, vela_urls,
@@ -25,7 +24,7 @@ pub use settings::VelaDotDevAvailableModel as AvailableModel;
 pub use settings::VelaDotDevAvailableProvider as AvailableProvider;
 use std::sync::Arc;
 use std::time::Duration;
-use ui::{TintColor, prelude::*};
+use ui::prelude::*;
 
 const PROVIDER_ID: LanguageModelProviderId = VELA_CLOUD_PROVIDER_ID;
 const PROVIDER_NAME: LanguageModelProviderName = VELA_CLOUD_PROVIDER_NAME;
@@ -438,87 +437,27 @@ struct VelaAiConfiguration {
 
 fn vela_ai_description(
     is_connected: bool,
-    plan: Option<Plan>,
+    _plan: Option<Plan>,
     is_vela_model_provider_enabled: bool,
-    eligible_for_trial: bool,
+    _eligible_for_trial: bool,
 ) -> &'static str {
     if !is_connected {
-        return "Sign in to have access to Vela's complete agentic experience with hosted models.";
-    }
-
-    match plan {
-        Some(Plan::VelaPro) => {
-            "You have access to Vela's hosted models through your Pro subscription."
-        }
-        Some(Plan::VelaProTrial) => {
-            "You have access to Vela's hosted models through your Pro trial."
-        }
-        Some(Plan::VelaStudent) => {
-            "You have access to Vela's hosted models through your Student subscription."
-        }
-        Some(Plan::VelaBusiness) => {
-            if is_vela_model_provider_enabled {
-                "You have access to Vela's hosted models through your organization."
-            } else {
-                "Vela's hosted models are disabled by your organization's configuration."
-            }
-        }
-        Some(Plan::VelaVip) => {
-            "You have access to Vela's hosted models through your VIP subscription."
-        }
-        Some(Plan::VelaFree) | None => {
-            if eligible_for_trial {
-                "Subscribe for access to Vela's hosted models. Start with a 14 day free trial."
-            } else {
-                "Subscribe for access to Vela's hosted models."
-            }
-        }
+        "Sign in to connect to this hosted provider, or configure your own API key or local model."
+    } else if !is_vela_model_provider_enabled {
+        "This hosted provider is disabled. You can use another configured provider."
+    } else {
+        "Connected to Vela's hosted models. Availability and usage limits are controlled by the service."
     }
 }
 
 impl RenderOnce for VelaAiConfiguration {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let has_paid_plan = matches!(
-            self.plan,
-            Some(Plan::VelaPro | Plan::VelaStudent | Plan::VelaBusiness | Plan::VelaVip)
-        );
-
         let description = vela_ai_description(
             self.is_connected,
             self.plan,
             self.is_vela_model_provider_enabled,
             self.eligible_for_trial,
         );
-
-        let manage_subscription_buttons = if has_paid_plan {
-            Button::new("manage_settings", "Manage Subscription")
-                .when(!self.compact, |this| {
-                    this.full_width().label_size(LabelSize::Small)
-                })
-                .when(self.compact, |this| this.size(ButtonSize::Medium))
-                .style(ButtonStyle::Tinted(TintColor::Accent))
-                .on_click(|_, _, cx| cx.open_url(&vela_urls::account_url(cx)))
-                .into_any_element()
-        } else if self.plan.is_none() || self.eligible_for_trial {
-            Button::new("start_trial", "Start 14-day Free Pro Trial")
-                .when(!self.compact, |this| {
-                    this.full_width().label_size(LabelSize::Small)
-                })
-                .when(self.compact, |this| this.size(ButtonSize::Medium))
-                .style(ui::ButtonStyle::Tinted(ui::TintColor::Accent))
-                .on_click(|_, _, cx| cx.open_url(&vela_urls::start_trial_url(cx)))
-                .into_any_element()
-        } else {
-            Button::new("upgrade", "Upgrade to Pro")
-                .when(!self.compact, |this| {
-                    this.full_width().label_size(LabelSize::Small)
-                })
-                .when(self.compact, |this| this.size(ButtonSize::Medium))
-                .style(ui::ButtonStyle::Tinted(ui::TintColor::Accent))
-                .on_click(|_, _, cx| cx.open_url(&vela_urls::upgrade_to_vela_pro_url(cx)))
-                .into_any_element()
-        };
-
         if !self.is_connected {
             return v_flex()
                 .gap_2()
@@ -541,21 +480,9 @@ impl RenderOnce for VelaAiConfiguration {
         v_flex()
             .gap_2()
             .when(!self.compact, |this| this.w_full())
-            .map(|this| {
-                if self.account_too_young {
-                    this.child(YoungAccountBanner).child(
-                        Button::new("upgrade", "Upgrade to Pro")
-                            .style(ui::ButtonStyle::Tinted(ui::TintColor::Accent))
-                            .when(!self.compact, |this| this.full_width())
-                            .on_click(|_, _, cx| {
-                                cx.open_url(&vela_urls::upgrade_to_vela_pro_url(cx))
-                            }),
-                    )
-                } else {
-                    this.when(!self.compact, |this| this.text_sm().child(description))
-                        .child(manage_subscription_buttons)
-                }
-            })
+            .when(!self.compact, |this| this.text_sm().child(description))
+            .when(self.account_too_young, |this| this.child(Label::new("This account is not eligible for the hosted service. Configure another provider to continue.").size(LabelSize::Small)))
+            .child(Button::new("manage-account", "Manage Account").on_click(|_, _, cx| cx.open_url(&vela_urls::account_url(cx))))
     }
 }
 

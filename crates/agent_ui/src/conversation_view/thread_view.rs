@@ -11815,49 +11815,50 @@ impl ThreadView {
         let has_authenticated_provider =
             LanguageModelRegistry::read_global(cx).has_authenticated_provider(cx);
 
-        let (title, description): (SharedString, SharedString) =
-            match thread.read(cx).thread_model() {
-                agent::ThreadModel::Ready(_) => return None,
-                agent::ThreadModel::Unresolved(selected_model) => {
-                    if let Some(provider) = LanguageModelRegistry::global(cx)
-                        .read(cx)
-                        .provider(&&selected_model.provider)
-                    {
-                        if !provider.is_authenticated(cx) {
-                            (
-                                format!("Failed to authenticate with {} provider", provider.name())
-                                    .into(),
-                                "Open the settings to configure the selected provider".into(),
-                            )
-                        } else {
-                            (
-                                format!("Model {} was not found", selected_model.model.0).into(),
-                                "You may need to reconfigure authentication for this provider"
-                                    .into(),
-                            )
-                        }
-                    } else {
+        let (title, description): (SharedString, SharedString) = match thread
+            .read(cx)
+            .thread_model()
+        {
+            agent::ThreadModel::Ready(_) => return None,
+            agent::ThreadModel::Unresolved(selected_model) => {
+                if let Some(provider) = LanguageModelRegistry::global(cx)
+                    .read(cx)
+                    .provider(&&selected_model.provider)
+                {
+                    if !provider.is_authenticated(cx) {
                         (
-                            format!("Provider {} was not found", selected_model.provider).into(),
-                            "Open the settings to configure providers".into(),
-                        )
-                    }
-                }
-                agent::ThreadModel::Unset => {
-                    if has_authenticated_provider {
-                        (
-                            "No model selected".into(),
-                            "Choose a different model or configure other providers to get started"
+                            format!("Failed to authenticate with {} provider", provider.name())
                                 .into(),
+                            "Open the settings to configure the selected provider".into(),
                         )
                     } else {
                         (
-                            "No model selected".into(),
-                            "Configure a provider to get started".into(),
+                            format!("Model {} was not found", selected_model.model.0).into(),
+                            "You may need to reconfigure authentication for this provider".into(),
                         )
                     }
+                } else {
+                    (
+                        format!("Provider {} was not found", selected_model.provider).into(),
+                        "Open the settings to configure providers".into(),
+                    )
                 }
-            };
+            }
+            agent::ThreadModel::Unset => {
+                if has_authenticated_provider {
+                    (
+                        "No model selected".into(),
+                        "Choose a different model or configure other providers to get started"
+                            .into(),
+                    )
+                } else {
+                    (
+                            "No model selected".into(),
+                            "In LLM Providers, set up credentials and models, then select a model in Agent".into(),
+                        )
+                }
+            }
+        };
 
         let description = self.thread_error_description(description);
 

@@ -18,9 +18,7 @@ use settings::{DefaultOpenBehavior, Settings};
 use std::path::Path;
 use ui::{ButtonLike, prelude::*};
 use util::ResultExt;
-use vela_actions::{
-    Extensions, OpenOnboarding, OpenRecent, OpenRemote, OpenSettings, assistant, command_palette,
-};
+use vela_actions::{Extensions, OpenRecent, OpenRemote, OpenSettings, command_palette};
 
 #[derive(PartialEq, Clone, Debug, Deserialize, Serialize, JsonSchema, Action)]
 #[action(namespace = welcome)]
@@ -91,7 +89,7 @@ impl RenderOnce for SectionButton {
 
         ButtonLike::new(id)
             .tab_index(self.tab_index as isize)
-            .size(ButtonSize::Compact)
+            .size(ButtonSize::Medium)
             .child(
                 h_flex()
                     .gap_2()
@@ -143,75 +141,6 @@ impl RenderOnce for RecentProjectButton {
     }
 }
 
-#[derive(IntoElement)]
-struct WalkthroughCard {
-    icon: IconName,
-    title: SharedString,
-    subtitle: SharedString,
-    featured: bool,
-    action: Box<dyn Action>,
-    tab_index: usize,
-    focus_handle: FocusHandle,
-}
-
-impl RenderOnce for WalkthroughCard {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let id = format!("welcome-walkthrough-{}-{}", self.title, self.tab_index);
-        let accent = Color::Accent.color(cx);
-        let colors = cx.theme().colors();
-        let featured = self.featured;
-        let subtitle = self.subtitle.clone();
-
-        ButtonLike::new(id)
-            .tab_index(self.tab_index as isize)
-            .full_width()
-            .child(
-                v_flex()
-                    .w_full()
-                    .px_2()
-                    .py(if featured { px(8.) } else { px(6.) })
-                    .gap_1()
-                    .rounded_md()
-                    .bg(colors.surface_background)
-                    .hover(|style| style.bg(colors.element_hover))
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                Icon::new(self.icon)
-                                    .color(Color::Accent)
-                                    .size(IconSize::Small),
-                            )
-                            .child(Label::new(self.title)),
-                    )
-                    .when(featured && !subtitle.is_empty(), |this| {
-                        this.child(
-                            div().pl_6().child(
-                                Label::new(subtitle)
-                                    .size(LabelSize::Small)
-                                    .color(Color::Muted),
-                            ),
-                        )
-                    })
-                    .when(featured, |this| {
-                        this.child(
-                            div()
-                                .mt_1()
-                                .ml_6()
-                                .h(px(2.))
-                                .w(rems(8.))
-                                .rounded_full()
-                                .bg(accent),
-                        )
-                    }),
-            )
-            .on_click(move |_, window, cx| {
-                self.focus_handle.dispatch_action(&*self.action, window, cx)
-            })
-    }
-}
-
 struct SectionEntry {
     icon: IconName,
     title: &'static str,
@@ -230,18 +159,18 @@ impl SectionEntry {
     }
 }
 
-const START: Section<5> = Section {
+const START: Section<4> = Section {
     title: "Start",
     entries: [
+        SectionEntry {
+            icon: IconName::FolderOpen,
+            title: "Open File or Folder...",
+            action: &Open::DEFAULT,
+        },
         SectionEntry {
             icon: IconName::Plus,
             title: "New File...",
             action: &NewFile,
-        },
-        SectionEntry {
-            icon: IconName::FolderOpen,
-            title: "Open...",
-            action: &Open::DEFAULT,
         },
         SectionEntry {
             icon: IconName::GitBranch,
@@ -256,11 +185,6 @@ const START: Section<5> = Section {
                 create_new_window: None,
             },
         },
-        SectionEntry {
-            icon: IconName::Sparkle,
-            title: "Generate New Workspace...",
-            action: &assistant::ToggleFocus,
-        },
     ],
 };
 
@@ -272,8 +196,9 @@ struct Section<const COLS: usize> {
 impl<const COLS: usize> Section<COLS> {
     fn render(self, index_offset: usize, focus: &FocusHandle) -> impl IntoElement {
         v_flex()
-            .min_w_full()
-            .gap_1()
+            .w_full()
+            .flex_none()
+            .gap_2()
             .child(SectionHeader::new(self.title))
             .children(
                 self.entries
@@ -303,23 +228,28 @@ impl WelcomePage {
         cx.on_focus(&focus_handle, window, |_, _, cx| cx.notify())
             .detach();
 
-        let fs = workspace
-            .upgrade()
-            .map(|ws| ws.read(cx).app_state().fs.clone());
         let db = WorkspaceDb::global(cx);
-        cx.spawn_in(window, async move |this: WeakEntity<Self>, cx| {
-            let Some(fs) = fs else { return };
-            let workspaces = db
-                .recent_project_workspaces(fs.as_ref())
-                .await
-                .log_err()
-                .unwrap_or_default();
+        cx.spawn_in(window, {
+            let workspace = workspace.clone();
+            async move |this: WeakEntity<Self>, cx| {
+                let Some(fs) = workspace
+                    .read_with(cx, |workspace, _| workspace.app_state().fs.clone())
+                    .log_err()
+                else {
+                    return;
+                };
+                let workspaces = db
+                    .recent_project_workspaces(fs.as_ref())
+                    .await
+                    .log_err()
+                    .unwrap_or_default();
 
-            this.update(cx, |this, cx| {
-                this.recent_workspaces = Some(workspaces);
-                cx.notify();
-            })
-            .ok();
+                this.update(cx, |this, cx| {
+                    this.recent_workspaces = Some(workspaces);
+                    cx.notify();
+                })
+                .log_err();
+            }
         })
         .detach();
 
@@ -329,11 +259,14 @@ impl WelcomePage {
             fallback_to_recent_projects,
             recent_workspaces: None,
         };
-        if let Some(workspace) = workspace.upgrade() {
-            workspace.update(cx, |workspace, cx| {
-                close_agent_panel(workspace, window, cx);
-            });
-        }
+        // Callers may still be constructing or updating the workspace.
+        cx.defer_in(window, move |_, window, cx| {
+            if let Some(workspace) = workspace.upgrade() {
+                workspace.update(cx, |workspace, cx| {
+                    close_agent_panel(workspace, window, cx);
+                });
+            }
+        });
         page
     }
 
@@ -428,120 +361,73 @@ impl WelcomePage {
                 )
             })
             .children(recents)
-            .child(
-                ButtonLike::new("welcome-recent-more")
-                    .tab_index(more_tab_index as isize)
-                    .size(ButtonSize::Compact)
-                    .child(Label::new("More...").color(Color::Accent))
-                    .on_click(move |_, window, cx| {
-                        focus.dispatch_action(&OpenRecent::default(), window, cx)
-                    }),
-            )
+            .when(!is_empty, |this| {
+                this.child(
+                    ButtonLike::new("welcome-recent-more")
+                        .tab_index(more_tab_index as isize)
+                        .size(ButtonSize::Compact)
+                        .child(Label::new("More...").color(Color::Accent))
+                        .on_click(move |_, window, cx| {
+                            focus.dispatch_action(&OpenRecent::default(), window, cx)
+                        }),
+                )
+            })
     }
 
-    fn render_walkthroughs(
-        &self,
-        start_tab_index: usize,
-        _cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let focus = self.focus_handle.clone();
-        let mut tab_index = start_tab_index;
-
-        let mut cards: Vec<WalkthroughCard> = Vec::new();
-        cards.push(WalkthroughCard {
-            icon: IconName::Star,
-            title: "Get started with Vela".into(),
-            subtitle: "Customize your editor, learn the basics, and start coding.".into(),
-            featured: true,
-            action: OpenOnboarding.boxed_clone(),
-            tab_index,
-            focus_handle: focus.clone(),
-        });
-        tab_index += 1;
-
-        cards.push(WalkthroughCard {
-            icon: IconName::Keyboard,
-            title: "Learn the Fundamentals".into(),
-            subtitle: SharedString::default(),
-            featured: false,
-            action: command_palette::Toggle.boxed_clone(),
-            tab_index,
-            focus_handle: focus.clone(),
-        });
-        tab_index += 1;
-
-        cards.push(WalkthroughCard {
-            icon: IconName::Settings,
-            title: "Customize your editor".into(),
-            subtitle: SharedString::default(),
-            featured: false,
-            action: OpenSettings.boxed_clone(),
-            tab_index,
-            focus_handle: focus.clone(),
-        });
-        tab_index += 1;
-
-        cards.push(WalkthroughCard {
-            icon: IconName::Blocks,
-            title: "Explore Extensions".into(),
-            subtitle: SharedString::default(),
-            featured: false,
-            action: Extensions {
-                category_filter: None,
-                id: None,
-            }
-            .boxed_clone(),
-            tab_index,
-            focus_handle: focus.clone(),
-        });
-        tab_index += 1;
-
-        let more_tab_index = tab_index;
-        let more_focus = focus;
-
-        v_flex()
-            .w_full()
-            .gap_1()
-            .child(SectionHeader::new("Walkthroughs"))
-            .children(cards)
-            .child(
-                ButtonLike::new("welcome-walkthroughs-more")
-                    .tab_index(more_tab_index as isize)
-                    .size(ButtonSize::Compact)
-                    .child(Label::new("More...").color(Color::Accent))
-                    .on_click(move |_, window, cx| {
-                        more_focus.dispatch_action(&OpenOnboarding, window, cx)
-                    }),
-            )
+    fn render_tools(&self, start_tab_index: usize) -> impl IntoElement {
+        Section {
+            title: "Tools",
+            entries: [
+                SectionEntry {
+                    icon: IconName::Keyboard,
+                    title: "Command Palette",
+                    action: &command_palette::Toggle,
+                },
+                SectionEntry {
+                    icon: IconName::Settings,
+                    title: "Settings",
+                    action: &OpenSettings,
+                },
+                SectionEntry {
+                    icon: IconName::Blocks,
+                    title: "Extensions",
+                    action: &Extensions {
+                        category_filter: None,
+                        id: None,
+                    },
+                },
+            ],
+        }
+        .render(start_tab_index, &self.focus_handle)
     }
 }
 
 impl Render for WelcomePage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let start_section = START;
-        let start_entries = start_section.entries.len();
-        let recent_tab_index = start_entries;
-        let walkthrough_tab_index = recent_tab_index + 10;
+        let recent_tab_index = start_section.entries.len();
+        let tools_tab_index = recent_tab_index + 10;
 
         v_flex()
+            .id("welcome-page")
             .key_context("Welcome")
             .track_focus(&self.focus_handle(cx))
             .on_action(cx.listener(Self::select_previous))
             .on_action(cx.listener(Self::select_next))
             .on_action(cx.listener(Self::open_recent_project))
             .size_full()
+            .overflow_y_scroll()
             .bg(cx.theme().colors().editor_background)
-            .justify_center()
+            .items_center()
+            .p_6()
             .child(
                 v_flex()
                     .id("welcome-content")
-                    .px_16()
-                    .pt_20()
-                    .pb_12()
                     .w_full()
-                    .max_w(rems_from_px(1200.))
-                    .gap_8()
-                    .overflow_y_scroll()
+                    .max_w(px(560.))
+                    .flex_none()
+                    .py_8()
+                    .gap_6()
                     .child(
                         v_flex()
                             .gap_1()
@@ -552,37 +438,14 @@ impl Render for WelcomePage {
                                     .child("Vela"),
                             )
                             .child(
-                                Label::new("The editor for what's next")
+                                Label::new("Open a project. Start building.")
                                     .size(LabelSize::Small)
                                     .color(Color::Muted),
                             ),
                     )
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .gap_16()
-                            .items_start()
-                            .flex_wrap()
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w(rems(18.))
-                                    .max_w(rems(28.))
-                                    .gap_6()
-                                    .child(
-                                        start_section
-                                            .render(Default::default(), &self.focus_handle),
-                                    )
-                                    .child(self.render_recent_section(recent_tab_index)),
-                            )
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w(rems(18.))
-                                    .max_w(rems(28.))
-                                    .child(self.render_walkthroughs(walkthrough_tab_index, cx)),
-                            ),
-                    ),
+                    .child(start_section.render(0, &self.focus_handle))
+                    .child(self.render_recent_section(recent_tab_index))
+                    .child(self.render_tools(tools_tab_index)),
             )
     }
 }

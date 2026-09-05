@@ -167,7 +167,7 @@ impl Panel for ProjectDiagnosticsPanel {
     }
 
     fn activation_priority(&self) -> u32 {
-        6
+        9
     }
 }
 

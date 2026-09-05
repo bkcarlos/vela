@@ -1,5 +1,11 @@
 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(0 2.8) scale(0.65)">
+<path d="M1.5 2H5L8 10.25L11 2H14.5L9.6 14H6.4L1.5 2Z" fill="black"/>
+<path d="M5 2L8 10.25L6.4 14L3.45 6.8L5 2Z" fill="black" fill-opacity="0.58"/>
+<path d="M11 2L8 10.25L9.6 14L12.55 6.8L11 2Z" fill="black" fill-opacity="0.32"/>
+<path d="M1.5 2L3.45 6.8L5 2H1.5Z" fill="black" fill-opacity="0.28"/>
+<path d="M11 2L12.55 6.8L14.5 2H11Z" fill="black" fill-opacity="0.72"/>
+</g>
 <path d="M10 6.66667L10.5 6.33333L12.5 5L14.5 6.33333L15 6.66667" stroke="black" stroke-width="1.2"/>
 <path d="M12.5 11V5" stroke="black" stroke-width="1.2"/>
-<path d="M7.5 8.9V11C5.43097 11 4.56903 11 2.5 11V10.4L7.5 5.6V5H2.5V7.1" stroke="black" stroke-width="1.2"/>
 </svg>

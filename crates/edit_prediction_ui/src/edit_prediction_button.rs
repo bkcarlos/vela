@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::{Client, UserStore, vela_urls};
+use client::{UserStore, vela_urls};
 use cloud_llm_client::UsageLimit;
 use codestral::{self, CodestralEditPredictionDelegate};
 use copilot::Status;
@@ -13,7 +13,7 @@ use fs::Fs;
 use gpui::{
     Action, Anchor, Animation, AnimationExt, App, AsyncWindowContext, Entity, FocusHandle,
     Focusable, IntoElement, ParentElement, Render, Subscription, TaskExt, WeakEntity, actions, div,
-    ease_in_out, pulsating_between,
+    pulsating_between,
 };
 use indoc::indoc;
 use language::{
@@ -375,36 +375,6 @@ impl Render for EditPredictionButton {
                     }
                 };
 
-                if edit_prediction::should_show_upsell_modal(cx) {
-                    let tooltip_meta = if self.user_store.read(cx).current_user().is_some() {
-                        "Choose a Plan"
-                    } else {
-                        "Configure a Provider"
-                    };
-
-                    return div().child(
-                        IconButton::new("vela-predict-pending-button", ep_icon)
-                            .shape(IconButtonShape::Square)
-                            .tab_index(0isize)
-                            .aria_label("Edit Predictions")
-                            .indicator(Indicator::dot().color(Color::Muted))
-                            .indicator_border_color(Some(cx.theme().colors().status_bar_background))
-                            .tooltip(move |_window, cx| {
-                                Tooltip::with_meta("Edit Predictions", None, tooltip_meta, cx)
-                            })
-                            .on_click(cx.listener(move |_, _, window, cx| {
-                                telemetry::event!(
-                                    "Pending ToS Clicked",
-                                    source = "Edit Prediction Status Button"
-                                );
-                                window.dispatch_action(
-                                    vela_actions::OpenVelaPredictOnboarding.boxed_clone(),
-                                    cx,
-                                );
-                            })),
-                    );
-                }
-
                 let mut over_limit = false;
 
                 if let Some(usage) = self
@@ -453,7 +423,7 @@ impl Render for EditPredictionButton {
                             let description = if !enabled {
                                 "Disabled For This File"
                             } else if vela_cloud_needs_sign_in {
-                                "Sign In Or Configure a Provider"
+                                "Configure a Provider"
                             } else if provider_unavailable || show_editor_predictions {
                                 tooltip_meta
                             } else {
@@ -1097,55 +1067,8 @@ impl EditPredictionButton {
 
             if needs_sign_in {
                 menu = menu
-                    .custom_row(move |_window, cx| {
-                        let description = indoc! {
-                            "You get 2,000 accepted suggestions at every keystroke for free, \
-                            powered by Zeta, our open-source, open-data model"
-                        };
-
-                        v_flex()
-                            .max_w_64()
-                            .h(rems_from_px(148.))
-                            .child(render_zeta_tab_animation(cx))
-                            .child(Label::new("Edit Prediction"))
-                            .child(
-                                Label::new(description)
-                                    .color(Color::Muted)
-                                    .size(LabelSize::Small),
-                            )
-                            .into_any_element()
-                    })
-                    .separator()
-                    .entry("Sign In & Start Using", None, |window, cx| {
-                        telemetry::event!(
-                            "Edit Prediction Menu Action",
-                            action = "sign_in",
-                            provider = "vela",
-                        );
-                        let client = Client::global(cx);
-                        window
-                            .spawn(cx, async move |cx| {
-                                client
-                                    .sign_in_with_optional_connect(true, &cx)
-                                    .await
-                                    .log_err();
-                            })
-                            .detach();
-                    })
-                    .link_with_handler(
-                        "Learn More",
-                        OpenBrowser {
-                            url: vela_urls::edit_prediction_docs(cx).into(),
-                        }
-                        .boxed_clone(),
-                        |_window, _cx| {
-                            telemetry::event!(
-                                "Edit Prediction Menu Action",
-                                action = "view_docs",
-                                source = "upsell",
-                            );
-                        },
-                    )
+                    .header("Edit Predictions")
+                    .item(ContextMenuEntry::new("Choose a provider to get started").disabled(true))
                     .separator();
             } else {
                 let mercury_payment_required = matches!(provider, EditPredictionProvider::Mercury)
@@ -1158,10 +1081,8 @@ impl EditPredictionButton {
                         .header("Mercury")
                         .item(ContextMenuEntry::new("Free tier limit reached").disabled(true))
                         .item(
-                            ContextMenuEntry::new(
-                                "Upgrade to a paid plan to continue using the service",
-                            )
-                            .disabled(true),
+                            ContextMenuEntry::new("Configure another provider to continue")
+                                .disabled(true),
                         )
                         .separator();
                 }
@@ -1204,16 +1125,6 @@ impl EditPredictionButton {
                             },
                             move |_, cx| cx.open_url(&vela_urls::account_url(cx)),
                         )
-                        .when(usage.over_limit(), |menu| -> ContextMenu {
-                            menu.entry("Subscribe to increase your limit", None, |_window, cx| {
-                                telemetry::event!(
-                                    "Edit Prediction Menu Action",
-                                    action = "upsell_clicked",
-                                    reason = "usage_limit",
-                                );
-                                cx.open_url(&vela_urls::account_url(cx))
-                            })
-                        })
                         .separator();
                 } else if self.user_store.read(cx).account_too_young() {
                     menu = menu
@@ -1226,14 +1137,10 @@ impl EditPredictionButton {
                             },
                             |_window, cx| cx.open_url(&vela_urls::account_url(cx)),
                         )
-                        .entry("Upgrade to Vela Pro or contact us.", None, |_window, cx| {
-                            telemetry::event!(
-                                "Edit Prediction Menu Action",
-                                action = "upsell_clicked",
-                                reason = "account_age",
-                            );
-                            cx.open_url(&vela_urls::account_url(cx))
-                        })
+                        .item(
+                            ContextMenuEntry::new("Configure another provider to continue")
+                                .disabled(true),
+                        )
                         .separator();
                 } else if self.user_store.read(cx).has_overdue_invoices() {
                     menu = menu
@@ -1547,73 +1454,6 @@ fn toggle_edit_prediction_mode(fs: Arc<dyn Fs>, mode: EditPredictionsMode, cx: &
             }
         });
     }
-}
-
-fn render_zeta_tab_animation(cx: &App) -> impl IntoElement {
-    let tab = |n: u64, inverted: bool| {
-        let text_color = cx.theme().colors().text;
-
-        h_flex().child(
-            h_flex()
-                .text_size(TextSize::XSmall.rems(cx))
-                .text_color(text_color)
-                .child("tab")
-                .with_animation(
-                    ElementId::Integer(n),
-                    Animation::new(Duration::from_secs(3)).repeat(),
-                    move |tab, delta| {
-                        let n_f32 = n as f32;
-
-                        let offset = if inverted {
-                            0.2 * (4.0 - n_f32)
-                        } else {
-                            0.2 * n_f32
-                        };
-
-                        let phase = (delta - offset + 1.0) % 1.0;
-                        let pulse = if phase < 0.6 {
-                            let t = phase / 0.6;
-                            1.0 - (0.5 - t).abs() * 2.0
-                        } else {
-                            0.0
-                        };
-
-                        let eased = ease_in_out(pulse);
-                        let opacity = 0.1 + 0.5 * eased;
-
-                        tab.text_color(text_color.opacity(opacity))
-                    },
-                ),
-        )
-    };
-
-    let tab_sequence = |inverted: bool| {
-        h_flex()
-            .gap_1()
-            .child(tab(0, inverted))
-            .child(tab(1, inverted))
-            .child(tab(2, inverted))
-            .child(tab(3, inverted))
-            .child(tab(4, inverted))
-    };
-
-    h_flex()
-        .my_1p5()
-        .p_4()
-        .justify_center()
-        .gap_2()
-        .rounded_xs()
-        .border_1()
-        .border_dashed()
-        .border_color(cx.theme().colors().border)
-        .bg(gpui::pattern_slash(
-            cx.theme().colors().border.opacity(0.5),
-            1.,
-            8.,
-        ))
-        .child(tab_sequence(true))
-        .child(Icon::new(IconName::VelaPredict))
-        .child(tab_sequence(false))
 }
 
 fn emit_edit_prediction_menu_opened(

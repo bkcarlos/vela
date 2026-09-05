@@ -45,8 +45,9 @@ use std::sync::Arc;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
-    Avatar, ButtonLike, ContextMenu, ContextMenuEntry, IconWithIndicator, Indicator, PopoverMenu,
-    PopoverMenuHandle, TintColor, Tooltip, prelude::*, utils::platform_title_bar_height,
+    Avatar, ButtonLike, ContextMenu, ContextMenuEntry, IconWithIndicator, Indicator, KeyBinding,
+    PopoverMenu, PopoverMenuHandle, TintColor, Tooltip, prelude::*,
+    utils::platform_title_bar_height,
 };
 use update_version::UpdateVersion;
 use util::ResultExt;
@@ -238,7 +239,7 @@ impl Render for TitleBar {
 
         let show_menus = show_menus(cx);
 
-        let mut children = <ArrayVec<_, 5>>::new();
+        let mut children = <ArrayVec<_, 6>>::new();
 
         let mut project_name = None;
         let mut repository = None;
@@ -338,6 +339,52 @@ impl Render for TitleBar {
                                 )
                         })
                 })
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .into_any_element(),
+        );
+
+        let has_project = self.project.read(cx).visible_worktrees(cx).next().is_some();
+        let (open_label, open_icon, open_action): (&str, IconName, Box<dyn Action>) = if has_project
+        {
+            (
+                "Search files…",
+                IconName::MagnifyingGlass,
+                workspace::ToggleFileFinder::default().boxed_clone(),
+            )
+        } else {
+            (
+                "Open File or Folder…",
+                IconName::FolderOpen,
+                workspace::Open {
+                    create_new_window: Some(false),
+                }
+                .boxed_clone(),
+            )
+        };
+        let tooltip_action = open_action.boxed_clone();
+
+        children.push(
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .justify_center()
+                .px_2()
+                .overflow_hidden()
+                .child(
+                    Button::new("quick-open", open_label)
+                        .style(ButtonStyle::OutlinedGhost)
+                        .start_icon(Icon::new(open_icon).size(IconSize::Small))
+                        .label_size(LabelSize::Small)
+                        .color(Color::Muted)
+                        .key_binding(KeyBinding::for_action(open_action.as_ref(), cx))
+                        .tab_index(0isize)
+                        .tooltip(move |_, cx| {
+                            Tooltip::for_action(open_label, tooltip_action.as_ref(), cx)
+                        })
+                        .on_click(move |_, window, cx| {
+                            window.dispatch_action(open_action.boxed_clone(), cx);
+                        }),
+                )
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .into_any_element(),
         );

@@ -107,7 +107,7 @@ impl Panel for BufferDiagnosticsPanel {
     }
 
     fn activation_priority(&self) -> u32 {
-        6
+        10
     }
 }
 

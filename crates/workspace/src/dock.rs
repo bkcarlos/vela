@@ -1570,7 +1570,7 @@ impl Render for PanelButtons {
                                         menu
                                     })
                                 })
-                                .trigger(move |is_active, _window, _cx| {
+                                .trigger(move |is_active, _window, cx| {
                                     // Include active state in element ID to invalidate the cached
                                     // tooltip when panel state changes (e.g., via keyboard shortcut)
                                     let button =
@@ -1596,13 +1596,41 @@ impl Render for PanelButtons {
                                                 })
                                             });
 
-                                    div().relative().child(button).when_some(
-                                        icon_label
-                                            .clone()
-                                            .filter(|_| !is_active_button)
-                                            .and_then(|label| label.parse::<usize>().ok()),
-                                        |this, count| this.child(CountBadge::new(count)),
-                                    )
+                                    div()
+                                        .relative()
+                                        .when(
+                                            matches!(location, PanelButtonsLocation::ActivityBar),
+                                            |this| {
+                                                this.w(px(40.))
+                                                    .h(px(36.))
+                                                    .flex()
+                                                    .items_center()
+                                                    .justify_center()
+                                                    .when(is_active_button, |this| {
+                                                        this.child(
+                                                            div()
+                                                                .absolute()
+                                                                .left_0()
+                                                                .top(px(8.))
+                                                                .bottom(px(8.))
+                                                                .w(px(2.))
+                                                                .rounded_full()
+                                                                .bg(cx
+                                                                    .theme()
+                                                                    .colors()
+                                                                    .icon_accent),
+                                                        )
+                                                    })
+                                            },
+                                        )
+                                        .child(button)
+                                        .when_some(
+                                            icon_label
+                                                .clone()
+                                                .filter(|_| !is_active_button)
+                                                .and_then(|label| label.parse::<usize>().ok()),
+                                            |this, count| this.child(CountBadge::new(count)),
+                                        )
                                 })
                                 .map(|menu| match location {
                                     PanelButtonsLocation::ActivityBar => {
@@ -1626,8 +1654,8 @@ impl Render for PanelButtons {
                 .w(px(40.))
                 .flex_none()
                 .items_center()
-                .gap_1()
-                .py_1()
+                .gap_0p5()
+                .py_2()
                 .bg(cx.theme().colors().panel_background)
                 .border_r_1()
                 .border_color(cx.theme().colors().border)

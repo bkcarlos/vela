@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use client::{Client, UserStore};
-use cloud_api_types::Plan;
 use gpui::{Entity, IntoElement, ParentElement};
 use language_model::{LanguageModelRegistry, VELA_CLOUD_PROVIDER_ID};
 use ui::prelude::*;
@@ -56,18 +55,6 @@ impl AgentPanelOnboarding {
 
 impl Render for AgentPanelOnboarding {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let enrolled_in_trial = self
-            .user_store
-            .read(cx)
-            .plan()
-            .is_some_and(|plan| plan == Plan::VelaProTrial);
-
-        let is_pro_user = self
-            .user_store
-            .read(cx)
-            .plan()
-            .is_some_and(|plan| plan == Plan::VelaPro);
-
         let onboarding = VelaAiOnboarding::new(
             self.client.clone(),
             &self.user_store,
@@ -82,7 +69,7 @@ impl Render for AgentPanelOnboarding {
         AgentPanelOnboardingCard::new()
             .child(onboarding)
             .map(|this| {
-                if enrolled_in_trial || is_pro_user || self.has_configured_providers {
+                if self.has_configured_providers {
                     this
                 } else {
                     this.child(ApiKeysWithoutProviders::new())

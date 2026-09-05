@@ -74,7 +74,7 @@
   // The weight of the UI font in standard CSS units from 100 to 900.
   "ui_font_weight": 400,
   // The default font size for text in the UI
-  "ui_font_size": 16,
+  "ui_font_size": 14,
   // The default font size for agent responses in the agent panel. Falls back to the UI font size if unset.
   "agent_ui_font_size": null,
   // The default font size for user messages in the agent panel.
@@ -542,7 +542,7 @@
     // Whether to show quick action buttons.
     "quick_actions": true,
     // Whether to show the Selections menu in the editor toolbar.
-    "selections_menu": true,
+    "selections_menu": false,
     // Whether to show agent review buttons in the editor toolbar.
     "agent_review": true,
     // Whether to show code action buttons in the editor toolbar.
@@ -561,9 +561,9 @@
     // Whether to show the project host and name in the titlebar.
     "show_project_items": true,
     // Whether to show onboarding banners in the titlebar.
-    "show_onboarding_banner": true,
+    "show_onboarding_banner": false,
     // Whether to show user picture in the titlebar.
-    "show_user_picture": true,
+    "show_user_picture": false,
     // Whether to show the user menu in the titlebar.
     "show_user_menu": true,
     // Whether to show the sign in button in the titlebar.
@@ -814,7 +814,7 @@
     // Where to dock the project panel. Can be 'left' or 'right'.
     "dock": "left",
     // Spacing between worktree entries in the project panel. Can be 'comfortable' or 'standard'.
-    "entry_spacing": "comfortable",
+    "entry_spacing": "standard",
     // Whether to show file icons in the project panel.
     "file_icons": true,
     // Whether to show folder icons or chevrons for directories in the project panel.
@@ -822,7 +822,7 @@
     // Whether to show the git status in the project panel.
     "git_status": true,
     // Amount of indentation for nested items.
-    "indent_size": 20,
+    "indent_size": 16,
     // Whether to reveal it in the project panel automatically,
     // when a corresponding project entry becomes active.
     // Gitignored entries are never auto revealed.
@@ -1069,12 +1069,12 @@
     "dock": "right",
     // Whether the agent panel should use flexible (proportional) sizing.
     //
-    // Default: true
-    "flexible": true,
+    // Default: false
+    "flexible": false,
     // Where to position the threads sidebar. Can be 'left' or 'right'.
     "sidebar_side": "left",
     // Default width when the agent panel is docked to the left or right.
-    "default_width": 640,
+    "default_width": 400,
     // Default height when the agent panel is docked to the bottom.
     "default_height": 320,
     // Whether to limit the content width in the agent panel. When enabled,
@@ -1310,7 +1310,7 @@
     // One of: ["right", "left"]
     "close_position": "right",
     // Whether to show the file icon for a tab.
-    "file_icons": false,
+    "file_icons": true,
     // Controls the appearance behavior of the tab's close button.
     //
     // 1. Show it just upon hovering the tab. (default)

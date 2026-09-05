@@ -2,76 +2,40 @@ mod agent_api_keys_onboarding;
 mod agent_panel_onboarding_card;
 mod agent_panel_onboarding_content;
 mod edit_prediction_onboarding_content;
-mod plan_definitions;
-mod young_account_banner;
 
 pub use agent_api_keys_onboarding::{ApiKeysWithProviders, ApiKeysWithoutProviders};
 pub use agent_panel_onboarding_card::AgentPanelOnboardingCard;
 pub use agent_panel_onboarding_content::AgentPanelOnboarding;
-use cloud_api_types::Plan;
 pub use edit_prediction_onboarding_content::EditPredictionOnboarding;
-pub use plan_definitions::PlanDefinitions;
-pub use young_account_banner::YoungAccountBanner;
 
 use std::sync::Arc;
 
-use client::{Client, UserStore, vela_urls};
-use gpui::{AnyElement, Entity, IntoElement, ParentElement, TaskExt};
-use ui::{Divider, RegisterComponent, Tooltip, Vector, VectorName, prelude::*};
-
-#[derive(PartialEq)]
-pub enum SignInStatus {
-    SignedIn,
-    SigningIn,
-    SignedOut,
-}
-
-impl From<client::Status> for SignInStatus {
-    fn from(status: client::Status) -> Self {
-        if status.is_signing_in() {
-            Self::SigningIn
-        } else if status.is_signed_out() {
-            Self::SignedOut
-        } else {
-            Self::SignedIn
-        }
-    }
-}
+use client::{Client, UserStore};
+use gpui::{AnyElement, Entity, IntoElement, ParentElement};
+use ui::{RegisterComponent, Tooltip, prelude::*};
 
 #[derive(RegisterComponent, IntoElement)]
 pub struct VelaAiOnboarding {
-    pub sign_in_status: SignInStatus,
-    pub plan: Option<Plan>,
-    pub account_too_young: bool,
-    pub continue_with_vela_ai: Arc<dyn Fn(&mut Window, &mut App)>,
-    pub sign_in: Arc<dyn Fn(&mut Window, &mut App)>,
+    settings_path: &'static str,
     pub dismiss_onboarding: Option<Arc<dyn Fn(&mut Window, &mut App)>>,
 }
 
 impl VelaAiOnboarding {
     pub fn new(
-        client: Arc<Client>,
-        user_store: &Entity<UserStore>,
-        continue_with_vela_ai: Arc<dyn Fn(&mut Window, &mut App)>,
-        cx: &mut App,
+        _client: Arc<Client>,
+        _user_store: &Entity<UserStore>,
+        _continue_with_vela_ai: Arc<dyn Fn(&mut Window, &mut App)>,
+        _cx: &mut App,
     ) -> Self {
-        let store = user_store.read(cx);
-        let status = *client.status().borrow();
-
         Self {
-            sign_in_status: status.into(),
-            plan: store.plan(),
-            account_too_young: store.account_too_young(),
-            continue_with_vela_ai,
-            sign_in: Arc::new(move |_window, cx| {
-                cx.spawn({
-                    let client = client.clone();
-                    async move |cx| client.sign_in_with_optional_connect(true, cx).await
-                })
-                .detach_and_log_err(cx);
-            }),
+            settings_path: "llm_providers",
             dismiss_onboarding: None,
         }
+    }
+
+    pub fn with_settings_path(mut self, settings_path: &'static str) -> Self {
+        self.settings_path = settings_path;
+        self
     }
 
     pub fn with_dismiss(
@@ -80,57 +44,6 @@ impl VelaAiOnboarding {
     ) -> Self {
         self.dismiss_onboarding = Some(Arc::new(dismiss_callback));
         self
-    }
-
-    fn certified_user_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::ProUserStamp,
-                rems_from_px(156.),
-                rems_from_px(60.),
-            )
-            .color(Color::Custom(cx.theme().colors().text_accent.alpha(0.8))),
-        )
-    }
-
-    fn pro_trial_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::ProTrialStamp,
-                rems_from_px(156.),
-                rems_from_px(60.),
-            )
-            .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
-    }
-
-    fn business_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::BusinessStamp,
-                rems_from_px(156.),
-                rems_from_px(60.),
-            )
-            .color(Color::Custom(cx.theme().colors().text_accent.alpha(0.8))),
-        )
-    }
-
-    fn vip_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(VectorName::VipStamp, rems_from_px(156.), rems_from_px(60.))
-                .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
-    }
-
-    fn student_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::StudentStamp,
-                rems_from_px(156.),
-                rems_from_px(60.),
-            )
-            .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
     }
 
     fn render_dismiss_button(&self) -> Option<AnyElement> {
@@ -153,242 +66,36 @@ impl VelaAiOnboarding {
                 .into_any_element()
         })
     }
-
-    fn render_sign_in_disclaimer(&self, _cx: &mut App) -> AnyElement {
-        let signing_in = matches!(self.sign_in_status, SignInStatus::SigningIn);
-
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Headline::new("Welcome to Vela AI"))
-            .child(
-                Label::new("Sign in to try Vela Pro free for 14 days.")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.sign_in_upsell())
-            .child(
-                Button::new("sign_in", "Try Vela Pro for Free")
-                    .disabled(signing_in)
-                    .full_width()
-                    .style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                    .on_click({
-                        let callback = self.sign_in.clone();
-                        move |_, window, cx| {
-                            telemetry::event!("Start Trial Clicked", state = "pre-sign-in");
-                            callback(window, cx)
-                        }
-                    }),
-            )
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_free_plan_state(&self, cx: &mut App) -> AnyElement {
-        if self.account_too_young {
-            v_flex()
-                .relative()
-                .min_w_0()
-                .gap_1()
-                .child(Headline::new("Welcome to Vela AI"))
-                .child(YoungAccountBanner)
-                .child(
-                    v_flex()
-                        .mt_2()
-                        .gap_1()
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Label::new("Pro")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Accent)
-                                        .buffer_font(cx),
-                                )
-                                .child(Divider::horizontal()),
-                        )
-                        .child(PlanDefinitions.pro_plan())
-                        .child(
-                            Button::new("pro", "Get Started")
-                                .full_width()
-                                .style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                                .on_click(move |_, _window, cx| {
-                                    telemetry::event!(
-                                        "Upgrade To Pro Clicked",
-                                        state = "young-account"
-                                    );
-                                    cx.open_url(&vela_urls::upgrade_to_vela_pro_url(cx))
-                                }),
-                        ),
-                )
-                .into_any_element()
-        } else {
-            v_flex()
-                .w_full()
-                .relative()
-                .gap_1()
-                .child(Headline::new("Welcome to Vela AI"))
-                .child(
-                    v_flex()
-                        .mt_2()
-                        .gap_1()
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Label::new("Free")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Muted)
-                                        .buffer_font(cx),
-                                )
-                                .child(
-                                    Label::new("(Current Plan)")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Custom(
-                                            cx.theme().colors().text_muted.opacity(0.6),
-                                        ))
-                                        .buffer_font(cx),
-                                )
-                                .child(Divider::horizontal()),
-                        )
-                        .child(PlanDefinitions.free_plan()),
-                )
-                .children(self.render_dismiss_button())
-                .child(
-                    v_flex()
-                        .mt_2()
-                        .gap_1()
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Label::new("Pro Trial")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Accent)
-                                        .buffer_font(cx),
-                                )
-                                .child(Divider::horizontal()),
-                        )
-                        .child(PlanDefinitions.pro_trial(true))
-                        .child(
-                            Button::new("pro", "Start Free Trial")
-                                .full_width()
-                                .style(ButtonStyle::Tinted(ui::TintColor::Accent))
-                                .on_click(move |_, _window, cx| {
-                                    telemetry::event!(
-                                        "Start Trial Clicked",
-                                        state = "post-sign-in"
-                                    );
-                                    cx.open_url(&vela_urls::start_trial_url(cx))
-                                }),
-                        ),
-                )
-                .into_any_element()
-        }
-    }
-
-    fn render_trial_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::pro_trial_stamp(cx))
-            .child(Headline::new("Welcome to the Vela Pro Trial"))
-            .child(
-                Label::new("Here's what you get for the next 14 days:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.pro_trial(false))
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_pro_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::certified_user_stamp(cx))
-            .child(Headline::new("Welcome to Vela Pro"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.pro_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_business_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::business_stamp(cx))
-            .child(Headline::new("Welcome to Vela Business"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.business_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_vip_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::vip_stamp(cx))
-            .child(Headline::new("Welcome to Vela VIP"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.vip_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_student_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::student_stamp(cx))
-            .child(Headline::new("Welcome to Vela Student"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.student_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
 }
 
 impl RenderOnce for VelaAiOnboarding {
-    fn render(self, _window: &mut ui::Window, cx: &mut App) -> impl IntoElement {
-        if matches!(self.sign_in_status, SignInStatus::SignedIn) {
-            match self.plan {
-                None => self.render_free_plan_state(cx),
-                Some(Plan::VelaFree) => self.render_free_plan_state(cx),
-                Some(Plan::VelaProTrial) => self.render_trial_state(cx),
-                Some(Plan::VelaPro) => self.render_pro_plan_state(cx),
-                Some(Plan::VelaBusiness) => self.render_business_plan_state(cx),
-                Some(Plan::VelaVip) => self.render_vip_plan_state(cx),
-                Some(Plan::VelaStudent) => self.render_student_plan_state(cx),
-            }
-        } else {
-            self.render_sign_in_disclaimer(cx)
-        }
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let settings_path = self.settings_path;
+        v_flex()
+            .relative()
+            .gap_3()
+            .child(Headline::new("Configure your AI provider"))
+            .child(
+                Label::new(
+                    "Use your own API key or a local model. Configure a provider to get started.",
+                )
+                .color(Color::Muted),
+            )
+            .child(
+                Button::new("configure-model-provider", "Configure Models")
+                    .full_width()
+                    .style(ButtonStyle::Tinted(ui::TintColor::Accent))
+                    .on_click(move |_, window, cx| {
+                        window.dispatch_action(
+                            Box::new(vela_actions::OpenSettingsAt {
+                                path: settings_path.to_string(),
+                                target: None,
+                            }),
+                            cx,
+                        );
+                    }),
+            )
+            .children(self.render_dismiss_button())
     }
 }
 
@@ -403,73 +110,15 @@ impl Component for VelaAiOnboarding {
 
     fn description() -> &'static str {
         "The onboarding surface shown to new agent panel users, \
-        guiding them through signing in to Vela and selecting a plan \
-        before they can start using the agent."
+        guiding them through configuring their own model provider."
     }
 
     fn preview(_window: &mut Window, _cx: &mut App) -> AnyElement {
-        fn onboarding(
-            sign_in_status: SignInStatus,
-            plan: Option<Plan>,
-            account_too_young: bool,
-        ) -> AnyElement {
-            div()
-                .w_full()
-                .min_w_40()
-                .max_w(px(1100.))
-                .child(
-                    AgentPanelOnboardingCard::new().child(
-                        VelaAiOnboarding {
-                            sign_in_status,
-                            plan,
-                            account_too_young,
-                            continue_with_vela_ai: Arc::new(|_, _| {}),
-                            sign_in: Arc::new(|_, _| {}),
-                            dismiss_onboarding: None,
-                        }
-                        .into_any_element(),
-                    ),
-                )
-                .into_any_element()
-        }
-
-        v_flex()
-            .min_w_0()
-            .gap_4()
-            .children(vec![
-                single_example(
-                    "Not Signed-in",
-                    onboarding(SignInStatus::SignedOut, None, false),
-                ),
-                single_example(
-                    "Young Account",
-                    onboarding(SignInStatus::SignedIn, None, true),
-                ),
-                single_example(
-                    "Free Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaFree), false),
-                ),
-                single_example(
-                    "Pro Trial",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaProTrial), false),
-                ),
-                single_example(
-                    "Pro Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaPro), false),
-                ),
-                single_example(
-                    "Business Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaBusiness), false),
-                ),
-                single_example(
-                    "VIP Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaVip), false),
-                ),
-                single_example(
-                    "Student Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::VelaStudent), false),
-                ),
-            ])
+        AgentPanelOnboardingCard::new()
+            .child(Self {
+                settings_path: "llm_providers",
+                dismiss_onboarding: None,
+            })
             .into_any_element()
     }
 }
