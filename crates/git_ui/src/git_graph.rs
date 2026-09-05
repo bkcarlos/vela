@@ -13,15 +13,15 @@ use git::{
     BuildCommitPermalinkParams, GitHostingProviderRegistry, GitRemote, Oid, ParsedGitRemote,
     parse_git_remote_url,
     repository::{
-        CommitDetails, CommitDiff, CommitFile, InitialGraphCommitData, LogOrder, LogSource, RepoPath,
-        SearchCommitArgs,
+        CommitDetails, CommitDiff, CommitFile, InitialGraphCommitData, LogOrder, LogSource,
+        RepoPath, SearchCommitArgs,
     },
     status::{FileStatus, StatusCode, TrackedStatus},
 };
 use gpui::{
-    Action, Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, DefiniteLength, DismissEvent,
-    DragMoveEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    MouseButton, MouseDownEvent, PathBuilder, Pixels, Point, ScrollHandle, ScrollStrategy,
+    Action, Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, DefiniteLength,
+    DismissEvent, DragMoveEvent, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
+    Hsla, MouseButton, MouseDownEvent, PathBuilder, Pixels, Point, ScrollHandle, ScrollStrategy,
     ScrollWheelEvent, SharedString, Subscription, Task, TextStyleRefinement,
     UniformListScrollHandle, WeakEntity, Window, actions, anchored, deferred, point, prelude::*,
     px, uniform_list,
@@ -1396,11 +1396,75 @@ impl GitGraph {
         ((viewport_height / row_height).ceil() as usize).min(self.graph_data.commits.len())
     }
 
-    fn graph_canvas_content_width(&self) -> Pixels {
-        (LANE_WIDTH * self.graph_data.max_lanes.max(6) as f32) + LEFT_PADDING * 2.0
+    fn graph_lane_count(&self, first_row: usize, end_row: usize) -> usize {
+        let mut rightmost_lane = self
+            .graph_data
+            .commits
+            .iter()
+            .skip(first_row)
+            .take(end_row - first_row)
+            .map(|commit| commit.lane)
+            .max()
+            .unwrap_or(0);
+
+        // Lines crossing the viewport can occupy lanes with no visible commit node.
+        for line in &self.graph_data.lines {
+            if line.full_interval.start > end_row || line.full_interval.end < first_row {
+                continue;
+            }
+            let Some((segment_index, column)) = line.get_first_visible_segment_idx(first_row)
+            else {
+                continue;
+            };
+            rightmost_lane = rightmost_lane.max(column);
+            for segment in line.segments.iter().skip(segment_index) {
+                match segment {
+                    CommitLineSegment::Straight { to_row } => {
+                        if *to_row > end_row {
+                            break;
+                        }
+                    }
+                    CommitLineSegment::Curve {
+                        to_column, on_row, ..
+                    } => {
+                        if *on_row > end_row {
+                            break;
+                        }
+                        rightmost_lane = rightmost_lane.max(*to_column);
+                    }
+                }
+            }
+        }
+        rightmost_lane + 1
+    }
+
+    fn graph_canvas_content_width(&self, window: &Window, cx: &App) -> Pixels {
+        let lanes = if self.embedded {
+            let row_height = Self::row_height(window, cx);
+            let offset = self.table_interaction_state.read(cx).scroll_offset().y;
+            let first_row = ((-offset).max(px(0.)) / row_height).floor() as usize;
+            let end_row = first_row + self.visible_row_count(window, cx) + 2;
+            self.graph_lane_count(first_row, end_row)
+        } else {
+            self.graph_data.max_lanes.max(6)
+        };
+        LANE_WIDTH * lanes as f32 + LEFT_PADDING * 2.0
     }
 
     fn preview_column_fractions(&self, window: &Window, cx: &App) -> [f32; 5] {
+        if self.embedded {
+            return if self.log_source.path().is_some() {
+                [0.0, 1.0, 0.0, 0.0, 0.0]
+            } else {
+                let container_width = self.column_widths.read(cx).cached_container_width();
+                let graph_fraction = if container_width > px(0.) {
+                    (self.graph_canvas_content_width(window, cx) / container_width).min(0.4)
+                } else {
+                    0.2
+                };
+                [graph_fraction, 1.0 - graph_fraction, 0.0, 0.0, 0.0]
+            };
+        }
         let raw = self
             .column_widths
             .read(cx)
@@ -1459,7 +1523,7 @@ impl GitGraph {
         if container > px(0.) && graph_fraction > 0.0 {
             container * graph_fraction
         } else {
-            self.graph_canvas_content_width()
+            self.graph_canvas_content_width(window, cx)
         }
     }
 
@@ -1772,7 +1836,8 @@ impl GitGraph {
         commit_idx: usize,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let chip = self.render_chip(name, accent_color, is_head);
+        let display_name = Self::ref_name_from_decoration(name).unwrap_or_else(|| name.clone());
+        let chip = self.render_chip(&display_name, accent_color, is_head);
         let Some(ref_name) = Self::ref_name_from_decoration(name) else {
             return chip.into_any_element();
         };
@@ -1876,6 +1941,7 @@ impl GitGraph {
                         .into_any_element()
                 };
 
+                let subject_tooltip = subject.clone();
                 let subject_label = if is_matched {
                     let query = match &self.search_state.state {
                         QueryState::Confirmed((query, _)) => Some(query.clone()),
@@ -1917,27 +1983,51 @@ impl GitGraph {
                 vec![
                     div()
                         .id(ElementId::NamedInteger("commit-subject".into(), idx as u64))
+                        .tooltip(Tooltip::text(subject_tooltip))
+                        .when(self.embedded && self.log_source.path().is_none(), |this| {
+                            this.pl(LANE_WIDTH * self.graph_lane_count(idx, idx + 1) as f32
+                                + LEFT_PADDING * 2.0)
+                        })
                         .overflow_hidden()
                         .child(
                             h_flex()
+                                .w_full()
                                 .gap_2()
                                 .overflow_hidden()
-                                .children((!commit.data.ref_names.is_empty()).then(|| {
-                                    h_flex().gap_1().children(commit.data.ref_names.iter().map(
-                                        |name| {
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .child(subject_label),
+                                )
+                                .children(
+                                    commit
+                                        .data
+                                        .ref_names
+                                        .iter()
+                                        .take(if self.embedded { 1 } else { usize::MAX })
+                                        .map(|name| {
                                             let is_head =
                                                 Self::is_head_ref(name.as_ref(), &head_branch_name);
-                                            self.render_ref_chip(
-                                                name,
-                                                accent_color,
-                                                is_head,
-                                                idx,
-                                                cx,
+                                            div().max_w(px(120.)).overflow_hidden().child(
+                                                self.render_ref_chip(
+                                                    name,
+                                                    accent_color,
+                                                    is_head,
+                                                    idx,
+                                                    cx,
+                                                ),
                                             )
-                                        },
-                                    ))
-                                }))
-                                .child(subject_label),
+                                        }),
+                                )
+                                .when(self.embedded && commit.data.ref_names.len() > 1, |this| {
+                                    this.child(
+                                        Label::new(format!("+{}", commit.data.ref_names.len() - 1))
+                                            .size(LabelSize::XSmall)
+                                            .color(Color::Muted),
+                                    )
+                                }),
                         )
                         .into_any_element(),
                     column_label(formatted_time.into()),
@@ -2346,7 +2436,12 @@ impl GitGraph {
         cx.notify();
     }
 
-    fn toggle_log_order(&mut self, _: &ToggleLogOrder, _window: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_log_order(
+        &mut self,
+        _: &ToggleLogOrder,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let next = match self.log_order {
             LogOrder::DateOrder => LogOrder::TopoOrder,
             _ => LogOrder::DateOrder,
@@ -2368,10 +2463,7 @@ impl GitGraph {
         }
     }
 
-    fn render_log_order_control(
-        &self,
-        graph: WeakEntity<Self>,
-    ) -> impl IntoElement + use<> {
+    fn render_log_order_control(&self, graph: WeakEntity<Self>) -> impl IntoElement + use<> {
         let current = self.log_order;
         Button::new("git-graph-log-order", Self::log_order_label(current))
             .style(ButtonStyle::Subtle)
@@ -2418,11 +2510,7 @@ impl GitGraph {
                         .color(Color::Accent),
                 )
                 .child(Label::new("Uncommitted Changes"))
-                .child(
-                    Label::new(label)
-                        .size(LabelSize::Small)
-                        .color(Color::Muted),
-                )
+                .child(Label::new(label).size(LabelSize::Small).color(Color::Muted))
                 .on_click(|_, window, cx| {
                     window.dispatch_action(crate::git_panel::ActivateChangesTab.boxed_clone(), cx);
                 }),
@@ -2430,6 +2518,10 @@ impl GitGraph {
     }
 
     fn ensure_inspect_commit_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.embedded {
+            self.clear_inspect_view();
+            return;
+        }
         let Some(idx) = self.selected_entry_idx else {
             self.clear_inspect_view();
             return;
@@ -2842,7 +2934,7 @@ impl GitGraph {
             )
             .child(
                 h_flex()
-                    .min_w_64()
+                    .flex_shrink_0()
                     .gap_1()
                     .child({
                         let focus_handle = self.focus_handle.clone();
@@ -2989,8 +3081,10 @@ impl GitGraph {
             .map(|datetime| {
                 let local_offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
                 let local_datetime = datetime.to_offset(local_offset);
-                let format =
-                    time::format_description::parse("[month repr:short] [day], [year]").ok();
+                let format = time::format_description::parse(
+                    "[year]-[month]-[day] [hour]:[minute]:[second]",
+                )
+                .ok();
                 format
                     .and_then(|f| local_datetime.format(&f).ok())
                     .unwrap_or_default()
@@ -3082,93 +3176,208 @@ impl GitGraph {
                     self.commit_details_split_state.read(cx).right_ratio(),
                 ))
             })
-            .child(
-                v_flex()
-                    .relative()
-                    .w_full()
-                    .p_2()
-                    .gap_2()
-                    .child(
-                        div().absolute().top_2().right_2().child(
-                            IconButton::new("close-detail", IconName::Close)
+            .when(self.embedded, |this| {
+                this.child(
+                    h_flex()
+                        .p_2()
+                        .gap_2()
+                        .w_full()
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Label::new(author_name.clone())
+                                    .size(LabelSize::Small)
+                                    .truncate(),
+                            ),
+                        )
+                        .child(
+                            Label::new(date_string.clone())
+                                .size(LabelSize::XSmall)
+                                .color(Color::Muted),
+                        )
+                        .child(
+                            Button::new("copy-compact-sha", commit_entry.data.sha.display_short())
+                                .label_size(LabelSize::XSmall)
+                                .tooltip(Tooltip::text("Copy Commit SHA"))
+                                .on_click({
+                                    let full_sha = full_sha.clone();
+                                    move |_, _, cx| {
+                                        cx.write_to_clipboard(ClipboardItem::new_string(
+                                            full_sha.to_string(),
+                                        ))
+                                    }
+                                }),
+                        )
+                        .child(
+                            IconButton::new("close-compact-detail", IconName::Close)
                                 .icon_size(IconSize::Small)
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.selected_entry_idx = None;
-                                    this.selected_commit_diff = None;
-                                    this.selected_commit_diff_stats = None;
-                                    this.selected_commit_message = None;
-                                    this._selected_commit_message_task = None;
-                                    this.changed_files_expanded_dirs.clear();
-                                    this._commit_diff_task = None;
-                                    this.clear_inspect_view();
-                                    cx.notify();
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.cancel(&Cancel, window, cx)
                                 })),
                         ),
-                    )
-                    .child(
-                        v_flex()
-                            .py_1()
-                            .w_full()
-                            .items_center()
-                            .child(avatar)
-                            .child(Label::new(author_name).mt_1p5())
-                            .child(
-                                Label::new(date_string)
-                                    .color(Color::Muted)
-                                    .size(LabelSize::Small),
+                )
+                .child(
+                    h_flex()
+                        .px_2()
+                        .gap_1()
+                        .flex_wrap()
+                        .children(ref_names.iter().map(|name| {
+                            self.render_ref_chip(
+                                name,
+                                accent_color,
+                                Self::is_head_ref(name.as_ref(), &head_branch_name),
+                                selected_idx,
+                                cx,
+                            )
+                        })),
+                )
+            })
+            .when(!self.embedded, |this| {
+                this.child(
+                    v_flex()
+                        .relative()
+                        .w_full()
+                        .p_2()
+                        .gap_2()
+                        .child(
+                            div().absolute().top_2().right_2().child(
+                                IconButton::new("close-detail", IconName::Close)
+                                    .icon_size(IconSize::Small)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.selected_entry_idx = None;
+                                        this.selected_commit_diff = None;
+                                        this.selected_commit_diff_stats = None;
+                                        this.selected_commit_message = None;
+                                        this._selected_commit_message_task = None;
+                                        this.changed_files_expanded_dirs.clear();
+                                        this._commit_diff_task = None;
+                                        this.clear_inspect_view();
+                                        cx.notify();
+                                    })),
                             ),
-                    )
-                    .children((!ref_names.is_empty()).then(|| {
-                        h_flex().gap_1().flex_wrap().justify_center().children(
-                            ref_names.iter().map(|name| {
-                                let is_head = Self::is_head_ref(name.as_ref(), &head_branch_name);
-                                self.render_ref_chip(name, accent_color, is_head, selected_idx, cx)
-                            }),
                         )
-                    }))
-                    .child(
-                        v_flex()
-                            .ml_neg_1()
-                            .gap_1p5()
-                            .when(!author_email.is_empty(), |this| {
-                                let copied_state: Entity<CopiedState> = window.use_keyed_state(
-                                    "author-email-copy",
-                                    cx,
-                                    CopiedState::new,
-                                );
-                                let is_copied = copied_state.read(cx).is_copied();
+                        .child(
+                            v_flex()
+                                .py_1()
+                                .w_full()
+                                .items_center()
+                                .child(avatar)
+                                .child(Label::new(author_name).mt_1p5())
+                                .child(
+                                    Label::new(date_string)
+                                        .color(Color::Muted)
+                                        .size(LabelSize::Small),
+                                ),
+                        )
+                        .children((!ref_names.is_empty()).then(|| {
+                            h_flex().gap_1().flex_wrap().justify_center().children(
+                                ref_names.iter().map(|name| {
+                                    let is_head =
+                                        Self::is_head_ref(name.as_ref(), &head_branch_name);
+                                    self.render_ref_chip(
+                                        name,
+                                        accent_color,
+                                        is_head,
+                                        selected_idx,
+                                        cx,
+                                    )
+                                }),
+                            )
+                        }))
+                        .child(
+                            v_flex()
+                                .ml_neg_1()
+                                .gap_1p5()
+                                .when(!author_email.is_empty(), |this| {
+                                    let copied_state: Entity<CopiedState> = window.use_keyed_state(
+                                        "author-email-copy",
+                                        cx,
+                                        CopiedState::new,
+                                    );
+                                    let is_copied = copied_state.read(cx).is_copied();
 
-                                let (icon, icon_color, tooltip_label) = if is_copied {
-                                    (IconName::Check, Color::Success, "Email Copied!")
-                                } else {
-                                    (IconName::Envelope, Color::Muted, "Copy Email")
-                                };
+                                    let (icon, icon_color, tooltip_label) = if is_copied {
+                                        (IconName::Check, Color::Success, "Email Copied!")
+                                    } else {
+                                        (IconName::Envelope, Color::Muted, "Copy Email")
+                                    };
 
-                                let copy_email = author_email.clone();
-                                let author_email_for_tooltip = author_email.clone();
+                                    let copy_email = author_email.clone();
+                                    let author_email_for_tooltip = author_email.clone();
 
-                                this.child(
-                                    Button::new("author-email-copy", author_email.clone())
+                                    this.child(
+                                        Button::new("author-email-copy", author_email.clone())
+                                            .start_icon(
+                                                Icon::new(icon)
+                                                    .size(IconSize::Small)
+                                                    .color(icon_color),
+                                            )
+                                            .label_size(LabelSize::Small)
+                                            .truncate(true)
+                                            .color(Color::Muted)
+                                            .tooltip(move |_, cx| {
+                                                Tooltip::with_meta(
+                                                    tooltip_label,
+                                                    None,
+                                                    author_email_for_tooltip.clone(),
+                                                    cx,
+                                                )
+                                            })
+                                            .on_click(move |_, _, cx| {
+                                                copied_state.update(cx, |state, _cx| {
+                                                    state.mark_copied();
+                                                });
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    copy_email.to_string(),
+                                                ));
+                                                let state_id = copied_state.entity_id();
+                                                cx.spawn(async move |cx| {
+                                                    cx.background_executor()
+                                                        .timer(COPIED_STATE_DURATION)
+                                                        .await;
+                                                    cx.update(|cx| {
+                                                        cx.notify(state_id);
+                                                    })
+                                                })
+                                                .detach();
+                                            }),
+                                    )
+                                })
+                                .child({
+                                    let copy_sha = full_sha.clone();
+                                    let copied_state: Entity<CopiedState> =
+                                        window.use_keyed_state("sha-copy", cx, CopiedState::new);
+                                    let is_copied = copied_state.read(cx).is_copied();
+
+                                    let (icon, icon_color, tooltip_label) = if is_copied {
+                                        (IconName::Check, Color::Success, "Commit SHA Copied!")
+                                    } else {
+                                        (IconName::Hash, Color::Muted, "Copy Commit SHA")
+                                    };
+
+                                    Button::new("sha-button", &full_sha)
                                         .start_icon(
                                             Icon::new(icon).size(IconSize::Small).color(icon_color),
                                         )
                                         .label_size(LabelSize::Small)
                                         .truncate(true)
                                         .color(Color::Muted)
-                                        .tooltip(move |_, cx| {
-                                            Tooltip::with_meta(
-                                                tooltip_label,
-                                                None,
-                                                author_email_for_tooltip.clone(),
-                                                cx,
-                                            )
+                                        .tooltip({
+                                            let full_sha = full_sha.clone();
+                                            move |_, cx| {
+                                                Tooltip::with_meta(
+                                                    tooltip_label,
+                                                    None,
+                                                    full_sha.clone(),
+                                                    cx,
+                                                )
+                                            }
                                         })
                                         .on_click(move |_, _, cx| {
                                             copied_state.update(cx, |state, _cx| {
                                                 state.mark_copied();
                                             });
                                             cx.write_to_clipboard(ClipboardItem::new_string(
-                                                copy_email.to_string(),
+                                                copy_sha.to_string(),
                                             ));
                                             let state_id = copied_state.entity_id();
                                             cx.spawn(async move |cx| {
@@ -3180,93 +3389,46 @@ impl GitGraph {
                                                 })
                                             })
                                             .detach();
-                                        }),
-                                )
-                            })
-                            .child({
-                                let copy_sha = full_sha.clone();
-                                let copied_state: Entity<CopiedState> =
-                                    window.use_keyed_state("sha-copy", cx, CopiedState::new);
-                                let is_copied = copied_state.read(cx).is_copied();
-
-                                let (icon, icon_color, tooltip_label) = if is_copied {
-                                    (IconName::Check, Color::Success, "Commit SHA Copied!")
-                                } else {
-                                    (IconName::Hash, Color::Muted, "Copy Commit SHA")
-                                };
-
-                                Button::new("sha-button", &full_sha)
-                                    .start_icon(
-                                        Icon::new(icon).size(IconSize::Small).color(icon_color),
-                                    )
-                                    .label_size(LabelSize::Small)
-                                    .truncate(true)
-                                    .color(Color::Muted)
-                                    .tooltip({
-                                        let full_sha = full_sha.clone();
-                                        move |_, cx| {
-                                            Tooltip::with_meta(
-                                                tooltip_label,
-                                                None,
-                                                full_sha.clone(),
-                                                cx,
-                                            )
-                                        }
-                                    })
-                                    .on_click(move |_, _, cx| {
-                                        copied_state.update(cx, |state, _cx| {
-                                            state.mark_copied();
-                                        });
-                                        cx.write_to_clipboard(ClipboardItem::new_string(
-                                            copy_sha.to_string(),
-                                        ));
-                                        let state_id = copied_state.entity_id();
-                                        cx.spawn(async move |cx| {
-                                            cx.background_executor()
-                                                .timer(COPIED_STATE_DURATION)
-                                                .await;
-                                            cx.update(|cx| {
-                                                cx.notify(state_id);
-                                            })
                                         })
-                                        .detach();
-                                    })
-                            })
-                            .when_some(remote.clone(), |this, remote| {
-                                let provider_name = remote.host.name();
-                                let icon = crate::get_provider_icon(provider_name.as_str());
-                                let parsed_remote = ParsedGitRemote {
-                                    owner: remote.owner.as_ref().into(),
-                                    repo: remote.repo.as_ref().into(),
-                                };
-                                let params = BuildCommitPermalinkParams {
-                                    sha: full_sha.as_ref(),
-                                };
-                                let url = remote
-                                    .host
-                                    .build_commit_permalink(&parsed_remote, params)
-                                    .to_string();
+                                })
+                                .when_some(remote.clone(), |this, remote| {
+                                    let provider_name = remote.host.name();
+                                    let icon = crate::get_provider_icon(provider_name.as_str());
+                                    let parsed_remote = ParsedGitRemote {
+                                        owner: remote.owner.as_ref().into(),
+                                        repo: remote.repo.as_ref().into(),
+                                    };
+                                    let params = BuildCommitPermalinkParams {
+                                        sha: full_sha.as_ref(),
+                                    };
+                                    let url = remote
+                                        .host
+                                        .build_commit_permalink(&parsed_remote, params)
+                                        .to_string();
 
-                                this.child(
-                                    Button::new(
-                                        "view-on-provider",
-                                        format!("View on {}", provider_name),
+                                    this.child(
+                                        Button::new(
+                                            "view-on-provider",
+                                            format!("View on {}", provider_name),
+                                        )
+                                        .start_icon(
+                                            Icon::new(icon)
+                                                .size(IconSize::Small)
+                                                .color(Color::Muted),
+                                        )
+                                        .label_size(LabelSize::Small)
+                                        .truncate(true)
+                                        .color(Color::Muted)
+                                        .on_click(
+                                            move |_, _, cx| {
+                                                cx.open_url(&url);
+                                            },
+                                        ),
                                     )
-                                    .start_icon(
-                                        Icon::new(icon).size(IconSize::Small).color(Color::Muted),
-                                    )
-                                    .label_size(LabelSize::Small)
-                                    .truncate(true)
-                                    .color(Color::Muted)
-                                    .on_click(
-                                        move |_, _, cx| {
-                                            cx.open_url(&url);
-                                        },
-                                    ),
-                                )
-                            }),
-                    ),
-            )
+                                }),
+                        ),
+                )
+            })
             .child(Divider::horizontal())
             .child(self.render_commit_message(window, cx))
             .child(Divider::horizontal())
@@ -3452,8 +3614,8 @@ impl GitGraph {
         let vertical_scroll_offset = scroll_offset_y - (first_visible_row as f32 * row_height);
 
         let graph_viewport_width = self.graph_viewport_width(window, cx);
-        let graph_width = if self.graph_canvas_content_width() > graph_viewport_width {
-            self.graph_canvas_content_width()
+        let graph_width = if self.graph_canvas_content_width(window, cx) > graph_viewport_width {
+            self.graph_canvas_content_width(window, cx)
         } else {
             graph_viewport_width
         };
@@ -3483,6 +3645,7 @@ impl GitGraph {
             .and_then(|menu| menu.target_entry_index);
         let is_focused = self.focus_handle.is_focused(window);
         let graph_canvas_bounds = self.graph_canvas_bounds.clone();
+        let embedded = self.embedded;
 
         gpui::canvas(
             move |_bounds, _window, _cx| {},
@@ -3506,7 +3669,7 @@ impl GitGraph {
                         let is_context_menu_target =
                             context_menu_target_index == Some(absolute_row_idx);
 
-                        if is_hovered || is_selected || is_context_menu_target {
+                        if !embedded && (is_hovered || is_selected || is_context_menu_target) {
                             let row_y = bounds.origin.y + visible_row_idx as f32 * row_height
                                 - vertical_scroll_offset;
 
@@ -3525,17 +3688,6 @@ impl GitGraph {
                             };
                             window.paint_quad(gpui::fill(row_bounds, bg_color));
                         }
-                    }
-
-                    for (row_idx, row) in rows.into_iter().enumerate() {
-                        let row_color = accent_colors.color_for_index(row.color_idx as u32);
-                        let row_y_center =
-                            bounds.origin.y + row_idx as f32 * row_height + row_height / 2.0
-                                - vertical_scroll_offset;
-
-                        let commit_x = lane_center_x(bounds, row.lane as f32);
-
-                        draw_commit_circle(commit_x, row_y_center, row_color, window);
                     }
 
                     for line in commit_lines {
@@ -3690,6 +3842,11 @@ impl GitGraph {
 
                     for (color_idx, builders) in lines {
                         let line_color = accent_colors.color_for_index(color_idx as u32);
+                        let line_color = if embedded {
+                            line_color.opacity(0.65)
+                        } else {
+                            line_color
+                        };
 
                         for builder in builders {
                             if let Ok(path) = builder.build() {
@@ -3700,6 +3857,16 @@ impl GitGraph {
                                 });
                             }
                         }
+                    }
+                    for (row_idx, row) in rows.into_iter().enumerate() {
+                        let row_color = accent_colors.color_for_index(row.color_idx as u32);
+                        let row_y_center =
+                            bounds.origin.y + row_idx as f32 * row_height + row_height / 2.0
+                                - vertical_scroll_offset;
+
+                        let commit_x = lane_center_x(bounds, row.lane as f32);
+
+                        draw_commit_circle(commit_x, row_y_center, row_color, window);
                     }
                 })
             },
@@ -3959,7 +4126,7 @@ impl GitGraph {
                             .id("commit-message")
                             .text_sm()
                             .w_full()
-                            .max_h(line_height * 12.)
+                            .max_h(line_height * if self.embedded { 3.0 } else { 12.0 })
                             .overflow_y_scroll()
                             .track_scroll(scroll_handle)
                             .child(MarkdownElement::new(message.clone(), message_style)),
@@ -4053,7 +4220,7 @@ impl Render for GitGraph {
             let table_width_config = self.table_column_width_config(window, cx);
 
             let table_collapsed = table_fraction <= f32::EPSILON;
-            let graph_content_width = self.graph_canvas_content_width();
+            let graph_content_width = self.graph_canvas_content_width(window, cx);
 
             h_flex()
                 .size_full()
@@ -4064,63 +4231,69 @@ impl Render for GitGraph {
                         .size_full()
                         .flex()
                         .flex_col()
-                        .child(
-                            div()
-                                .on_mouse_down(
-                                    MouseButton::Right,
-                                    cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                                        this.deploy_header_context_menu(event.position, window, cx);
-                                        cx.stop_propagation();
-                                    }),
-                                )
-                                .child(render_table_header(
-                                    if !is_path_history {
-                                        TableRow::from_vec(
-                                            vec![
-                                                Label::new("Graph")
-                                                    .color(Color::Muted)
-                                                    .truncate()
-                                                    .into_any_element(),
-                                                Label::new("Description")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Date")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Author")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Commit")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                            ],
-                                            5,
-                                        )
-                                    } else {
-                                        TableRow::from_vec(
-                                            vec![
-                                                Label::new("Description")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Date")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Author")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                                Label::new("Commit")
-                                                    .color(Color::Muted)
-                                                    .into_any_element(),
-                                            ],
-                                            4,
-                                        )
-                                    },
-                                    header_context,
-                                    Some(header_resize_info),
-                                    Some(self.column_widths.entity_id()),
-                                    cx,
-                                )),
-                        )
+                        .when(!self.embedded, |this| {
+                            this.child(
+                                div()
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                            this.deploy_header_context_menu(
+                                                event.position,
+                                                window,
+                                                cx,
+                                            );
+                                            cx.stop_propagation();
+                                        }),
+                                    )
+                                    .child(render_table_header(
+                                        if !is_path_history {
+                                            TableRow::from_vec(
+                                                vec![
+                                                    Label::new("Graph")
+                                                        .color(Color::Muted)
+                                                        .truncate()
+                                                        .into_any_element(),
+                                                    Label::new("Description")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Date")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Author")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Commit")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                ],
+                                                5,
+                                            )
+                                        } else {
+                                            TableRow::from_vec(
+                                                vec![
+                                                    Label::new("Description")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Date")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Author")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                    Label::new("Commit")
+                                                        .color(Color::Muted)
+                                                        .into_any_element(),
+                                                ],
+                                                4,
+                                            )
+                                        },
+                                        header_context,
+                                        Some(header_resize_info),
+                                        Some(self.column_widths.entity_id()),
+                                        cx,
+                                    )),
+                            )
+                        })
                         .child({
                             let row_height = Self::row_height(window, cx);
                             let selected_entry_idx = self.selected_entry_idx;
@@ -4241,61 +4414,96 @@ impl Render for GitGraph {
                                     cx.processor(Self::render_table_rows),
                                 );
 
-                            bind_redistributable_columns(
+                            if self.embedded {
                                 div()
                                     .relative()
-                                    .flex_1()
-                                    .w_full()
+                                    .size_full()
                                     .overflow_hidden()
-                                    .child(
-                                        h_flex()
-                                            .size_full()
-                                            .when(!is_path_history && graph_visible, |this| {
-                                                this.child(
+                                    .child(commits_table)
+                                    .when(!is_path_history, |this| {
+                                        this.child(
+                                            div()
+                                                .absolute()
+                                                .top_0()
+                                                .left_0()
+                                                .h_full()
+                                                .w(graph_content_width)
+                                                .child(self.render_graph_canvas(window, cx)),
+                                        )
+                                    })
+                                    .into_any_element()
+                            } else {
+                                bind_redistributable_columns(
+                                    div()
+                                        .relative()
+                                        .flex_1()
+                                        .w_full()
+                                        .overflow_hidden()
+                                        .child(
+                                            h_flex()
+                                                .size_full()
+                                                .when(!is_path_history && graph_visible, |this| {
+                                                    this.child(
+                                                        div()
+                                                            .id("git-graph-lanes")
+                                                            .map(|this| {
+                                                                if self.embedded {
+                                                                    this.w(graph_content_width)
+                                                                        .max_w(relative(0.4))
+                                                                        .flex_shrink_0()
+                                                                } else if table_collapsed {
+                                                                    this.w(graph_content_width)
+                                                                } else {
+                                                                    this.w(
+                                                                        DefiniteLength::Fraction(
+                                                                            graph_fraction,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            })
+                                                            .h_full()
+                                                            .min_w_0()
+                                                            .overflow_hidden()
+                                                            .when(self.embedded, |this| {
+                                                                this.overflow_x_scroll()
+                                                            })
+                                                            .child(graph_canvas),
+                                                    )
+                                                })
+                                                .child(
                                                     div()
+                                                        .tab_index(2)
+                                                        .tab_group()
+                                                        .tab_stop(false)
                                                         .map(|this| {
-                                                            if table_collapsed {
-                                                                this.w(graph_content_width)
+                                                            if self.embedded || table_collapsed {
+                                                                this.flex_1()
                                                             } else {
                                                                 this.w(DefiniteLength::Fraction(
-                                                                    graph_fraction,
+                                                                    table_fraction,
                                                                 ))
                                                             }
                                                         })
                                                         .h_full()
                                                         .min_w_0()
-                                                        .overflow_hidden()
-                                                        .child(graph_canvas),
-                                                )
-                                            })
-                                            .child(
-                                                div()
-                                                    .tab_index(2)
-                                                    .tab_group()
-                                                    .tab_stop(false)
-                                                    .map(|this| {
-                                                        if table_collapsed {
-                                                            this.flex_1()
-                                                        } else {
-                                                            this.w(DefiniteLength::Fraction(
-                                                                table_fraction,
-                                                            ))
-                                                        }
-                                                    })
-                                                    .h_full()
-                                                    .min_w_0()
-                                                    .child(commits_table),
-                                            ),
-                                    )
-                                    .child(render_redistributable_columns_resize_handles(
-                                        &self.column_widths,
-                                        Some(&self.column_visibility),
-                                        window,
-                                        cx,
-                                    )),
-                                self.column_widths.clone(),
-                                Some(self.column_visibility.clone()),
-                            )
+                                                        .child(commits_table),
+                                                ),
+                                        )
+                                        .when(!self.embedded, |this| {
+                                            this.child(
+                                                render_redistributable_columns_resize_handles(
+                                                    &self.column_widths,
+                                                    Some(&self.column_visibility),
+                                                    window,
+                                                    cx,
+                                                ),
+                                            )
+                                        }),
+                                    self.column_widths.clone(),
+                                    Some(self.column_visibility.clone()),
+                                )
+                                .into_any_element()
+                            }
                         }),
                 )
                 .on_drag_move::<DraggedSplitHandle>(cx.listener(|this, event, window, cx| {
