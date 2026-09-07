@@ -74,6 +74,8 @@ use uuid::Uuid;
 const TOOL_CANCELED_MESSAGE: &str = "Tool canceled by user";
 pub const MAX_TOOL_NAME_LENGTH: usize = 64;
 pub const MAX_SUBAGENT_DEPTH: u8 = 1;
+/// Codex-inspired cap on concurrently registered subagents under one parent.
+pub const MAX_ACTIVE_SUBAGENTS: usize = 8;
 
 pub(crate) fn provider_compatible_tool_name(tool_name: &str) -> String {
     let mut sanitized = String::new();
@@ -206,7 +208,12 @@ pub enum CompactionInfo {
 impl CompactionInfo {
     fn to_request(&self) -> Vec<LanguageModelRequestMessage> {
         match self {
-            Self::Summary(summary) => vec![LanguageModelRequestMessage {
+            Self::Summary(summary) => {
+                let summary = crate::truncate_middle_to_tokens(
+                    summary,
+                    crate::MAX_COMPACTION_SUMMARY_TOKENS,
+                );
+                vec![LanguageModelRequestMessage {
                 role: Role::User,
                 content: vec![format!(
                     "The previous conversation was compacted. Use this summary as context:\n\n{}",
@@ -215,7 +222,8 @@ impl CompactionInfo {
                 .into()],
                 cache: false,
                 reasoning_details: None,
-            }],
+            }]
+            },
             Self::CompletedTask {
                 checkpoint,
                 session_id,
@@ -256,8 +264,9 @@ fn completed_task_checkpoint_markdown(
         source_start,
         source_end,
     );
+    let retained = crate::cap_retained_facts(checkpoint.retained_context.iter().cloned());
     for (title, values) in [
-        ("Retained context", &checkpoint.retained_context),
+        ("Retained context", &retained),
         ("Changed files", &checkpoint.changed_files),
         ("Verification", &checkpoint.verification),
         ("Artifacts", &checkpoint.artifacts),
@@ -265,6 +274,8 @@ fn completed_task_checkpoint_markdown(
         if !values.is_empty() {
             markdown.push_str(&format!("\n## {title}\n"));
             for value in values {
+                let value =
+                    crate::truncate_middle_to_tokens(value, crate::MAX_RETAINED_FACT_TOKENS);
                 markdown.push_str(&format!("\n- {value}"));
             }
             markdown.push('\n');
@@ -4348,7 +4359,48 @@ impl Thread {
         self.tools.contains_key(name)
     }
 
+    pub(crate) fn prune_running_subagents(&mut self) {
+        self.running_subagents
+            .retain(|subagent| subagent.upgrade().is_some());
+    }
+
+    pub(crate) fn active_subagent_count(&mut self) -> usize {
+        self.prune_running_subagents();
+        // Deduplicate by upgraded entity id.
+        let mut seen = std::collections::BTreeSet::new();
+        self.running_subagents.retain(|subagent| {
+            let Some(entity) = subagent.upgrade() else {
+                return false;
+            };
+            seen.insert(entity.entity_id())
+        });
+        self.running_subagents.len()
+    }
+
+    pub(crate) fn ensure_can_spawn_subagent(&mut self) -> anyhow::Result<()> {
+        if self.depth() >= MAX_SUBAGENT_DEPTH {
+            anyhow::bail!("Maximum subagent depth ({MAX_SUBAGENT_DEPTH}) reached");
+        }
+        let active = self.active_subagent_count();
+        if active >= MAX_ACTIVE_SUBAGENTS {
+            anyhow::bail!(
+                "Maximum active subagents ({MAX_ACTIVE_SUBAGENTS}) reached; wait for one to finish or reuse a session_id"
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn register_running_subagent(&mut self, subagent: WeakEntity<Thread>) {
+        if let Some(entity) = subagent.upgrade() {
+            let id = entity.entity_id();
+            if self
+                .running_subagents
+                .iter()
+                .any(|existing| existing.upgrade().is_some_and(|e| e.entity_id() == id))
+            {
+                return;
+            }
+        }
         self.running_subagents.push(subagent);
     }
 

@@ -1,3 +1,4 @@
+mod context_budget;
 mod db;
 mod legacy_thread;
 mod native_agent_server;
@@ -12,6 +13,7 @@ mod thread_store;
 mod tool_permissions;
 mod tools;
 
+pub use context_budget::*;
 use context_server::ContextServerId;
 pub use db::*;
 use itertools::Itertools;
@@ -3113,21 +3115,20 @@ impl NativeThreadEnvironment {
         let Some(parent_thread_entity) = self.thread.upgrade() else {
             anyhow::bail!("Parent thread no longer exists".to_string());
         };
-        let parent_thread = parent_thread_entity.read(cx);
-        let current_depth = parent_thread.depth();
-        let parent_session_id = parent_thread.id().clone();
-
-        if current_depth >= MAX_SUBAGENT_DEPTH {
-            return Err(anyhow!(
-                "Maximum subagent depth ({}) reached",
-                MAX_SUBAGENT_DEPTH
-            ));
-        }
+        let parent_session_id = parent_thread_entity.read(cx).id().clone();
+        parent_thread_entity.update(cx, |parent_thread, _cx| {
+            parent_thread.ensure_can_spawn_subagent()
+        })?;
+        let current_depth = parent_thread_entity.read(cx).depth();
 
         let subagent_thread: Entity<Thread> = cx.new(|cx| {
             let mut thread = Thread::new_subagent(&parent_thread_entity, cx);
             thread.set_title(label.into(), cx);
             thread
+        });
+
+        parent_thread_entity.update(cx, |parent_thread, _cx| {
+            parent_thread.register_running_subagent(subagent_thread.downgrade());
         });
 
         let session_id = subagent_thread.read(cx).id().clone();

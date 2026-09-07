@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{rc::Rc, sync::Arc};
 use uuid::Uuid;
 
-use crate::{AgentTool, ThreadEnvironment, ToolCallEventStream, ToolInput};
+use crate::{AgentTool, ThreadEnvironment, ToolCallEventStream, ToolInput, cap_retained_facts};
 
 /// Mark the current work task as completed after all requested work and verification have finished.
 /// This archives the task's detailed conversation out of the active model context while retaining
@@ -103,7 +103,7 @@ impl AgentTool for CompleteTaskTool {
                     task_id: Uuid::new_v4().to_string(),
                     title: input.title,
                     outcome: input.outcome,
-                    retained_context: input.retained_context,
+                    retained_context: cap_retained_facts(input.retained_context),
                     changed_files: input.changed_files,
                     verification: input.verification,
                     artifacts: input.artifacts,

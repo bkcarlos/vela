@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::{AgentTool, ThreadEnvironment, ToolCallEventStream, ToolInput};
+use crate::{
+    AgentTool, MAX_SPAWN_AGENT_MESSAGE_TOKENS, MAX_SPAWN_AGENT_OUTPUT_TOKENS, ThreadEnvironment,
+    ToolCallEventStream, ToolInput, truncate_middle_to_tokens,
+};
 
 /// Spawn a sub-agent for a well-scoped task.
 ///
@@ -132,7 +135,7 @@ impl AgentTool for SpawnAgentTool {
         cx: &mut App,
     ) -> Task<Result<Self::Output, Self::Output>> {
         cx.spawn(async move |cx| {
-            let input = input
+            let mut input = input
                 .recv()
                 .await
                 .map_err(|e| SpawnAgentToolOutput::Error {
@@ -140,6 +143,8 @@ impl AgentTool for SpawnAgentTool {
                     error: e.to_string(),
                     session_info: None,
                 })?;
+            input.message =
+                truncate_middle_to_tokens(&input.message, MAX_SPAWN_AGENT_MESSAGE_TOKENS);
 
             let (subagent, mut session_info) = cx.update(|cx| {
                 let subagent = if let Some(session_id) = input.session_id {
@@ -192,14 +197,17 @@ impl AgentTool for SpawnAgentTool {
             )]));
 
             let (output, result) = match send_result {
-                Ok(output) => (
-                    output.clone(),
-                    Ok(SpawnAgentToolOutput::Success {
-                        session_id: session_info.session_id.clone(),
-                        session_info,
-                        output,
-                    }),
-                ),
+                Ok(output) => {
+                    let output = truncate_middle_to_tokens(&output, MAX_SPAWN_AGENT_OUTPUT_TOKENS);
+                    (
+                        output.clone(),
+                        Ok(SpawnAgentToolOutput::Success {
+                            session_id: session_info.session_id.clone(),
+                            session_info,
+                            output,
+                        }),
+                    )
+                }
                 Err(e) => {
                     let error = e.to_string();
                     (
