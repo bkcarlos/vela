@@ -982,6 +982,7 @@ mod tests {
             permission_mode: settings::AgentPermissionMode::Manual,
             tool_permissions: Default::default(),
             sandbox_permissions: Default::default(),
+            multi_agent_mode: Default::default(),
             show_turn_stats: false,
             show_merge_conflict_indicator: true,
             sidebar_side: Default::default(),

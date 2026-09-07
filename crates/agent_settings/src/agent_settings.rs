@@ -16,6 +16,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
     AgentPermissionMode, DockPosition, DockSide, LanguageModelParameters, LanguageModelSelection,
+    MultiAgentMode,
     NotifyWhenAgentWaiting, PlaySoundWhenAgentDone, RegisterSetting, Settings, SettingsContent,
     SettingsStore, SidebarDockPosition, SidebarSide, ThinkingBlockDisplay, ToolPermissionMode,
     update_settings_file, update_settings_file_with_completion,
@@ -238,6 +239,7 @@ pub struct AgentSettings {
     pub permission_mode: AgentPermissionMode,
     pub tool_permissions: ToolPermissions,
     pub sandbox_permissions: SandboxPermissions,
+    pub multi_agent_mode: MultiAgentMode,
 }
 
 impl AgentSettings {
@@ -797,6 +799,7 @@ impl Settings for AgentSettings {
             permission_mode: agent.permission_mode.unwrap_or_default(),
             tool_permissions: compile_tool_permissions(agent.tool_permissions),
             sandbox_permissions: compile_sandbox_permissions(agent.sandbox_permissions),
+            multi_agent_mode: agent.multi_agent_mode.unwrap_or_default(),
         }
     }
 }

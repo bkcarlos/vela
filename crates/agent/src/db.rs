@@ -86,6 +86,9 @@ pub struct DbThread {
     /// [`crate::sandboxing::ThreadSandboxGrants`].
     #[serde(default)]
     pub sandbox_grants: DbSandboxGrants,
+    /// Host-owned facts surviving message-window compaction.
+    #[serde(default)]
+    pub retained_facts: Vec<String>,
 }
 
 /// Serialized form of the sandbox permissions the user granted "for the rest of
@@ -165,6 +168,7 @@ impl SharedThread {
             ui_scroll_position: None,
             sandboxed_terminal_temp_dir: None,
             sandbox_grants: DbSandboxGrants::default(),
+            retained_facts: Vec::new(),
         }
     }
 
@@ -351,6 +355,7 @@ impl DbThread {
             ui_scroll_position: None,
             sandboxed_terminal_temp_dir: None,
             sandbox_grants: DbSandboxGrants::default(),
+            retained_facts: Vec::new(),
         })
     }
 }
@@ -822,6 +827,7 @@ mod tests {
             ui_scroll_position: None,
             sandboxed_terminal_temp_dir: None,
             sandbox_grants: DbSandboxGrants::default(),
+            retained_facts: Vec::new(),
         }
     }
 

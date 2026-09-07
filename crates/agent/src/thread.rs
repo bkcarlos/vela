@@ -1,11 +1,11 @@
 use crate::{
     ApplyCodeActionTool, AskUserTool, CodeActionStore, CompleteTaskTool, CompletedTaskCheckpoint,
-    ContextServerRegistry, CopyPathTool, CreateDirectoryTool, CreateThreadTool, DbLanguageModel,
-    DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool, FindPathTool,
-    FindReferencesTool, GetCodeActionsTool, GoToDefinitionTool, GrepTool, ListAgentsAndModelsTool,
-    ListDirectoryTool, MovePathTool, ProjectSnapshot, ReadFileTool, ReadSessionTool, RenameTool,
-    SandboxedTerminalTool, SearchSessionsTool, SessionSearchResult, SessionTranscript,
-    SpawnAgentTool, SystemPromptTemplate, Template, Templates, TerminalTool,
+    ContextServerRegistry, ContextualFragment, CopyPathTool, CreateDirectoryTool, CreateThreadTool,
+    DbLanguageModel, DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool,
+    FindPathTool, FindReferencesTool, GetCodeActionsTool, GoToDefinitionTool, GrepTool,
+    ListAgentsAndModelsTool, ListDirectoryTool, MovePathTool, ProjectSnapshot, ReadFileTool,
+    ReadSessionTool, RenameTool, SandboxedTerminalTool, SearchSessionsTool, SessionSearchResult,
+    SessionTranscript, SpawnAgentTool, SystemPromptTemplate, Template, Templates, TerminalTool,
     ToolPermissionDecision, WebSearchTool, WriteFileTool, decide_permission_from_settings,
 };
 use acp_thread::{ClientUserMessageId, MentionUri};
@@ -209,29 +209,25 @@ impl CompactionInfo {
     fn to_request(&self) -> Vec<LanguageModelRequestMessage> {
         match self {
             Self::Summary(summary) => {
-                let summary = crate::truncate_middle_to_tokens(
-                    summary,
-                    crate::MAX_COMPACTION_SUMMARY_TOKENS,
-                );
+                let rendered = crate::CompactionSummaryFragment {
+                    summary: summary.to_string(),
+                }
+                .render();
                 vec![LanguageModelRequestMessage {
-                role: Role::User,
-                content: vec![format!(
-                    "The previous conversation was compacted. Use this summary as context:\n\n{}",
-                    summary
-                )
-                .into()],
-                cache: false,
-                reasoning_details: None,
-            }]
+                    role: Role::User,
+                    content: vec![rendered.into()],
+                    cache: false,
+                    reasoning_details: None,
+                }]
             },
             Self::CompletedTask {
                 checkpoint,
                 session_id,
                 source_start,
                 source_end,
-            } => vec![LanguageModelRequestMessage {
-                role: Role::User,
-                content: vec![format!(
+            } => {
+                // Budget the archived checkpoint the same way as other injections.
+                let markdown = format!(
                     "A previous task was completed and archived. Start a new active task unless the user reopens it. If details are needed, call read_session with the recorded session and message range.\n\n{}",
                     completed_task_checkpoint_markdown(
                         checkpoint,
@@ -239,11 +235,18 @@ impl CompactionInfo {
                         *source_start,
                         *source_end,
                     )
-                )
-                .into()],
-                cache: false,
-                reasoning_details: None,
-            }],
+                );
+                let capped = crate::truncate_middle_to_tokens(
+                    &markdown,
+                    crate::MAX_COMPACTION_SUMMARY_TOKENS,
+                );
+                vec![LanguageModelRequestMessage {
+                    role: Role::User,
+                    content: vec![capped.into()],
+                    cache: false,
+                    reasoning_details: None,
+                }]
+            },
             Self::ProviderNative { .. } => Vec::new(),
         }
     }
@@ -1457,6 +1460,9 @@ pub struct Thread {
     current_request_token_usage: TokenUsage,
     pending_compaction_telemetry: Option<CompactionTelemetry>,
     pending_completed_task: Option<CompletedTaskCheckpoint>,
+    /// Host-owned facts that survive message-window compaction (Codex dual-layer).
+    /// Independent of `messages`; injected via [`crate::RetainedFactsFragment`].
+    retained_facts: Vec<String>,
     #[allow(unused)]
     initial_project_snapshot: Shared<Task<Option<Arc<ProjectSnapshot>>>>,
     pub(crate) context_server_registry: Entity<ContextServerRegistry>,
@@ -1595,6 +1601,7 @@ impl Thread {
             current_request_token_usage: TokenUsage::default(),
             pending_compaction_telemetry: None,
             pending_completed_task: None,
+            retained_facts: Vec::new(),
             initial_project_snapshot: {
                 let project_snapshot = Self::project_snapshot(project.clone(), cx);
                 cx.foreground_executor()
@@ -1987,6 +1994,7 @@ impl Thread {
             current_request_token_usage: TokenUsage::default(),
             pending_compaction_telemetry: None,
             pending_completed_task: None,
+            retained_facts: crate::cap_retained_facts(db_thread.retained_facts),
             initial_project_snapshot: Task::ready(db_thread.initial_project_snapshot).shared(),
             context_server_registry,
             profile_id,
@@ -2115,6 +2123,7 @@ impl Thread {
             }),
             sandboxed_terminal_temp_dir: self.sandboxed_terminal_temp_dir.clone(),
             sandbox_grants: self.sandbox_grants.borrow().to_db(),
+            retained_facts: self.retained_facts.clone(),
         };
 
         cx.background_spawn(async move {
@@ -3422,6 +3431,36 @@ impl Thread {
             {
                 this.pending_completed_task = Some(output.task_completed);
             }
+            if tool_result.tool_name.as_ref() == SpawnAgentTool::NAME
+                && let Some(output) = tool_result.output.as_ref()
+                && let Ok(parsed) =
+                    serde_json::from_value::<crate::SpawnAgentToolOutput>(output.clone())
+            {
+                match parsed {
+                    crate::SpawnAgentToolOutput::Success {
+                        session_id,
+                        output,
+                        ..
+                    } => {
+                        let short = crate::truncate_middle_to_tokens(&output, 80);
+                        this.add_retained_fact(format!(
+                            "subagent {session_id}: completed — {short}"
+                        ));
+                    }
+                    crate::SpawnAgentToolOutput::Error {
+                        session_id,
+                        error,
+                        ..
+                    } => {
+                        let id = session_id
+                            .as_ref()
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| "unknown".into());
+                        let short = crate::truncate_middle_to_tokens(&error, 80);
+                        this.add_retained_fact(format!("subagent {id}: error — {short}"));
+                    }
+                }
+            }
             this.pending_message()
                 .tool_results
                 .insert(tool_result.tool_use_id.clone(), tool_result)
@@ -4092,10 +4131,36 @@ impl Thread {
         self.pending_summary_generation = None;
     }
 
+    /// Append a host-owned fact that survives message-window compaction.
+    pub fn add_retained_fact(&mut self, fact: impl Into<String>) {
+        let fact = fact.into();
+        if fact.trim().is_empty() {
+            return;
+        }
+        self.retained_facts.push(fact);
+        self.retained_facts = crate::cap_retained_facts(std::mem::take(&mut self.retained_facts));
+    }
+
+    pub fn retained_facts(&self) -> &[String] {
+        &self.retained_facts
+    }
+
+    pub fn clear_retained_facts(&mut self) {
+        self.retained_facts.clear();
+    }
+
     fn archive_completed_task(&mut self, cx: &mut Context<Self>) {
         let Some(checkpoint) = self.pending_completed_task.take() else {
             return;
         };
+        // Merge checkpoint facts into the host-owned layer; do not clear existing facts.
+        let merged = self
+            .retained_facts
+            .iter()
+            .cloned()
+            .chain(checkpoint.retained_context.iter().cloned());
+        self.retained_facts = crate::cap_retained_facts(merged);
+
         let source_start = latest_compaction_message_ix_before(&self.messages, self.messages.len())
             .map_or(0, |index| index.saturating_add(1));
         let source_end = self.messages.len();
@@ -4213,6 +4278,20 @@ impl Thread {
                                 properties.remove("reason");
                             }
                         }
+                    }
+                    if tool_name.as_ref() == SpawnAgentTool::NAME {
+                        let mode = AgentSettings::get_global(cx).multi_agent_mode;
+                        let mode_note = match mode {
+                            settings::MultiAgentMode::ExplicitRequestOnly => {
+                                "Mode: explicit_request_only — spawn only when clearly needed."
+                            }
+                            settings::MultiAgentMode::Proactive => {
+                                "Mode: proactive — parallelize independent work when useful."
+                            }
+                        };
+                        description = format!("{description}
+
+{mode_note}");
                     }
                     Some(LanguageModelRequestTool::function(
                         tool_name.to_string(),
@@ -4493,6 +4572,33 @@ impl Thread {
             cache: false,
             reasoning_details: None,
         }];
+
+        // Dual-layer context: host-owned retained facts (survive compaction).
+        if !self.retained_facts.is_empty() {
+            let rendered = crate::RetainedFactsFragment {
+                facts: self.retained_facts.clone(),
+            }
+            .render();
+            messages.push(LanguageModelRequestMessage {
+                role: Role::User,
+                content: vec![rendered.into()],
+                cache: false,
+                reasoning_details: None,
+            });
+        }
+
+        // Multi-agent collaboration mode guidance for spawn_agent.
+        let multi_agent_mode = AgentSettings::get_global(cx).multi_agent_mode;
+        let mode_fragment = crate::MultiAgentModeFragment {
+            mode: multi_agent_mode.into(),
+        };
+        messages.push(LanguageModelRequestMessage {
+            role: Role::User,
+            content: vec![mode_fragment.render().into()],
+            cache: false,
+            reasoning_details: None,
+        });
+
         self.extend_request_history_until(&mut messages, end_ix);
 
         if let Some(last_message) = messages.last_mut() {
@@ -7081,10 +7187,33 @@ mod tests {
         let language_model::MessageContent::Text(text) = &request_messages[0].content[0] else {
             panic!("expected text summary context");
         };
-        assert_eq!(
-            text.as_str(),
-            "The previous conversation was compacted. Use this summary as context:\n\nOlder context"
-        );
+        assert!(text.contains("<<<COMPACTION_SUMMARY>>>"));
+        assert!(text.contains("<<<END_COMPACTION_SUMMARY>>>"));
+        assert!(text.contains(
+            "The previous conversation was compacted. Use this summary as context:"
+        ));
+        assert!(text.contains("Older context"));
+    }
+
+    #[test]
+    fn test_retained_facts_survive_summary_compaction_message() {
+        // Host-owned facts are independent of Message::Compaction insertion.
+        let mut facts = vec!["keep-me".to_string(), "also-keep".to_string()];
+        facts = crate::cap_retained_facts(facts);
+        assert_eq!(facts, vec!["keep-me".to_string(), "also-keep".to_string()]);
+
+        let fragment = crate::RetainedFactsFragment {
+            facts: facts.clone(),
+        };
+        let rendered = fragment.render();
+        assert!(crate::RetainedFactsFragment::matches_text(&rendered));
+        assert!(rendered.contains("keep-me"));
+        assert!(rendered.contains("also-keep"));
+
+        // Compaction summary messages do not clear host facts — callers keep
+        // `Thread::retained_facts` across Summary insertion (see archive/spawn paths).
+        let _ = Message::Compaction(CompactionInfo::Summary("Older context".into()));
+        assert_eq!(facts.len(), 2);
     }
 
     fn user_text_message(id: ClientUserMessageId, text: &str) -> Arc<Message> {
@@ -7117,6 +7246,7 @@ mod tests {
             thread
                 .messages
                 .push(agent_text_message("Implemented and verified"));
+            thread.add_retained_fact("pre-existing fact");
             thread.pending_completed_task = Some(CompletedTaskCheckpoint {
                 task_id: "task-1".to_string(),
                 title: "Implement feature".to_string(),
@@ -7130,6 +7260,18 @@ mod tests {
         });
 
         thread.read_with(cx, |thread, _| {
+            assert!(
+                thread
+                    .retained_facts()
+                    .iter()
+                    .any(|f| f == "pre-existing fact")
+            );
+            assert!(
+                thread
+                    .retained_facts()
+                    .iter()
+                    .any(|f| f == "Keep compatibility")
+            );
             let Some(Message::Compaction(CompactionInfo::CompletedTask {
                 checkpoint,
                 session_id: checkpoint_session_id,
@@ -7184,9 +7326,10 @@ mod tests {
     }
 
     fn summary_request_text(summary: &str) -> String {
-        format!(
-            "The previous conversation was compacted. Use this summary as context:\n\n{summary}"
-        )
+        crate::CompactionSummaryFragment {
+            summary: summary.to_string(),
+        }
+        .render()
     }
 
     fn request_texts_after_system(messages: &[LanguageModelRequestMessage]) -> Vec<String> {
@@ -7194,6 +7337,11 @@ mod tests {
             .iter()
             .skip(1)
             .map(LanguageModelRequestMessage::string_contents)
+            .filter(|text| {
+                // Skip host injections that always precede history.
+                !crate::MultiAgentModeFragment::matches_text(text)
+                    && !crate::RetainedFactsFragment::matches_text(text)
+            })
             .collect()
     }
 

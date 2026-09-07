@@ -9,11 +9,15 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::{
-    AgentTool, MAX_SPAWN_AGENT_MESSAGE_TOKENS, MAX_SPAWN_AGENT_OUTPUT_TOKENS, ThreadEnvironment,
-    ToolCallEventStream, ToolInput, truncate_middle_to_tokens,
+    AgentTool, ContextualFragment, MAX_SPAWN_AGENT_MESSAGE_TOKENS, MAX_SPAWN_AGENT_OUTPUT_TOKENS,
+    SubagentNotificationFragment, ThreadEnvironment, ToolCallEventStream, ToolInput,
+    truncate_middle_to_tokens,
 };
 
 /// Spawn a sub-agent for a well-scoped task.
+///
+/// Respect the active multi_agent_mode: in `explicit_request_only`, spawn only when
+/// clearly needed; in `proactive`, parallelize independent work when useful.
 ///
 /// ### Designing delegated subtasks
 /// - An agent does not see your conversation history. Include all relevant context (file paths, requirements, constraints) in the message.
@@ -28,13 +32,13 @@ use crate::{
 /// - When sending a follow-up using an existing agent session_id, the agent already has the context from the previous turn. Send only a short, direct message. Do NOT repeat the original task or context.
 ///
 /// ### Parallel delegation patterns
-/// - Run multiple independent information-seeking subtasks in parallel when you have distinct questions that can be answered independently.
+/// - In proactive mode, run multiple independent information-seeking subtasks in parallel when you have distinct questions.
 /// - Split implementation into disjoint codebase slices and spawn multiple agents for them in parallel when the write scopes do not overlap.
 /// - When a plan has multiple independent steps, prefer delegating those steps in parallel rather than serializing them unnecessarily.
 /// - Reuse the returned session_id when you want to follow up on the same delegated subproblem instead of creating a duplicate session.
 ///
 /// ### Output
-/// - You will receive only the agent's final message as output.
+/// - You will receive a typed subagent notification plus a session_id JSON trailer for follow-ups.
 /// - Successful calls return a session_id that you can use for follow-up messages.
 /// - Error results may also include a session_id if a session was already created.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -69,26 +73,47 @@ pub enum SpawnAgentToolOutput {
 
 impl From<SpawnAgentToolOutput> for LanguageModelToolResultContent {
     fn from(output: SpawnAgentToolOutput) -> Self {
-        match output {
+        let (session_id, status, summary) = match &output {
             SpawnAgentToolOutput::Success {
                 session_id,
                 output,
-                session_info: _, // Don't show this to the model
-            } => serde_json::to_string(
-                &serde_json::json!({ "session_id": session_id, "output": output }),
-            )
-            .unwrap_or_else(|e| format!("Failed to serialize spawn_agent output: {e}"))
-            .into(),
+                session_info: _,
+            } => (
+                session_id.to_string(),
+                "completed".to_string(),
+                truncate_middle_to_tokens(output, MAX_SPAWN_AGENT_OUTPUT_TOKENS),
+            ),
             SpawnAgentToolOutput::Error {
                 session_id,
                 error,
-                session_info: _, // Don't show this to the model
-            } => serde_json::to_string(
-                &serde_json::json!({ "session_id": session_id, "error": error }),
-            )
-            .unwrap_or_else(|e| format!("Failed to serialize spawn_agent output: {e}"))
-            .into(),
+                session_info: _,
+            } => (
+                session_id
+                    .as_ref()
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
+                "error".to_string(),
+                truncate_middle_to_tokens(error, MAX_SPAWN_AGENT_OUTPUT_TOKENS),
+            ),
+        };
+
+        let notification = SubagentNotificationFragment {
+            agent_session_id: session_id.clone(),
+            status: status.clone(),
+            summary: summary.clone(),
         }
+        .render();
+
+        // Typed notification for the model + compact JSON trailer with session_id for follow-ups.
+        let trailer = serde_json::json!({
+            "session_id": if session_id.is_empty() { serde_json::Value::Null } else { session_id.into() },
+            "status": status,
+        });
+        let trailer_json = serde_json::to_string(&trailer)
+            .unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#));
+        format!("{notification}
+
+{trailer_json}").into()
     }
 }
 

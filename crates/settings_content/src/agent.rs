@@ -188,6 +188,30 @@ pub struct AutoCompactSettingsContent {
     pub threshold: Option<AutoCompactThreshold>,
 }
 
+/// How the agent should collaborate with subagents via `spawn_agent`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    MergeFrom,
+    strum::VariantArray,
+    strum::VariantNames,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum MultiAgentMode {
+    /// Spawn subagents only when explicitly needed for the task.
+    #[default]
+    ExplicitRequestOnly,
+    /// Proactively spawn parallel subagents when independent work would help.
+    Proactive,
+}
+
 #[with_fallible_options]
 #[derive(Clone, PartialEq, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, Default)]
 pub struct AgentSettingsContent {
@@ -351,6 +375,11 @@ pub struct AgentSettingsContent {
     /// `always_confirm`) match against the tool's text input (command, path,
     /// URL, etc.).
     pub tool_permissions: Option<ToolPermissionsContent>,
+
+    /// How the agent should use `spawn_agent` for multi-agent collaboration.
+    ///
+    /// Default: explicit_request_only
+    pub multi_agent_mode: Option<MultiAgentMode>,
 
     /// Persistent sandbox permission grants for agent-run terminal commands.
     /// These are populated when choosing "Allow always" from a sandbox

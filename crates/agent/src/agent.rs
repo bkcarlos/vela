@@ -1,4 +1,5 @@
 mod context_budget;
+mod context_fragments;
 mod db;
 mod legacy_thread;
 mod native_agent_server;
@@ -14,6 +15,7 @@ mod tool_permissions;
 mod tools;
 
 pub use context_budget::*;
+pub use context_fragments::*;
 use context_server::ContextServerId;
 pub use db::*;
 use itertools::Itertools;

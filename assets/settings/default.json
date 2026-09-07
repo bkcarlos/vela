@@ -1166,6 +1166,10 @@
     // Settings for automatic agent context compaction, which summarizes earlier
     // messages to free up room in the model's context window once it grows too
     // large.
+    // How the agent should collaborate with subagents via spawn_agent.
+    // "explicit_request_only" - only spawn when clearly needed (default)
+    // "proactive" - spawn parallel subagents when independent work would help
+    "multi_agent_mode": "explicit_request_only",
     "auto_compact": {
       // Whether to automatically compact the agent's context near the limit.
       "enabled": true,
