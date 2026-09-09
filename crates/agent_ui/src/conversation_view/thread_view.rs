@@ -3250,8 +3250,8 @@ impl ThreadView {
             .justify_center()
             .child(
                 v_flex()
-                    .when_some(max_content_width, |this, max_w| this.flex_basis(max_w))
-                    .when(max_content_width.is_none(), |this| this.w_full())
+                    .w_full()
+                    .when_some(max_content_width, |this, max_w| this.max_w(max_w))
                     .flex_shrink_1()
                     .flex_grow_0()
                     .max_w_full()
@@ -4469,8 +4469,8 @@ impl ThreadView {
             })
             .child(
                 v_flex()
-                    .when_some(max_content_width, |this, max_w| this.flex_basis(max_w))
-                    .when(max_content_width.is_none(), |this| this.w_full())
+                    .w_full()
+                    .when_some(max_content_width, |this, max_w| this.max_w(max_w))
                     .min_w_0()
                     .when(fills_container, |this| this.h_full())
                     .px_2()

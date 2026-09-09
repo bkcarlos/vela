@@ -6557,7 +6557,7 @@ fn panels_page() -> SettingsPage {
                 discriminant: SettingItem {
                     files: USER,
                     title: "Limit Content Width",
-                    description: "Whether to constrain the agent panel content to a maximum width, centering it when the panel is wider, for optimal readability.",
+                    description: "When enabled, constrain agent panel content to max_content_width and center it when the panel is wider. When disabled (default), content follows the panel width.",
                     field: Box::new(SettingField::<bool> {
                         organization_override: None,
                         json_path: Some("agent.limit_content_width"),

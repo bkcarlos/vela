@@ -1079,8 +1079,9 @@
     "default_height": 320,
     // Whether to limit the content width in the agent panel. When enabled,
     // content will be constrained to `max_content_width` and centered when
-    // the panel is wider, for optimal readability.
-    "limit_content_width": true,
+    // the panel is wider, for optimal readability. When disabled (default),
+    // content follows the panel width.
+    "limit_content_width": false,
     // Maximum content width in pixels when limit_content_width is enabled.
     // Content will be centered within the panel.
     "max_content_width": 850,
