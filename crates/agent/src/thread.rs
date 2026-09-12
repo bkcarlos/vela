@@ -219,7 +219,7 @@ impl CompactionInfo {
                     cache: false,
                     reasoning_details: None,
                 }]
-            },
+            }
             Self::CompletedTask {
                 checkpoint,
                 session_id,
@@ -246,7 +246,7 @@ impl CompactionInfo {
                     cache: false,
                     reasoning_details: None,
                 }]
-            },
+            }
             Self::ProviderNative { .. } => Vec::new(),
         }
     }
@@ -1461,7 +1461,8 @@ pub struct Thread {
     pending_compaction_telemetry: Option<CompactionTelemetry>,
     pending_completed_task: Option<CompletedTaskCheckpoint>,
     /// Host-owned facts that survive message-window compaction (Codex dual-layer).
-    /// Independent of `messages`; injected via [`crate::RetainedFactsFragment`].
+    /// Independent of `messages`; appended into the system prompt via
+    /// [`crate::RetainedFactsFragment`] (never as fake User messages).
     retained_facts: Vec<String>,
     #[allow(unused)]
     initial_project_snapshot: Shared<Task<Option<Arc<ProjectSnapshot>>>>,
@@ -3431,36 +3432,9 @@ impl Thread {
             {
                 this.pending_completed_task = Some(output.task_completed);
             }
-            if tool_result.tool_name.as_ref() == SpawnAgentTool::NAME
-                && let Some(output) = tool_result.output.as_ref()
-                && let Ok(parsed) =
-                    serde_json::from_value::<crate::SpawnAgentToolOutput>(output.clone())
-            {
-                match parsed {
-                    crate::SpawnAgentToolOutput::Success {
-                        session_id,
-                        output,
-                        ..
-                    } => {
-                        let short = crate::truncate_middle_to_tokens(&output, 80);
-                        this.add_retained_fact(format!(
-                            "subagent {session_id}: completed — {short}"
-                        ));
-                    }
-                    crate::SpawnAgentToolOutput::Error {
-                        session_id,
-                        error,
-                        ..
-                    } => {
-                        let id = session_id
-                            .as_ref()
-                            .map(|id| id.to_string())
-                            .unwrap_or_else(|| "unknown".into());
-                        let short = crate::truncate_middle_to_tokens(&error, 80);
-                        this.add_retained_fact(format!("subagent {id}: error — {short}"));
-                    }
-                }
-            }
+            // Spawn results already reach the model via SubagentNotificationFragment
+            // in the tool result; do not auto-add truncated spawn lines into the
+            // permanent retained_facts host layer (that only accumulates noise).
             this.pending_message()
                 .tool_results
                 .insert(tool_result.tool_use_id.clone(), tool_result)
@@ -4289,9 +4263,11 @@ impl Thread {
                                 "Mode: proactive — parallelize independent work when useful."
                             }
                         };
-                        description = format!("{description}
+                        description = format!(
+                            "{description}
 
-{mode_note}");
+{mode_note}"
+                        );
                     }
                     Some(LanguageModelRequestTool::function(
                         tool_name.to_string(),
@@ -4550,6 +4526,9 @@ impl Thread {
         log::trace!("Building request messages from {} thread messages", end_ix);
 
         let user_agents_md = UserAgentsMd::global(cx).and_then(|s| s.content().cloned());
+        let include_multi_agent = available_tools
+            .iter()
+            .any(|tool| tool.as_ref() == SpawnAgentTool::NAME);
         let system_prompt = SystemPromptTemplate {
             project: self.project_context.read(cx),
             available_tools,
@@ -4566,38 +4545,32 @@ impl Thread {
         .render(&self.templates)
         .context("failed to build system prompt")
         .expect("Invalid template");
+        // Append host-owned dual-layer context into the system prompt (never as
+        // fake User messages — those pollute turn structure and bias the model).
+        let mut system_prompt = system_prompt;
+        if !self.retained_facts.is_empty() {
+            let rendered = crate::RetainedFactsFragment {
+                facts: self.retained_facts.clone(),
+            }
+            .render();
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&rendered);
+        }
+        if include_multi_agent {
+            let multi_agent_mode = AgentSettings::get_global(cx).multi_agent_mode;
+            let mode_fragment = crate::MultiAgentModeFragment {
+                mode: multi_agent_mode.into(),
+            };
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&mode_fragment.render());
+        }
+
         let mut messages = vec![LanguageModelRequestMessage {
             role: Role::System,
             content: vec![system_prompt.into()],
             cache: false,
             reasoning_details: None,
         }];
-
-        // Dual-layer context: host-owned retained facts (survive compaction).
-        if !self.retained_facts.is_empty() {
-            let rendered = crate::RetainedFactsFragment {
-                facts: self.retained_facts.clone(),
-            }
-            .render();
-            messages.push(LanguageModelRequestMessage {
-                role: Role::User,
-                content: vec![rendered.into()],
-                cache: false,
-                reasoning_details: None,
-            });
-        }
-
-        // Multi-agent collaboration mode guidance for spawn_agent.
-        let multi_agent_mode = AgentSettings::get_global(cx).multi_agent_mode;
-        let mode_fragment = crate::MultiAgentModeFragment {
-            mode: multi_agent_mode.into(),
-        };
-        messages.push(LanguageModelRequestMessage {
-            role: Role::User,
-            content: vec![mode_fragment.render().into()],
-            cache: false,
-            reasoning_details: None,
-        });
 
         self.extend_request_history_until(&mut messages, end_ix);
 
@@ -7187,11 +7160,10 @@ mod tests {
         let language_model::MessageContent::Text(text) = &request_messages[0].content[0] else {
             panic!("expected text summary context");
         };
-        assert!(text.contains("<<<COMPACTION_SUMMARY>>>"));
-        assert!(text.contains("<<<END_COMPACTION_SUMMARY>>>"));
-        assert!(text.contains(
-            "The previous conversation was compacted. Use this summary as context:"
-        ));
+        assert!(!text.contains("<<<COMPACTION_SUMMARY>>>"));
+        assert!(
+            text.contains("The previous conversation was compacted. Use this summary as context:")
+        );
         assert!(text.contains("Older context"));
     }
 
@@ -7206,7 +7178,8 @@ mod tests {
             facts: facts.clone(),
         };
         let rendered = fragment.render();
-        assert!(crate::RetainedFactsFragment::matches_text(&rendered));
+        assert_eq!(fragment.role(), "system");
+        assert!(!rendered.contains("<<<RETAINED_FACTS>>>"));
         assert!(rendered.contains("keep-me"));
         assert!(rendered.contains("also-keep"));
 
@@ -7214,6 +7187,60 @@ mod tests {
         // `Thread::retained_facts` across Summary insertion (see archive/spawn paths).
         let _ = Message::Compaction(CompactionInfo::Summary("Older context".into()));
         assert_eq!(facts.len(), 2);
+    }
+
+    #[gpui::test]
+    async fn test_host_context_injected_into_system_not_user(cx: &mut TestAppContext) {
+        let (thread, _event_stream) = setup_thread_for_test(cx).await;
+
+        let request_messages = cx.update(|cx| {
+            thread.update(cx, |thread, cx| {
+                thread.add_retained_fact("remember-this-fact");
+                thread.messages.push(user_text_message(
+                    ClientUserMessageId::new(),
+                    "hello from user",
+                ));
+                thread.build_request_messages(vec![SpawnAgentTool::NAME.into()], cx)
+            })
+        });
+
+        assert!(
+            request_messages
+                .iter()
+                .filter(|m| m.role == Role::System)
+                .count()
+                >= 1
+        );
+        let system = request_messages[0].string_contents();
+        assert_eq!(request_messages[0].role, Role::System);
+        assert!(system.contains("remember-this-fact"));
+        assert!(system.contains("Retained facts from earlier work"));
+        assert!(system.contains("Multi-agent collaboration mode"));
+        assert!(
+            !system.contains("<<<RETAINED_FACTS>>>") && !system.contains("<<<MULTI_AGENT_MODE>>>"),
+            "system injections must not use loud markers"
+        );
+
+        // No host User injections before conversation history.
+        let after_system: Vec<_> = request_messages.iter().skip(1).collect();
+        assert_eq!(after_system.len(), 1);
+        assert_eq!(after_system[0].role, Role::User);
+        assert_eq!(after_system[0].string_contents(), "hello from user");
+        for message in &after_system {
+            let text = message.string_contents();
+            assert!(!text.contains("remember-this-fact"));
+            assert!(!text.contains("Multi-agent collaboration mode"));
+        }
+
+        // Without spawn_agent, multi-agent guidance stays out of the system prompt.
+        let without_spawn = cx.update(|cx| {
+            thread.update(cx, |thread, cx| {
+                thread.build_request_messages(Vec::new(), cx)
+            })
+        });
+        let system_without = without_spawn[0].string_contents();
+        assert!(system_without.contains("remember-this-fact"));
+        assert!(!system_without.contains("Multi-agent collaboration mode"));
     }
 
     fn user_text_message(id: ClientUserMessageId, text: &str) -> Arc<Message> {
@@ -7337,11 +7364,6 @@ mod tests {
             .iter()
             .skip(1)
             .map(LanguageModelRequestMessage::string_contents)
-            .filter(|text| {
-                // Skip host injections that always precede history.
-                !crate::MultiAgentModeFragment::matches_text(text)
-                    && !crate::RetainedFactsFragment::matches_text(text)
-            })
             .collect()
     }
 

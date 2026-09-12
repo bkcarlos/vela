@@ -1,8 +1,11 @@
-//! Model-visible context injections with hard size caps and stable markers.
+//! Model-visible context injections with hard size caps.
 //!
-//! Every host-owned injection that lands in a LanguageModel request should go
-//! through a [`ContextualFragment`] so truncation and marker conventions stay
-//! consistent (Codex-inspired dual-layer context: messages + retained facts).
+//! Host-owned injections (retained facts, multi-agent mode) are appended into the
+//! system prompt. Conversation-history fragments (compaction summaries) and tool
+//! results (subagent notifications) use plain readable prose without loud markers.
+//! [`ContextualFragment::markers`] may still expose helper markers for tests, but
+//! mode / retained-facts / notification renders use empty markers so the model
+//! never sees `<<<...>>>` wrappers.
 
 use crate::context_budget::{
     MAX_COMPACTION_SUMMARY_TOKENS, MAX_RETAINED_FACT_TOKENS, MAX_SPAWN_AGENT_OUTPUT_TOKENS,
@@ -58,7 +61,7 @@ impl ContextualFragment for CompactionSummaryFragment {
     }
 
     fn markers() -> (&'static str, &'static str) {
-        ("<<<COMPACTION_SUMMARY>>>", "<<<END_COMPACTION_SUMMARY>>>")
+        ("", "")
     }
 
     fn body(&self) -> String {
@@ -84,11 +87,11 @@ impl ContextualFragment for RetainedFactsFragment {
     }
 
     fn role(&self) -> &'static str {
-        "user"
+        "system"
     }
 
     fn markers() -> (&'static str, &'static str) {
-        ("<<<RETAINED_FACTS>>>", "<<<END_RETAINED_FACTS>>>")
+        ("", "")
     }
 
     fn body(&self) -> String {
@@ -129,15 +132,12 @@ impl ContextualFragment for SubagentNotificationFragment {
     }
 
     fn markers() -> (&'static str, &'static str) {
-        (
-            "<<<SUBAGENT_NOTIFICATION>>>",
-            "<<<END_SUBAGENT_NOTIFICATION>>>",
-        )
+        ("", "")
     }
 
     fn body(&self) -> String {
         format!(
-            "session_id: {}\nstatus: {}\nsummary:\n{}",
+            "Subagent notification\nsession_id: {}\nstatus: {}\nsummary:\n{}",
             self.agent_session_id, self.status, self.summary
         )
     }
@@ -199,11 +199,11 @@ impl ContextualFragment for MultiAgentModeFragment {
     }
 
     fn role(&self) -> &'static str {
-        "user"
+        "system"
     }
 
     fn markers() -> (&'static str, &'static str) {
-        ("<<<MULTI_AGENT_MODE>>>", "<<<END_MULTI_AGENT_MODE>>>")
+        ("", "")
     }
 
     fn body(&self) -> String {
@@ -224,53 +224,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compaction_summary_renders_with_markers_and_truncation() {
+    fn compaction_summary_renders_plain_prose_with_truncation() {
         let fragment = CompactionSummaryFragment {
             summary: format!("{}MIDDLE{}", "A".repeat(20_000), "Z".repeat(20_000)),
         };
         let rendered = fragment.render();
-        assert!(CompactionSummaryFragment::matches_text(&rendered));
-        assert!(rendered.contains("<<<COMPACTION_SUMMARY>>>"));
-        assert!(rendered.starts_with("<<<COMPACTION_SUMMARY>>>"));
+        assert!(!CompactionSummaryFragment::matches_text(&rendered));
+        assert!(!rendered.contains("<<<COMPACTION_SUMMARY>>>"));
         assert!(rendered.contains("The previous conversation was compacted"));
         assert!(rendered.contains('A'));
         assert!(rendered.contains('Z'));
         assert!(rendered.contains("truncated"));
+        assert_eq!(fragment.role(), "user");
     }
 
     #[test]
-    fn retained_facts_lists_bullets() {
+    fn retained_facts_lists_bullets_without_markers() {
         let fragment = RetainedFactsFragment {
             facts: vec!["alpha".into(), "beta".into()],
         };
         let rendered = fragment.render();
-        assert!(RetainedFactsFragment::matches_text(&rendered));
+        assert!(!RetainedFactsFragment::matches_text(&rendered));
+        assert!(!rendered.contains("<<<RETAINED_FACTS>>>"));
         assert!(rendered.contains("- alpha"));
         assert!(rendered.contains("- beta"));
+        assert_eq!(fragment.role(), "system");
     }
 
     #[test]
-    fn subagent_notification_includes_session_and_status() {
+    fn subagent_notification_includes_session_and_status_plain() {
         let fragment = SubagentNotificationFragment {
             agent_session_id: "sess-1".into(),
             status: "completed".into(),
             summary: "done".into(),
         };
         let rendered = fragment.render();
-        assert!(SubagentNotificationFragment::matches_text(&rendered));
+        assert!(!SubagentNotificationFragment::matches_text(&rendered));
+        assert!(!rendered.contains("<<<SUBAGENT_NOTIFICATION>>>"));
+        assert!(rendered.contains("Subagent notification"));
         assert!(rendered.contains("session_id: sess-1"));
         assert!(rendered.contains("status: completed"));
         assert!(rendered.contains("done"));
     }
 
     #[test]
-    fn multi_agent_mode_explicit_and_proactive() {
+    fn multi_agent_mode_explicit_and_proactive_without_markers() {
         let explicit = MultiAgentModeFragment {
             mode: MultiAgentCollaborationMode::ExplicitRequestOnly,
-        }
-        .render();
-        assert!(MultiAgentModeFragment::matches_text(&explicit));
-        assert!(explicit.contains("explicit_request_only"));
+        };
+        let explicit_text = explicit.render();
+        assert!(!MultiAgentModeFragment::matches_text(&explicit_text));
+        assert!(!explicit_text.contains("<<<MULTI_AGENT_MODE>>>"));
+        assert!(explicit_text.contains("explicit_request_only"));
+        assert_eq!(explicit.role(), "system");
 
         let proactive = MultiAgentModeFragment {
             mode: MultiAgentCollaborationMode::Proactive,

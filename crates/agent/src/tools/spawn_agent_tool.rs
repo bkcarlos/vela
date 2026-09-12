@@ -38,7 +38,7 @@ use crate::{
 /// - Reuse the returned session_id when you want to follow up on the same delegated subproblem instead of creating a duplicate session.
 ///
 /// ### Output
-/// - You will receive a typed subagent notification plus a session_id JSON trailer for follow-ups.
+/// - You will receive a readable subagent notification plus a session_id JSON trailer for follow-ups.
 /// - Successful calls return a session_id that you can use for follow-up messages.
 /// - Error results may also include a session_id if a session was already created.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -104,16 +104,19 @@ impl From<SpawnAgentToolOutput> for LanguageModelToolResultContent {
         }
         .render();
 
-        // Typed notification for the model + compact JSON trailer with session_id for follow-ups.
+        // Plain notification for the model + compact JSON trailer with session_id for follow-ups.
         let trailer = serde_json::json!({
             "session_id": if session_id.is_empty() { serde_json::Value::Null } else { session_id.into() },
             "status": status,
         });
-        let trailer_json = serde_json::to_string(&trailer)
-            .unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#));
-        format!("{notification}
+        let trailer_json =
+            serde_json::to_string(&trailer).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#));
+        format!(
+            "{notification}
 
-{trailer_json}").into()
+{trailer_json}"
+        )
+        .into()
     }
 }
 
@@ -285,5 +288,41 @@ impl AgentTool for SpawnAgentTool {
         );
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spawn_output_formats_plain_notification_with_session_trailer() {
+        let session_id = acp::SessionId::new("sess-abc");
+        let output = SpawnAgentToolOutput::Success {
+            session_id: session_id.clone(),
+            output: "finished the research".into(),
+            session_info: SubagentSessionInfo {
+                session_id,
+                message_start_index: 0,
+                message_end_index: Some(1),
+            },
+        };
+        let LanguageModelToolResultContent::Text(text) =
+            LanguageModelToolResultContent::from(output)
+        else {
+            panic!("expected text tool result");
+        };
+        assert!(text.contains("Subagent notification"));
+        assert!(text.contains("session_id: sess-abc"));
+        assert!(text.contains("status: completed"));
+        assert!(text.contains("finished the research"));
+        assert!(!text.contains("<<<SUBAGENT_NOTIFICATION>>>"));
+        assert!(
+            text.contains(r#""session_id":"sess-abc""#)
+                || text.contains(r#""session_id": "sess-abc""#)
+        );
+        assert!(
+            text.contains(r#""status":"completed""#) || text.contains(r#""status": "completed""#)
+        );
     }
 }
