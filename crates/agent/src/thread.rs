@@ -226,9 +226,8 @@ impl CompactionInfo {
                 source_start,
                 source_end,
             } => {
-                // Budget the archived checkpoint the same way as other injections.
                 let markdown = format!(
-                    "A previous task was completed and archived. Start a new active task unless the user reopens it. If details are needed, call read_session with the recorded session and message range.\n\n{}",
+                    "A task was completed. Keep its details available for follow-up requests. If those details have been compacted, call read_session with the recorded session and message range.\n\n{}",
                     completed_task_checkpoint_markdown(
                         checkpoint,
                         session_id,
@@ -2420,6 +2419,7 @@ impl Thread {
     }
 
     pub fn cancel(&mut self, cx: &mut Context<Self>) -> Task<()> {
+        self.pending_completed_task = None;
         for subagent in self.running_subagents.drain(..) {
             if let Some(subagent) = subagent.upgrade() {
                 subagent.update(cx, |thread, cx| thread.cancel(cx)).detach();
@@ -2849,6 +2849,8 @@ impl Thread {
                         event_stream.send_stop(acp::StopReason::EndTurn);
                     }
                     Err(error) => {
+                        this.update(cx, |this, _| this.pending_completed_task = None)
+                            .log_err();
                         log::error!("Turn execution failed: {:?}", error);
                         match error.downcast::<CompletionError>() {
                             Ok(CompletionError::Refusal) => {
@@ -3174,9 +3176,6 @@ impl Thread {
 
             this.update(cx, |this, cx| {
                 this.flush_pending_message(cx);
-                if this.pending_completed_task.is_some() {
-                    this.archive_completed_task(cx);
-                }
                 if this.title.is_none() {
                     this.generate_title(cx);
                 }
@@ -3211,11 +3210,13 @@ impl Thread {
                     }
                 })?;
             } else if end_turn {
+                this.update(cx, |this, cx| this.record_completed_task(cx))?;
                 return Ok(());
             } else {
                 let end_at_boundary =
                     this.update(cx, |this, _| this.end_turn_at_next_boundary())?;
                 if end_at_boundary {
+                    this.update(cx, |this, _| this.pending_completed_task = None)?;
                     log::debug!("Steering message queued, ending turn at message boundary");
                     return Ok(());
                 }
@@ -4123,7 +4124,7 @@ impl Thread {
         self.retained_facts.clear();
     }
 
-    fn archive_completed_task(&mut self, cx: &mut Context<Self>) {
+    fn record_completed_task(&mut self, cx: &mut Context<Self>) {
         let Some(checkpoint) = self.pending_completed_task.take() else {
             return;
         };
@@ -4135,7 +4136,10 @@ impl Thread {
             .chain(checkpoint.retained_context.iter().cloned());
         self.retained_facts = crate::cap_retained_facts(merged);
 
-        let source_start = latest_compaction_message_ix_before(&self.messages, self.messages.len())
+        let source_start = self
+            .messages
+            .iter()
+            .rposition(|message| matches!(&**message, Message::Compaction(_)))
             .map_or(0, |index| index.saturating_add(1));
         let source_end = self.messages.len();
         self.messages.push(Arc::new(Message::Compaction(
@@ -5147,29 +5151,6 @@ fn extend_request_history_until(
             messages,
             compaction_ix,
         ));
-    } else if matches!(
-        &*messages[compaction_ix],
-        Message::Compaction(CompactionInfo::CompletedTask { .. })
-    ) {
-        let checkpoint_start = messages[..compaction_ix]
-            .iter()
-            .rposition(|message| {
-                matches!(
-                    &**message,
-                    Message::Compaction(
-                        CompactionInfo::Summary(_) | CompactionInfo::ProviderNative { .. }
-                    )
-                )
-            })
-            .map_or(0, |index| index.saturating_add(1));
-        for message in &messages[checkpoint_start..compaction_ix] {
-            if matches!(
-                &**message,
-                Message::Compaction(CompactionInfo::CompletedTask { .. })
-            ) {
-                request_messages.extend(message.to_request());
-            }
-        }
     }
 
     for message in &messages[compaction_ix..end_ix] {
@@ -5178,9 +5159,12 @@ fn extend_request_history_until(
 }
 
 fn latest_compaction_message_ix_before(messages: &[Arc<Message>], end_ix: usize) -> Option<usize> {
-    messages[..end_ix]
-        .iter()
-        .rposition(|message| matches!(&**message, Message::Compaction(_)))
+    messages[..end_ix].iter().rposition(|message| {
+        matches!(
+            &**message,
+            Message::Compaction(CompactionInfo::Summary(_) | CompactionInfo::ProviderNative { .. })
+        )
+    })
 }
 
 fn retained_user_request_messages_before(
@@ -7262,7 +7246,7 @@ mod tests {
     }
 
     #[gpui::test]
-    async fn test_completed_task_archives_raw_messages_behind_checkpoint(cx: &mut TestAppContext) {
+    async fn test_completed_task_keeps_recent_messages_with_checkpoint(cx: &mut TestAppContext) {
         let (thread, _) = setup_thread_for_test(cx).await;
         let session_id = thread.read_with(cx, |thread, _| thread.id.clone());
         thread.update(cx, |thread, cx| {
@@ -7283,7 +7267,7 @@ mod tests {
                 verification: vec!["Tests passed".to_string()],
                 artifacts: vec!["commit abc123".to_string()],
             });
-            thread.archive_completed_task(cx);
+            thread.record_completed_task(cx);
         });
 
         thread.read_with(cx, |thread, _| {
@@ -7314,11 +7298,11 @@ mod tests {
 
             let mut request = Vec::new();
             extend_request_history_until(&thread.messages, &mut request, thread.messages.len());
-            assert_eq!(request.len(), 1);
-            let text = request[0].string_contents();
+            assert_eq!(request.len(), 3);
+            assert_eq!(request[0].string_contents(), "Implement the feature");
+            let text = request[2].string_contents();
             assert!(text.contains("Feature implemented"));
             assert!(text.contains("Source messages: 0..2"));
-            assert!(!text.contains("Implement the feature"));
 
             let transcript = thread.session_transcript(0, Some(2), 10_000);
             assert!(transcript.content.contains("Implement the feature"));
@@ -7340,15 +7324,74 @@ mod tests {
                 verification: Vec::new(),
                 artifacts: vec!["release v1".to_string()],
             });
-            thread.archive_completed_task(cx);
+            thread.record_completed_task(cx);
         });
         thread.read_with(cx, |thread, _| {
             let mut request = Vec::new();
             extend_request_history_until(&thread.messages, &mut request, thread.messages.len());
-            assert_eq!(request.len(), 2);
-            assert!(request[0].string_contents().contains("Feature implemented"));
-            assert!(request[1].string_contents().contains("Feature published"));
-            assert!(!request[1].string_contents().contains("Publish the feature"));
+            assert_eq!(request.len(), 6);
+            assert!(request[2].string_contents().contains("Feature implemented"));
+            assert_eq!(request[3].string_contents(), "Publish the feature");
+            assert!(request[5].string_contents().contains("Feature published"));
+            assert!(
+                request[5]
+                    .string_contents()
+                    .contains("Source messages: 3..5")
+            );
+        });
+    }
+
+    #[gpui::test]
+    async fn test_completed_task_keeps_context_until_final_response(cx: &mut TestAppContext) {
+        let (thread, _event_stream) = setup_thread_for_test(cx).await;
+        let model = Arc::new(FakeLanguageModel::default());
+        let _events = cx
+            .update(|cx| {
+                thread.update(cx, |thread, cx| {
+                    thread.set_model(model.clone(), cx);
+                    thread.send(ClientUserMessageId::new(), vec!["Finish this work"], cx)
+                })
+            })
+            .expect("send should start");
+        cx.run_until_parked();
+
+        let request = model.pending_completions().pop().expect("model request");
+        thread.update(cx, |thread, _cx| {
+            thread.pending_completed_task = Some(CompletedTaskCheckpoint {
+                task_id: "task-1".to_string(),
+                title: "Finish work".to_string(),
+                outcome: "Work completed".to_string(),
+                retained_context: Vec::new(),
+                changed_files: Vec::new(),
+                verification: Vec::new(),
+                artifacts: Vec::new(),
+            });
+            assert!(thread.messages.iter().all(|message| !matches!(
+                &**message,
+                Message::Compaction(CompactionInfo::CompletedTask { .. })
+            )));
+        });
+
+        model.send_completion_stream_text_chunk(&request, "Final answer");
+        cx.run_until_parked();
+        thread.read_with(cx, |thread, _cx| {
+            assert!(thread.pending_completed_task.is_some());
+            let request = thread.build_request_messages(Vec::new(), _cx);
+            assert!(
+                request
+                    .iter()
+                    .any(|message| message.string_contents().contains("Finish this work"))
+            );
+        });
+
+        model.end_completion_stream(&request);
+        cx.run_until_parked();
+        thread.read_with(cx, |thread, _cx| {
+            assert!(thread.pending_completed_task.is_none());
+            assert!(matches!(
+                thread.last_message(),
+                Some(Message::Compaction(CompactionInfo::CompletedTask { .. }))
+            ));
         });
     }
 

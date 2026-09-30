@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::{AgentTool, ThreadEnvironment, ToolCallEventStream, ToolInput, cap_retained_facts};
 
 /// Mark the current work task as completed after all requested work and verification have finished.
-/// This archives the task's detailed conversation out of the active model context while retaining
-/// the full transcript in the session. Do not call this while work, verification, a user decision,
+/// This records a checkpoint while keeping the recent conversation available for follow-ups.
+/// Do not call this while work, verification, a user decision,
 /// or a requested follow-up remains. Call it exactly once before the final response for a completed
 /// work task. Do not use it for casual conversation or informational answers that did not create a
 /// work task.

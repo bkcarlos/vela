@@ -61,14 +61,19 @@ pub fn truncate_middle_to_tokens(text: &str, max_tokens: usize) -> String {
     out
 }
 
-/// Cap a list of retained facts: drop extras and truncate each item.
+/// Cap a list of retained facts, keeping the most recent non-empty entries.
 pub fn cap_retained_facts(facts: impl IntoIterator<Item = String>) -> Vec<String> {
-    facts
-        .into_iter()
-        .take(MAX_RETAINED_FACTS)
-        .map(|fact| truncate_middle_to_tokens(&fact, MAX_RETAINED_FACT_TOKENS))
-        .filter(|fact| !fact.trim().is_empty())
-        .collect()
+    let mut retained = std::collections::VecDeque::with_capacity(MAX_RETAINED_FACTS);
+    for fact in facts {
+        if fact.trim().is_empty() {
+            continue;
+        }
+        if retained.len() == MAX_RETAINED_FACTS {
+            retained.pop_front();
+        }
+        retained.push_back(truncate_middle_to_tokens(&fact, MAX_RETAINED_FACT_TOKENS));
+    }
+    retained.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -97,6 +102,16 @@ mod tests {
             .collect::<Vec<_>>();
         let capped = cap_retained_facts(facts);
         assert_eq!(capped.len(), MAX_RETAINED_FACTS);
+        assert!(
+            capped
+                .first()
+                .is_some_and(|fact| fact.starts_with("fact-8-"))
+        );
+        assert!(
+            capped
+                .last()
+                .is_some_and(|fact| fact.starts_with("fact-39-"))
+        );
         assert!(
             capped
                 .iter()
