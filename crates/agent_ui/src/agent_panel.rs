@@ -10807,6 +10807,7 @@ mod tests {
             ui_scroll_position: None,
             sandboxed_terminal_temp_dir: None,
             sandbox_grants: Default::default(),
+            retained_facts: Vec::new(),
         };
 
         let thread_store = cx.update(|cx| ThreadStore::global(cx));

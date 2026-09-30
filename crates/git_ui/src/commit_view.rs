@@ -984,6 +984,7 @@ async fn build_buffer(
             text,
         );
         let mut buffer = Buffer::build(buffer, Some(blob), Capability::ReadWrite);
+        buffer.set_language_registry(language_registry.clone());
         buffer.set_language_async(language, cx);
         buffer
     });

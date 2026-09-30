@@ -1419,6 +1419,7 @@ impl ThreadView {
     // turns
 
     pub fn start_turn(&mut self, cx: &mut Context<Self>) -> usize {
+        self.thread_error.take();
         self.turn_fields.turn_generation += 1;
         let generation = self.turn_fields.turn_generation;
         self.turn_fields.turn_started_at = Some(Instant::now());
@@ -1727,20 +1728,21 @@ impl ThreadView {
                 this.set_editor_is_expanded(false, cx);
             })?;
 
-            let _ = this.update(cx, |this, cx| {
+            this.update(cx, |this, cx| {
                 this.list_state.scroll_to_end();
                 cx.notify();
-            });
+            })?;
 
             let _stop_turn = defer({
                 let this = this.clone();
                 let mut cx = cx.clone();
                 move || {
-                    this.update(&mut cx, |this, cx| {
+                    if let Err(error) = this.update(&mut cx, |this, cx| {
                         this.stop_turn(generation, cx);
                         cx.notify();
-                    })
-                    .ok();
+                    }) {
+                        log::debug!("Could not stop agent turn after thread closed: {error:#}");
+                    }
                 }
             });
             if is_first_message && thread.read_with(cx, |thread, _cx| thread.title().is_none())? {
@@ -1798,12 +1800,7 @@ impl ThreadView {
             let res = send.await;
             let turn_time_ms = turn_start_time.elapsed().as_millis();
             drop(_stop_turn);
-            let status = if res.is_ok() {
-                let _ = this.update(cx, |this, _| this.in_flight_prompt.take());
-                "success"
-            } else {
-                "failure"
-            };
+            let status = if res.is_ok() { "success" } else { "failure" };
             telemetry::event!(
                 "Agent Turn Completed",
                 agent = agent_telemetry_id,
@@ -1815,26 +1812,38 @@ impl ThreadView {
                 turn_time_ms,
                 side = side
             );
-            res.map(|_| ())
+            this.update(cx, |this, cx| {
+                if this.turn_fields.turn_generation != generation {
+                    if let Err(error) = res {
+                        log::debug!("Ignoring error from a superseded agent send: {error:#}");
+                    }
+                    return;
+                }
+                match res {
+                    Ok(_) => {
+                        this.in_flight_prompt.take();
+                        this.should_be_following = this
+                            .workspace
+                            .update(cx, |workspace, _| {
+                                workspace.is_being_followed(CollaboratorId::Agent)
+                            })
+                            .unwrap_or_default();
+                    }
+                    Err(error) => this.handle_thread_error(error, cx),
+                }
+            })?;
+            anyhow::Ok(())
         });
 
         cx.spawn(async move |this, cx| {
             if let Err(err) = task.await {
-                this.update(cx, |this, cx| {
+                if let Err(update_error) = this.update(cx, |this, cx| {
                     this.handle_thread_error(err, cx);
-                })
-                .ok();
-            } else {
-                this.update(cx, |this, cx| {
-                    let should_be_following = this
-                        .workspace
-                        .update(cx, |workspace, _| {
-                            workspace.is_being_followed(CollaboratorId::Agent)
-                        })
-                        .unwrap_or_default();
-                    this.should_be_following = should_be_following;
-                })
-                .ok();
+                }) {
+                    log::debug!(
+                        "Could not show agent send error after thread closed: {update_error:#}"
+                    );
+                }
             }
         })
         .detach();
